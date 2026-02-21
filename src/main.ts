@@ -13,6 +13,11 @@ async function bootstrap() {
     }),
   );
   app.useGlobalFilters(new AuthExceptionFilter());
-  await app.listen(process.env.PORT ?? 3000);
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true,
+  });
+  const port = Number(process.env.PORT) || 3000;
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();
