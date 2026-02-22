@@ -20,7 +20,8 @@ import { AudioChunkDto } from './dto/audio-chunk.dto';
 @WebSocketGateway({
   namespace: 'speaking',
   cors: {
-    origin: '*',
+    origin: ['http://localhost:3000', 'http://localhost:5173'],
+    credentials: true,
   },
 })
 @Injectable()
