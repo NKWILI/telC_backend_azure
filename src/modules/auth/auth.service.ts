@@ -179,6 +179,21 @@ export class AuthService {
   }
 
   /**
+   * Login with an already-claimed activation code (for dev / returning users).
+   * Code must be status 'active' with a student. Returns the student and expiry.
+   */
+  async loginWithActivationCode(
+    activationCode: string,
+  ): Promise<{ student: Student; expiresAt: string }> {
+    const { student } = await this.validateActivationCode(activationCode);
+    if (!student) {
+      throw new BadRequestException('INVALID_ACTIVATION_CODE');
+    }
+    const expiresAt = await this.getActivationCodeExpiry(activationCode);
+    return { student, expiresAt };
+  }
+
+  /**
    * Step 11: Create device session
    * Creates a new device session for a student
    * Stores the hashed refresh token for validation

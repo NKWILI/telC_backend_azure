@@ -20,8 +20,7 @@ import { AudioChunkDto } from './dto/audio-chunk.dto';
 @WebSocketGateway({
   namespace: 'speaking',
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:5173'],
-    credentials: true,
+    origin: '*',
   },
 })
 @Injectable()
@@ -149,14 +148,18 @@ export class SpeakingGateway
           this.sessions.delete(oldClientId);
           this.sessions.set(client.id, existingContext);
 
-          client.emit('session_ready', {
+          const sessionReadyPayload = {
             sessionId,
             teilNumber: existingContext.teilNumber,
             serverStartTime: existingContext.startTime.toISOString(),
             timeLimit: existingContext.timeLimit,
             status: 'reconnected',
             message: 'Reconnected to existing session during grace period',
-          });
+          };
+          this.logger.log(
+            `[SpeakingGateway] envoi → client session_ready: ${JSON.stringify(sessionReadyPayload)}`,
+          );
+          client.emit('session_ready', sessionReadyPayload);
 
           this.logger.log(
             `Client ${client.id} reconnected to session ${sessionId}`,
@@ -360,8 +363,11 @@ export class SpeakingGateway
         `Session context created for client ${client.id}, session ${sessionId}`,
       );
 
+      // Trigger examiner's initial greeting so the student doesn't have to speak first
+      this.geminiService.triggerExaminerGreeting(sessionId);
+
       // Step 7: Emit session_ready event to client
-      client.emit('session_ready', {
+      const sessionReadyPayload = {
         sessionId,
         teilNumber: examSession.teil_number,
         serverStartTime: examSession.server_start_time,
@@ -369,7 +375,11 @@ export class SpeakingGateway
         status: 'ready',
         message:
           'WebSocket connection established and Gemini session initialized',
-      });
+      };
+      this.logger.log(
+        `[SpeakingGateway] envoi → client session_ready: ${JSON.stringify(sessionReadyPayload)}`,
+      );
+      client.emit('session_ready', sessionReadyPayload);
 
       // Step 8: Set up timer warnings and auto-end if timer is enabled
       if (sessionContext.timeLimit && sessionContext.expectedEndTime) {
@@ -523,6 +533,15 @@ export class SpeakingGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: AudioChunkDto,
   ): Promise<void> {
+    const payloadDesc =
+      typeof payload === 'string'
+        ? `string length=${(payload as string).length}`
+        : payload?.data != null
+          ? `data length=${(payload as { data?: string }).data?.length ?? 0}`
+          : JSON.stringify(payload).slice(0, 200);
+    this.logger.log(
+      `[SpeakingGateway] reçu ← client audio_chunk (${client.id}): ${payloadDesc}`,
+    );
     try {
       const context = this.sessions.get(client.id);
 
@@ -657,6 +676,10 @@ export class SpeakingGateway
         this.logger.debug(
           `Audio chunk forwarded to Gemini for session ${context.sessionId}`,
         );
+        // NOTE: Do NOT send sendClientContent({ turnComplete: true }) when using
+        // realtime audio (sendRealtimeInput). The Live API rejects it with
+        // code=1007 "Request contains an invalid argument" and closes the session.
+        // For audio-only sessions, rely on Gemini VAD to trigger responses.
       } catch (geminiError) {
         this.logger.error(
           `Error forwarding audio to Gemini for session ${context.sessionId}: ${geminiError.message}`,
@@ -825,11 +848,15 @@ export class SpeakingGateway
       context.pauseGeminiCloseTimer = pauseCloseTimer;
 
       // Emit success
-      client.emit('session_paused', {
+      const sessionPausedPayload = {
         sessionId: context.sessionId,
         elapsedSeconds: context.elapsedSeconds,
         message: 'Session paused, you have 60 seconds to resume',
-      });
+      };
+      this.logger.log(
+        `[SpeakingGateway] envoi → client session_paused: ${JSON.stringify(sessionPausedPayload)}`,
+      );
+      client.emit('session_paused', sessionPausedPayload);
 
       this.logger.log(
         `Session ${context.sessionId} paused, Gemini will close in 60s if not resumed`,
@@ -908,6 +935,8 @@ export class SpeakingGateway
           );
 
           this.logger.log('Gemini session re-initialized successfully');
+          // Trigger examiner to resume the conversation
+          this.geminiService.triggerExaminerGreeting(context.sessionId);
         } catch (reinitError) {
           this.logger.error(
             `Failed to re-initialize Gemini: ${reinitError.message}`,
@@ -960,10 +989,14 @@ export class SpeakingGateway
       }
 
       // Emit success
-      client.emit('session_resumed', {
+      const sessionResumedPayload = {
         sessionId: context.sessionId,
         message: 'Session resumed, you can continue speaking',
-      });
+      };
+      this.logger.log(
+        `[SpeakingGateway] envoi → client session_resumed: ${JSON.stringify(sessionResumedPayload)}`,
+      );
+      client.emit('session_resumed', sessionResumedPayload);
 
       this.logger.log(`Session ${context.sessionId} resumed successfully`);
     } catch (error) {
@@ -993,6 +1026,76 @@ export class SpeakingGateway
   }
 
   /**
+   * Close session immediately when POST /session/:id/end is called.
+   * Closes Gemini, clears context and timers, disconnects the client.
+   * Avoids grace period so the next session can start without conflicts.
+   */
+  async closeSessionImmediately(sessionId: string): Promise<void> {
+    const entry = this.findSessionBySessionId(sessionId);
+    if (!entry) {
+      this.logger.log(
+        `closeSessionImmediately: no active WebSocket session for ${sessionId}`,
+      );
+      return;
+    }
+    const [clientId, context] = entry;
+
+    this.logger.log(
+      `Closing session ${sessionId} immediately (POST end), client ${clientId}`,
+    );
+
+    if (context.disconnectTimer) {
+      clearTimeout(context.disconnectTimer);
+      context.disconnectTimer = null;
+    }
+    if (context.pauseTimer) {
+      clearTimeout(context.pauseTimer);
+      context.pauseTimer = null;
+    }
+    if (context.timerHandles?.length) {
+      for (const handle of context.timerHandles) {
+        clearTimeout(handle);
+      }
+      context.timerHandles = [];
+    }
+    if (context.pauseGeminiCloseTimer) {
+      clearTimeout(context.pauseGeminiCloseTimer);
+      context.pauseGeminiCloseTimer = undefined;
+    }
+    if (this.idleTimeouts.has(clientId)) {
+      clearTimeout(this.idleTimeouts.get(clientId));
+      this.idleTimeouts.delete(clientId);
+    }
+
+    if (
+      context.conversationHistory &&
+      context.conversationHistory.length > 0
+    ) {
+      try {
+        await this.speakingService.saveConversationHistory(
+          sessionId,
+          context.conversationHistory,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to save transcript on immediate close for ${sessionId}: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    this.geminiService.closeLiveSession(sessionId);
+    this.sessions.delete(clientId);
+
+    const namespace = this.server?.of?.('speaking');
+    const socket = namespace?.sockets?.get(clientId);
+    if (socket?.connected) {
+      socket.disconnect(true);
+    }
+
+    this.logger.log(`Session ${sessionId} closed immediately (gateway + Gemini)`);
+  }
+
+  /**
    * Create standardized Gemini callback handlers for a session
    * Used by both initial connection and resume scenarios
    */
@@ -1003,12 +1106,16 @@ export class SpeakingGateway
     return {
       onAudioResponse: (response) => {
         if (client.connected) {
-          client.emit('audio_response', {
+          const audioResponsePayload = {
             text: response.text,
             audioData: response.audioData,
             audioMimeType: response.audioMimeType,
             timestamp: new Date().toISOString(),
-          });
+          };
+          this.logger.log(
+            `[SpeakingGateway] envoi → client audio_response (client.id=${client.id}): text=${response.text?.length ?? 0} chars, audioData=${response.audioData?.length ?? 0} chars, preview=${(response.text ?? '').slice(0, 80)}${(response.text?.length ?? 0) > 80 ? '...' : ''}`,
+          );
+          client.emit('audio_response', audioResponsePayload);
 
           // Record Elena's response in conversation history
           // For audio-only responses, use placeholder to preserve conversation flow
@@ -1019,6 +1126,21 @@ export class SpeakingGateway
             timestamp: new Date().toISOString(),
           });
         }
+      },
+      onInputTranscription: (text) => {
+        context.conversationHistory.push({
+          speaker: 'student',
+          text,
+          timestamp: new Date().toISOString(),
+        });
+        this.logger.debug(
+          `Student transcription recorded for session ${context.sessionId}: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`,
+        );
+      },
+      onOutputTranscription: (text) => {
+        this.logger.debug(
+          `Elena output transcription for session ${context.sessionId}: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`,
+        );
       },
       onError: (error) => {
         this.logger.error(
@@ -1059,13 +1181,14 @@ export class SpeakingGateway
           // Verify session still exists and client is still connected
           const currentContext = this.sessions.get(client.id);
           if (currentContext && client.connected) {
-            this.logger.log(
-              `Timer warning: ${threshold}s remaining for session ${context.sessionId}`,
-            );
-            client.emit('time_warning', {
+            const timeWarningPayload = {
               remainingSeconds: threshold,
               sessionId: context.sessionId,
-            });
+            };
+            this.logger.log(
+              `[SpeakingGateway] envoi → client time_warning: ${JSON.stringify(timeWarningPayload)}`,
+            );
+            client.emit('time_warning', timeWarningPayload);
           }
         }, delay);
         context.timerHandles.push(handle);
@@ -1131,11 +1254,15 @@ export class SpeakingGateway
         this.geminiService.closeLiveSession(context.sessionId);
 
         // Notify client
-        client.emit('session_ended', {
+        const sessionEndedPayload = {
           reason: 'timer_expired',
           sessionId: context.sessionId,
           message: 'Session time limit reached',
-        });
+        };
+        this.logger.log(
+          `[SpeakingGateway] envoi → client session_ended: ${JSON.stringify(sessionEndedPayload)}`,
+        );
+        client.emit('session_ended', sessionEndedPayload);
 
         // Clean up and disconnect
         this.sessions.delete(client.id);

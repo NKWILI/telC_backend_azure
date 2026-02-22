@@ -40,7 +40,7 @@ describe('SpeakingService', () => {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        maybeSingle: jest.fn().mockResolvedValue({
           data: null,
           error: { code: 'PGRST116', message: 'No rows found' },
         }),
@@ -87,7 +87,7 @@ describe('SpeakingService', () => {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         in: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
+        maybeSingle: jest.fn().mockResolvedValue({
           data: null,
           error: { code: 'PGRST116', message: 'No rows found' },
         }),
@@ -140,7 +140,7 @@ describe('SpeakingService', () => {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
           in: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({
+          maybeSingle: jest.fn().mockResolvedValue({
             data: null,
             error: { code: 'PGRST116', message: 'No rows found' },
           }),

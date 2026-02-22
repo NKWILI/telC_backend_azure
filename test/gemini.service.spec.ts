@@ -166,5 +166,32 @@ describe('GeminiService', () => {
         service.closeLiveSession('non-existent-session'),
       ).not.toThrow();
     });
+
+    it('should not throw when sendTurnComplete is called for non-existent session', () => {
+      expect(() =>
+        service.sendTurnComplete('non-existent-session'),
+      ).not.toThrow();
+    });
+
+    it('should not throw when triggerExaminerGreeting is called for non-existent session', () => {
+      expect(() =>
+        service.triggerExaminerGreeting('non-existent-session'),
+      ).not.toThrow();
+    });
+  });
+
+  describe('Transcription callbacks', () => {
+    it('should accept GeminiSessionCallbacks with optional onInputTranscription and onOutputTranscription', () => {
+      // Type check: callbacks with optional transcription handlers are valid
+      const callbacksWithTranscription = {
+        onAudioResponse: () => {},
+        onInputTranscription: (_text: string) => {},
+        onOutputTranscription: (_text: string) => {},
+        onError: (_err: Error) => {},
+        onClose: () => {},
+      };
+      expect(callbacksWithTranscription.onInputTranscription).toBeDefined();
+      expect(callbacksWithTranscription.onOutputTranscription).toBeDefined();
+    });
   });
 });

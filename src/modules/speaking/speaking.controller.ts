@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
+import { SpeakingGateway } from './speaking.gateway';
 import { SpeakingService, EvaluationService } from './services';
 import {
   StartSessionDto,
@@ -37,6 +38,7 @@ export class SpeakingController {
   constructor(
     private readonly speakingService: SpeakingService,
     private readonly evaluationService: EvaluationService,
+    private readonly speakingGateway: SpeakingGateway,
   ) {}
 
   /**
@@ -172,6 +174,8 @@ export class SpeakingController {
         studentPayload.studentId,
         dto?.reason,
       );
+
+      await this.speakingGateway.closeSessionImmediately(sessionId);
 
       return response;
     } catch (error) {

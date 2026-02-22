@@ -20,6 +20,8 @@ export interface GeminiSessionCallbacks {
     audioData?: string;
     audioMimeType?: string;
   }) => void;
+  onInputTranscription?: (text: string) => void;
+  onOutputTranscription?: (text: string) => void;
   onError: (error: Error) => void;
   onClose: () => void;
 }
@@ -127,8 +129,12 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
 
     const systemInstruction = this.getSystemInstruction(teilNumber);
 
+    // Enforce German-only responses: prepend so the model sees it first
+    const languageRule =
+      'CRITICAL: This is a German (Deutsch) B1 exam. You MUST speak and write ONLY in German. Never respond in English. All your turns must be in German.';
+
     // Build full system instruction with context if resuming
-    let fullInstruction = systemInstruction;
+    let fullInstruction = languageRule + '\n\n' + systemInstruction;
     if (conversationHistory && conversationHistory.length > 0) {
       fullInstruction += `\n\n## Previous Conversation Context:\nThe following is the previous part of the exam session. Continue from where it left off:\n`;
       conversationHistory.forEach((msg) => {
@@ -164,6 +170,8 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
             },
             systemInstruction: fullInstruction,
             temperature: 0.7,
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
           },
           callbacks: {
             onopen: () => {
@@ -229,6 +237,32 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Debug: log Live API message shape to diagnose missing responses (hypothesisId A/B)
+   */
+  private agentDebugLog(sessionId: string, message: LiveServerMessage): void {
+    const keys = message ? Object.keys(message) : [];
+    const hasServerContent = !!(message as { serverContent?: unknown }).serverContent;
+    const sc = (message as { serverContent?: { modelTurn?: { parts?: unknown[] } } }).serverContent;
+    const hasModelTurn = !!sc?.modelTurn;
+    const partsLength = sc?.modelTurn?.parts?.length ?? 0;
+    const payload = {
+      location: 'gemini.service.ts:handleLiveMessage',
+      message: 'LiveServerMessage received',
+      data: { sessionId, keys, hasServerContent, hasModelTurn, partsLength },
+      timestamp: Date.now(),
+      hypothesisId: 'A',
+    };
+    fetch('http://127.0.0.1:7247/ingest/fbe85b36-9f6d-4953-8668-ec5f10a6de17', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    this.logger.debug(
+      `[agent] Live message keys=${keys.join(',')} hasServerContent=${hasServerContent} hasModelTurn=${hasModelTurn} partsLen=${partsLength}`,
+    );
+  }
+
+  /**
    * Handle incoming messages from Gemini Live API
    * Extracts audio/text responses and forwards via callbacks
    * Also handles setupComplete to resolve the createLiveSession Promise
@@ -241,6 +275,10 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
     setupResolve: () => void,
   ): void {
     try {
+      // #region agent log
+      this.agentDebugLog(sessionId, message);
+      // #endregion
+
       // Handle setup complete — resolve the createLiveSession Promise
       if (message.setupComplete) {
         this.logger.log(`Gemini Live setup complete for session ${sessionId}`);
@@ -274,6 +312,17 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
             });
           }
         }
+      }
+
+      // Handle input transcription (student speech)
+      const serverContent = message.serverContent as
+        | { inputTranscription?: { text?: string }; outputTranscription?: { text?: string } }
+        | undefined;
+      if (serverContent?.inputTranscription?.text) {
+        callbacks.onInputTranscription?.(serverContent.inputTranscription.text);
+      }
+      if (serverContent?.outputTranscription?.text) {
+        callbacks.onOutputTranscription?.(serverContent.outputTranscription.text);
       }
 
       // Handle turn complete (optional logging)
@@ -315,6 +364,72 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.logger.debug(`Audio chunk sent to Gemini for session ${sessionId}`);
+  }
+
+  /**
+   * Signal end of user turn so Gemini can generate a response (when VAD does not trigger)
+   */
+  sendTurnComplete(sessionId: string): void {
+    const sessionData = this.activeSessions.get(sessionId);
+    if (!sessionData) {
+      this.logger.warn(`sendTurnComplete: session not found ${sessionId}`);
+      return;
+    }
+    if (!sessionData.setupComplete) {
+      this.logger.warn(`sendTurnComplete: setup not complete ${sessionId}`);
+      return;
+    }
+    try {
+      sessionData.session.sendClientContent({ turnComplete: true });
+      this.logger.log(`[GeminiService] Turn complete sent to Gemini for session ${sessionId} (user 2s silence)`);
+    } catch (err) {
+      this.logger.warn(
+        `sendTurnComplete failed for ${sessionId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Trigger the examiner's initial greeting by sending a text-only client content.
+   * Must be called ONCE after setupComplete, BEFORE any sendRealtimeInput calls.
+   */
+  triggerExaminerGreeting(sessionId: string): void {
+    const sessionData = this.activeSessions.get(sessionId);
+    if (!sessionData) {
+      this.logger.warn(
+        `triggerExaminerGreeting: session not found ${sessionId}`,
+      );
+      return;
+    }
+    if (!sessionData.setupComplete) {
+      this.logger.warn(
+        `triggerExaminerGreeting: setup not complete ${sessionId}`,
+      );
+      return;
+    }
+
+    try {
+      sessionData.session.sendClientContent({
+        turns: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'Begin the exam now. Start with your greeting in German.',
+              },
+            ],
+          },
+        ],
+        turnComplete: true,
+      });
+      this.logger.log(
+        `Examiner greeting triggered for session ${sessionId}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `triggerExaminerGreeting failed for ${sessionId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   /**

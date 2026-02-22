@@ -18,6 +18,7 @@ import {
   ActivateResponseDto,
   StudentResponseDto,
 } from './dto/activate-response.dto';
+import { LoginWithCodeRequestDto } from './dto/login-with-code-request.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { ProfileUpdateDto } from './dto/profile-update.dto';
@@ -110,6 +111,56 @@ export class AuthController {
       }
       throw new BadRequestException(error?.message || 'ACTIVATION_FAILED');
     }
+  }
+
+  /**
+   * POST /api/auth/login-with-code
+   * For dev / returning users: get tokens with an already-claimed activation code.
+   */
+  @Post('login-with-code')
+  async loginWithCode(
+    @Body() dto: LoginWithCodeRequestDto,
+  ): Promise<ActivateResponseDto> {
+    const { student, expiresAt } =
+      await this.authService.loginWithActivationCode(dto.activationCode);
+
+    const deviceId = dto.deviceId;
+    const sessionId = randomUUID();
+    const tokenPair = this.tokenService.generateTokenPair({
+      studentId: student.id,
+      isRegistered: student.is_registered,
+      deviceId,
+      sessionId,
+    });
+    const refreshTokenHash =
+      await this.tokenService.hashRefreshToken(tokenPair.refreshToken);
+    await this.authService.createDeviceSession(
+      student.id,
+      deviceId,
+      refreshTokenHash,
+      'Unknown Device',
+    );
+
+    return {
+      accessToken: tokenPair.accessToken,
+      refreshToken: tokenPair.refreshToken,
+      student: {
+        id: student.id,
+        firstName: student.first_name,
+        lastName: student.last_name,
+        email: student.email,
+        isRegistered: student.is_registered,
+        createdAt: student.created_at,
+        updatedAt: student.updated_at,
+      } as StudentResponseDto,
+      bootstrap: {
+        availableModules: ['SPRECHEN', 'LESEN', 'HOEREN', 'SCHREIBEN'],
+        enabledModules: ['SPRECHEN', 'LESEN'],
+        progressSummary: {},
+        lastActivityAt: null,
+        expiresAt,
+      },
+    };
   }
 
   /**

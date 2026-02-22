@@ -17,6 +17,8 @@ describe('SpeakingGateway Unit Tests', () => {
     createLiveSession: jest.fn(),
     isSessionActive: jest.fn(),
     sendAudioChunk: jest.fn(),
+    sendTurnComplete: jest.fn(),
+    triggerExaminerGreeting: jest.fn(),
     closeLiveSession: jest.fn(),
   };
 

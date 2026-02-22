@@ -12,6 +12,7 @@ import {
   ResumeSessionResponseDto,
   EndSessionResponseDto,
 } from '../dto';
+import type { TeilListItemDto, SessionHistoryItemDto } from '../dto';
 import { ConversationMessage } from '../interfaces/session.interface';
 
 interface SessionState {
@@ -57,17 +58,27 @@ export class SpeakingService {
         throw new BadRequestException('INVALID_TEIL_NUMBER');
       }
 
-      // Check if student already has an active session
-      const { data: existingSession, error: checkError } = await this.db
+      // If student already has an active/paused session, close it so a new one can start
+      const { data: existingSession } = await this.db
         .getClient()
         .from('exam_sessions')
         .select('session_id, status')
         .eq('student_id', studentId)
         .in('status', ['active', 'paused'])
-        .single();
+        .maybeSingle();
 
       if (existingSession) {
-        throw new BadRequestException('SPEAKING_SESSION_ALREADY_ACTIVE');
+        this.logger.log(
+          `Closing existing session ${existingSession.session_id} (status: ${existingSession.status}) before starting new one for student ${studentId}`,
+        );
+        await this.db
+          .getClient()
+          .from('exam_sessions')
+          .update({
+            status: 'interrupted',
+            completed_at: new Date().toISOString(),
+          })
+          .eq('session_id', existingSession.session_id);
       }
 
       // Determine time limit based on Teil
@@ -412,6 +423,138 @@ export class SpeakingService {
     } catch (error) {
       this.logger.error(`Error ending session: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * GET /api/speaking/teils
+   * Return the list of 3 Teils (metadata for list/detail screens).
+   * Data in code; frontend maps to SpeakingExerciseType.
+   */
+  getTeils(): TeilListItemDto[] {
+    const teils: TeilListItemDto[] = [
+      {
+        id: 1,
+        part: 1,
+        title: 'Lire à voix haute',
+        subtitle:
+          'Lisez la phrase affichée à voix haute.',
+        topicTitle: 'Aufgabe: Stellen Sie sich vor',
+        topicDescription:
+          'Sprechen Sie über sich. Gehen Sie auf die folgenden Punkte ein. Bilden Sie vollständige Sätze.',
+        topicPoints: [
+          'Name',
+          'Alter',
+          'Land & Wohnort',
+          'Sprachen',
+          'Beruf',
+          'Hobby',
+        ],
+        durationMinutes: 10,
+        prepDurationSeconds: 300,
+        imagePath: 'assets/images/modules/sprechen.jpg',
+        examImagePath: null,
+        instructions:
+          'In this Teil, Elena will ask you about your personal life including your name, where you are from, your hobbies and interests, and your work or studies. Speak naturally and clearly.',
+      },
+      {
+        id: 2,
+        part: 2,
+        title: 'Dialogue',
+        subtitle: 'Pratiquez des échanges courts en situation.',
+        topicTitle: 'Aufgabe: Bildbeschreibung',
+        topicDescription:
+          'Beschreiben Sie das Bild genau. Was sehen Sie? Wie ist die Situation?',
+        topicPoints: [
+          'Was sehen Sie auf dem Foto?',
+          'Was machen die Personen?',
+          'Wie ist die Umgebung/Wetter?',
+          'Ihre persönliche Meinung zum Thema.',
+        ],
+        durationMinutes: 15,
+        prepDurationSeconds: 300,
+        imagePath: 'assets/images/modules/sprechen.jpg',
+        examImagePath: 'assets/images/modules/sprechen.jpg',
+        instructions:
+          'In this Teil, Elena will present you with a topic and ask for your opinion and experiences. Share your thoughts elaborately and give concrete examples.',
+      },
+      {
+        id: 3,
+        part: 3,
+        title: 'Répétition',
+        subtitle: "Répétez la phrase après l'écoute.",
+        topicTitle: 'Aufgabe: Ein Abschiedsfest planen',
+        topicDescription:
+          'Ihr Kollege Patrick verlässt die Firma. Sie möchten mit Ihrer Partnerin eine Überraschungsparty organisieren.',
+        topicPoints: [
+          'Wann feiern?',
+          'Wo feiern?',
+          'Essen und Trinken?',
+          'Geschenk für Patrick?',
+          'Wer wird eingeladen?',
+        ],
+        durationMinutes: 5,
+        prepDurationSeconds: 300,
+        imagePath: 'assets/images/modules/sprechen.jpg',
+        examImagePath: null,
+        instructions:
+          'In this Teil, Elena will present a debatable topic with different viewpoints. Take a position and defend it with arguments. Be prepared to explain your reasoning.',
+      },
+    ];
+    return teils;
+  }
+
+  /**
+   * GET /api/speaking/sessions
+   * Return history of speaking sessions (and evaluations) for the authenticated student.
+   */
+  async getSessions(
+    studentId: string,
+    teilNumber?: number,
+    limit = 50,
+  ): Promise<SessionHistoryItemDto[]> {
+    try {
+      let query = this.db
+        .getClient()
+        .from('exam_sessions')
+        .select(
+          'session_id, teil_number, completed_at, teil_evaluations(overall_score, strengths, areas_for_improvement)',
+        )
+        .eq('student_id', studentId)
+        .in('status', ['completed', 'interrupted'])
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(limit);
+
+      if (teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3) {
+        query = query.eq('teil_number', teilNumber);
+      }
+
+      const { data: rows, error } = await query;
+
+      if (error) {
+        this.logger.error(`Failed to fetch sessions: ${error.message}`);
+        return [];
+      }
+
+      const result: SessionHistoryItemDto[] = (rows || []).map((row: any) => {
+        const evalRow = Array.isArray(row.teil_evaluations)
+          ? row.teil_evaluations[0]
+          : row.teil_evaluations;
+        return {
+          sessionId: row.session_id,
+          teilNumber: row.teil_number,
+          completedAt: row.completed_at || '',
+          overallScore: evalRow?.overall_score ?? null,
+          strengths: evalRow?.strengths ?? null,
+          areasForImprovement: evalRow?.areas_for_improvement ?? null,
+        };
+      });
+
+      return result;
+    } catch (err) {
+      this.logger.error(`Error in getSessions: ${err.message}`);
+      return [];
     }
   }
 
