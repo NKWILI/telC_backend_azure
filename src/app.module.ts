@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { DatabaseService } from './shared/services/database.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { SpeakingModule } from './modules/speaking/speaking.module';
+import { WritingModule } from './modules/writing/writing.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SpeakingModule } from './modules/speaking/speaking.module';
     }),
     AuthModule,
     SpeakingModule,
+    WritingModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
