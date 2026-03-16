@@ -6,14 +6,15 @@ import { WritingCorrectionService } from './writing-correction.service';
 import { DatabaseService } from '../../shared/services/database.service';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { AuthModule } from '../auth/auth.module';
+import { SpeakingModule } from '../speaking/speaking.module';
 
 /**
  * Writing (Schreiben) module.
  * REST: GET teils, GET sessions, POST submit.
- * WebSocket namespace /writing for correction_ready; in-process queue runs stub correction.
+ * WebSocket namespace /writing for correction_ready; in-process queue runs correction via Gemini (stub fallback).
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, SpeakingModule],
   controllers: [WritingController],
   providers: [
     WritingService,
