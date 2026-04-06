@@ -34,8 +34,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-1-v1',
-      audio_url: '',
-      bundled_audio_asset: 'images/modules/Telc - A1.mp3',
+      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      bundled_audio_asset: '',
       questions: [
         {
           id: 'q11',
@@ -98,8 +98,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-2-v1',
-      audio_url: '',
-      bundled_audio_asset: 'images/modules/Telc - A1.mp3',
+      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      bundled_audio_asset: '',
       questions: [
         {
           id: 'q21',
@@ -163,8 +163,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-3-v1',
-      audio_url: '',
-      bundled_audio_asset: 'images/modules/Telc - A1.mp3',
+      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      bundled_audio_asset: '',
       questions: [
         {
           id: 'q31',
