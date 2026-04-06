@@ -12,7 +12,10 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { TokenService } from '../auth/token.service';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { SpeakingService } from './services/speaking.service';
-import { GeminiService, GeminiSessionCallbacks } from './services/gemini.service';
+import {
+  GeminiService,
+  GeminiSessionCallbacks,
+} from './services/gemini.service';
 import { DatabaseService } from '../../shared/services/database.service';
 import { SessionContext } from './interfaces/session.interface';
 import { AudioChunkDto } from './dto/audio-chunk.dto';
@@ -447,7 +450,10 @@ export class SpeakingGateway
       }
 
       // Save transcript IMMEDIATELY on disconnect (before grace period)
-      if (context.conversationHistory && context.conversationHistory.length > 0) {
+      if (
+        context.conversationHistory &&
+        context.conversationHistory.length > 0
+      ) {
         this.logger.log(
           `Saving transcript on disconnect for session ${context.sessionId}`,
         );
@@ -755,9 +761,7 @@ export class SpeakingGateway
    * Keeps Gemini alive for 60 seconds, then closes if not resumed
    */
   @SubscribeMessage('pause_session')
-  async handlePauseSession(
-    @ConnectedSocket() client: Socket,
-  ): Promise<void> {
+  async handlePauseSession(@ConnectedSocket() client: Socket): Promise<void> {
     try {
       const context = this.sessions.get(client.id);
 
@@ -879,9 +883,7 @@ export class SpeakingGateway
    * Cancels Gemini close timer or re-initializes if already closed
    */
   @SubscribeMessage('resume_session')
-  async handleResumeSession(
-    @ConnectedSocket() client: Socket,
-  ): Promise<void> {
+  async handleResumeSession(@ConnectedSocket() client: Socket): Promise<void> {
     try {
       const context = this.sessions.get(client.id);
 
@@ -1068,10 +1070,7 @@ export class SpeakingGateway
       this.idleTimeouts.delete(clientId);
     }
 
-    if (
-      context.conversationHistory &&
-      context.conversationHistory.length > 0
-    ) {
+    if (context.conversationHistory && context.conversationHistory.length > 0) {
       try {
         await this.speakingService.saveConversationHistory(
           sessionId,
@@ -1093,7 +1092,9 @@ export class SpeakingGateway
       socket.disconnect(true);
     }
 
-    this.logger.log(`Session ${sessionId} closed immediately (gateway + Gemini)`);
+    this.logger.log(
+      `Session ${sessionId} closed immediately (gateway + Gemini)`,
+    );
   }
 
   /**

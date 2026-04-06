@@ -437,8 +437,7 @@ export class SpeakingService {
         id: 1,
         part: 1,
         title: 'Lire à voix haute',
-        subtitle:
-          'Lisez la phrase affichée à voix haute.',
+        subtitle: 'Lisez la phrase affichée à voix haute.',
         topicTitle: 'Aufgabe: Stellen Sie sich vor',
         topicDescription:
           'Sprechen Sie über sich. Gehen Sie auf die folgenden Punkte ein. Bilden Sie vollständige Sätze.',

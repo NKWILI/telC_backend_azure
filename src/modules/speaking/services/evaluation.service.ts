@@ -235,9 +235,7 @@ Write strengths and areas_for_improvement in German (suitable for B1 learners).`
   /**
    * Create temporary Gemini session for evaluation and get response
    */
-  private async runEvaluation(
-    prompt: string,
-  ): Promise<string> {
+  private async runEvaluation(prompt: string): Promise<string> {
     try {
       // Use text-only Gemini API for evaluation (not Live API)
       const responseText =

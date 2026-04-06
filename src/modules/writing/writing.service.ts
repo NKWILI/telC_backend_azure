@@ -55,7 +55,8 @@ export class WritingService {
 
   constructor(
     private readonly db: DatabaseService,
-    @Optional() @Inject('WRITING_CORRECTION_QUEUE')
+    @Optional()
+    @Inject('WRITING_CORRECTION_QUEUE')
     private readonly correctionQueue?: WritingCorrectionQueue,
   ) {}
 
@@ -103,9 +104,7 @@ export class WritingService {
         return [];
       }
 
-      return (rows || []).map((row: any) =>
-        this.mapRowToAttemptDto(row),
-      );
+      return (rows || []).map((row: any) => this.mapRowToAttemptDto(row));
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
@@ -130,7 +129,11 @@ export class WritingService {
       });
     }
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    if (
+      !content ||
+      typeof content !== 'string' ||
+      content.trim().length === 0
+    ) {
       throw new UnprocessableEntityException({
         statusCode: 422,
         error: 'Unprocessable Entity',
@@ -155,7 +158,9 @@ export class WritingService {
       });
 
     if (insertError) {
-      this.logger.error(`Failed to create writing attempt: ${insertError.message}`);
+      this.logger.error(
+        `Failed to create writing attempt: ${insertError.message}`,
+      );
       throw new UnprocessableEntityException({
         statusCode: 422,
         error: 'Unprocessable Entity',

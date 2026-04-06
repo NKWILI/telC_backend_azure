@@ -66,7 +66,10 @@ describe('ListeningController', () => {
 
       const result = await controller.getSessions(MOCK_STUDENT as any, '2');
 
-      expect(mockListeningService.getSessions).toHaveBeenCalledWith('student-abc', 2);
+      expect(mockListeningService.getSessions).toHaveBeenCalledWith(
+        'student-abc',
+        2,
+      );
       expect(result).toBe(sessions);
     });
 
@@ -121,14 +124,17 @@ describe('ListeningController', () => {
 
       const result = await controller.submit(MOCK_STUDENT as any, dto as any);
 
-      expect(mockListeningService.submit).toHaveBeenCalledWith('student-abc', dto);
+      expect(mockListeningService.submit).toHaveBeenCalledWith(
+        'student-abc',
+        dto,
+      );
       expect(result).toBe(response);
     });
 
     it('throws UnauthorizedException when student is null', async () => {
-      await expect(
-        controller.submit(null as any, dto as any),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(controller.submit(null as any, dto as any)).rejects.toThrow(
+        UnauthorizedException,
+      );
 
       expect(mockListeningService.submit).not.toHaveBeenCalled();
     });

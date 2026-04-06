@@ -46,7 +46,8 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
   private activeSessions: Map<string, GeminiSessionData> = new Map();
 
   // Configuration
-  private readonly GEMINI_LIVE_MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
+  private readonly GEMINI_LIVE_MODEL =
+    'gemini-2.5-flash-native-audio-preview-12-2025';
   private readonly GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
   private readonly VOICE_NAME = 'Zephyr';
 
@@ -241,8 +242,11 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
    */
   private agentDebugLog(sessionId: string, message: LiveServerMessage): void {
     const keys = message ? Object.keys(message) : [];
-    const hasServerContent = !!(message as { serverContent?: unknown }).serverContent;
-    const sc = (message as { serverContent?: { modelTurn?: { parts?: unknown[] } } }).serverContent;
+    const hasServerContent = !!(message as { serverContent?: unknown })
+      .serverContent;
+    const sc = (
+      message as { serverContent?: { modelTurn?: { parts?: unknown[] } } }
+    ).serverContent;
     const hasModelTurn = !!sc?.modelTurn;
     const partsLength = sc?.modelTurn?.parts?.length ?? 0;
     const payload = {
@@ -316,13 +320,18 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
 
       // Handle input transcription (student speech)
       const serverContent = message.serverContent as
-        | { inputTranscription?: { text?: string }; outputTranscription?: { text?: string } }
+        | {
+            inputTranscription?: { text?: string };
+            outputTranscription?: { text?: string };
+          }
         | undefined;
       if (serverContent?.inputTranscription?.text) {
         callbacks.onInputTranscription?.(serverContent.inputTranscription.text);
       }
       if (serverContent?.outputTranscription?.text) {
-        callbacks.onOutputTranscription?.(serverContent.outputTranscription.text);
+        callbacks.onOutputTranscription?.(
+          serverContent.outputTranscription.text,
+        );
       }
 
       // Handle turn complete (optional logging)
@@ -381,7 +390,9 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
     }
     try {
       sessionData.session.sendClientContent({ turnComplete: true });
-      this.logger.log(`[GeminiService] Turn complete sent to Gemini for session ${sessionId} (user 2s silence)`);
+      this.logger.log(
+        `[GeminiService] Turn complete sent to Gemini for session ${sessionId} (user 2s silence)`,
+      );
     } catch (err) {
       this.logger.warn(
         `sendTurnComplete failed for ${sessionId}: ${(err as Error).message}`,
@@ -422,9 +433,7 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
         ],
         turnComplete: true,
       });
-      this.logger.log(
-        `Examiner greeting triggered for session ${sessionId}`,
-      );
+      this.logger.log(`Examiner greeting triggered for session ${sessionId}`);
     } catch (err) {
       this.logger.error(
         `triggerExaminerGreeting failed for ${sessionId}: ${(err as Error).message}`,
@@ -471,7 +480,11 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
    */
   isSessionActive(sessionId: string): boolean {
     const sessionData = this.activeSessions.get(sessionId);
-    return !!sessionData && sessionData.setupComplete && sessionData.status === 'connected';
+    return (
+      !!sessionData &&
+      sessionData.setupComplete &&
+      sessionData.status === 'connected'
+    );
   }
 
   /**

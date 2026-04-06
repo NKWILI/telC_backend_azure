@@ -33,7 +33,9 @@ export interface CorrectionReadyPayload {
   },
 })
 @Injectable()
-export class WritingGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class WritingGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -79,7 +81,9 @@ export class WritingGateway implements OnGatewayConnection, OnGatewayDisconnect 
       }
 
       client.join(`student:${studentId}`);
-      this.logger.log(`Writing client ${client.id} joined room student:${studentId}`);
+      this.logger.log(
+        `Writing client ${client.id} joined room student:${studentId}`,
+      );
     } catch (err) {
       this.logger.warn(`Writing connection error: ${(err as Error).message}`);
       client.disconnect(true);
@@ -96,6 +100,8 @@ export class WritingGateway implements OnGatewayConnection, OnGatewayDisconnect 
    */
   notifyCorrectionReady(studentId: string, payload: CorrectionReadyPayload) {
     this.server.to(`student:${studentId}`).emit('correction_ready', payload);
-    this.logger.log(`Emitted correction_ready for attempt ${payload.attemptId} to student ${studentId}`);
+    this.logger.log(
+      `Emitted correction_ready for attempt ${payload.attemptId} to student ${studentId}`,
+    );
   }
 }

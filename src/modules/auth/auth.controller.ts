@@ -132,8 +132,9 @@ export class AuthController {
       deviceId,
       sessionId,
     });
-    const refreshTokenHash =
-      await this.tokenService.hashRefreshToken(tokenPair.refreshToken);
+    const refreshTokenHash = await this.tokenService.hashRefreshToken(
+      tokenPair.refreshToken,
+    );
     await this.authService.createDeviceSession(
       student.id,
       deviceId,

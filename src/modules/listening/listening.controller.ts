@@ -43,7 +43,8 @@ export class ListeningController {
     @Query('teilNumber') teilNumber?: string,
   ): Promise<ExerciseAttemptDto[]> {
     if (!student?.studentId) return [];
-    const teil = teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
+    const teil =
+      teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
     return this.listeningService.getSessions(student.studentId, teil);
   }
 

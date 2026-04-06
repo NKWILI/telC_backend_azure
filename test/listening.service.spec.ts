@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ListeningService } from '../src/modules/listening/listening.service';
 import { DatabaseService } from '../src/shared/services/database.service';
 
@@ -109,7 +112,10 @@ describe('ListeningService', () => {
         from: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
             eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } }),
+              eq: jest.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'DB error' },
+              }),
             }),
           }),
         }),
@@ -185,7 +191,10 @@ describe('ListeningService', () => {
           select: jest.fn().mockReturnValue({
             eq: jest.fn().mockReturnValue({
               order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: null, error: { message: 'fail' } }),
+                limit: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'fail' },
+                }),
               }),
             }),
           }),
@@ -198,7 +207,9 @@ describe('ListeningService', () => {
     });
 
     it('applies exercise_id filter when teilNumber is provided', async () => {
-      const eqExerciseMock = jest.fn().mockResolvedValue({ data: [], error: null });
+      const eqExerciseMock = jest
+        .fn()
+        .mockResolvedValue({ data: [], error: null });
       const limitMock = jest.fn().mockReturnValue({ eq: eqExerciseMock });
       const orderMock = jest.fn().mockReturnValue({ limit: limitMock });
       const eqStudentMock = jest.fn().mockReturnValue({ order: orderMock });
@@ -280,7 +291,9 @@ describe('ListeningService', () => {
     });
 
     it('throws NotFoundException for unknown type', async () => {
-      await expect(service.getExercise('99')).rejects.toThrow(NotFoundException);
+      await expect(service.getExercise('99')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws NotFoundException for empty string type', async () => {
@@ -417,7 +430,9 @@ describe('ListeningService', () => {
     it('does not throw when DB insert fails — logs and returns score anyway', async () => {
       mockDatabaseService.getClient.mockReturnValue({
         from: jest.fn().mockReturnValue({
-          insert: jest.fn().mockResolvedValue({ error: { message: 'DB down' } }),
+          insert: jest
+            .fn()
+            .mockResolvedValue({ error: { message: 'DB down' } }),
         }),
       });
 

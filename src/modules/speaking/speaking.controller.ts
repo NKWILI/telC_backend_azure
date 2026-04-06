@@ -96,7 +96,7 @@ export class SpeakingController {
 
       this.logger.warn(
         `DEPRECATED: REST pause called for session ${sessionId}. ` +
-        `Client should use WebSocket 'pause_session' event for proper Gemini management.`,
+          `Client should use WebSocket 'pause_session' event for proper Gemini management.`,
       );
 
       const response = await this.speakingService.pauseSession(
@@ -133,7 +133,7 @@ export class SpeakingController {
 
       this.logger.warn(
         `DEPRECATED: REST resume called for session ${sessionId}. ` +
-        `Client should use WebSocket 'resume_session' event for proper Gemini management.`,
+          `Client should use WebSocket 'resume_session' event for proper Gemini management.`,
       );
 
       const response = await this.speakingService.resumeSession(

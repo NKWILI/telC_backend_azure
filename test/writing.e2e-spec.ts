@@ -147,15 +147,11 @@ describe('WritingController (e2e)', () => {
   });
 
   it('GET /api/writing/teils without token returns 401', async () => {
-    await request(app.getHttpServer())
-      .get('/api/writing/teils')
-      .expect(401);
+    await request(app.getHttpServer()).get('/api/writing/teils').expect(401);
   });
 
   it('GET /api/writing/sessions without token returns 401', async () => {
-    await request(app.getHttpServer())
-      .get('/api/writing/sessions')
-      .expect(401);
+    await request(app.getHttpServer()).get('/api/writing/sessions').expect(401);
   });
 
   it('POST /api/writing/submit returns 201 with attemptId and status', async () => {
@@ -163,7 +159,10 @@ describe('WritingController (e2e)', () => {
       .post('/api/writing/submit')
       .set('Authorization', 'Bearer fake-token')
       .set('Content-Type', 'application/json')
-      .send({ exerciseId: '1', content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...' })
+      .send({
+        exerciseId: '1',
+        content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
+      })
       .expect(201)
       .expect((res) => {
         expect(res.body.attemptId).toBe('attempt-uuid-new');

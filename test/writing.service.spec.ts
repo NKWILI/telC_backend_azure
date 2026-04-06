@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { WritingService } from '../src/modules/writing/writing.service';
 import { DatabaseService } from '../src/shared/services/database.service';
 
@@ -135,7 +138,9 @@ describe('WritingService', () => {
     });
 
     it('filters by teilNumber (exercise_id) when provided', async () => {
-      const eqExerciseMock = jest.fn().mockResolvedValue({ data: [], error: null });
+      const eqExerciseMock = jest
+        .fn()
+        .mockResolvedValue({ data: [], error: null });
       const limitMock = jest.fn().mockReturnValue({ eq: eqExerciseMock });
       const orderMock = jest.fn().mockReturnValue({ limit: limitMock });
       const eqStudentMock = jest.fn().mockReturnValue({ order: orderMock });

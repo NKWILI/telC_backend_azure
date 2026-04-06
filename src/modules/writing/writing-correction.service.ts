@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../../shared/services/database.service';
-import {
-  WritingGateway,
-  CorrectionReadyPayload,
-} from './writing.gateway';
+import { WritingGateway, CorrectionReadyPayload } from './writing.gateway';
 import { GeminiService } from '../speaking/services/gemini.service';
 
 export interface CorrectionJobData {
@@ -182,8 +179,9 @@ ${content}
       throw new Error('Corrections must be an array');
     }
 
-    const corrections = parsed.corrections.slice(0, 10).map(
-      (c: Record<string, unknown>, index: number) => {
+    const corrections = parsed.corrections
+      .slice(0, 10)
+      .map((c: Record<string, unknown>, index: number) => {
         if (
           typeof c.original !== 'string' ||
           typeof c.corrected !== 'string' ||
@@ -193,7 +191,9 @@ ${content}
           throw new Error(`Invalid correction at index ${index}`);
         }
         if (!ALLOWED_ERROR_TYPES.includes(c.error_type)) {
-          throw new Error(`Invalid error_type at index ${index}: ${c.error_type}`);
+          throw new Error(
+            `Invalid error_type at index ${index}: ${c.error_type}`,
+          );
         }
         return {
           original: c.original,
@@ -201,8 +201,7 @@ ${content}
           explanation: c.explanation,
           error_type: c.error_type,
         };
-      },
-    );
+      });
 
     return { score, feedback, corrections };
   }
