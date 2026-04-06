@@ -155,7 +155,8 @@ const CATALOG: Record<string, CatalogEntry> = {
       id: '3',
       title: 'Teil 3',
       subtitle: 'Selektives Hören',
-      prompt: 'Sie hören Durchsagen. Notieren Sie die wichtigsten Informationen.',
+      prompt:
+        'Sie hören Durchsagen. Notieren Sie die wichtigsten Informationen.',
       imagePath: '',
       part: 3,
       durationMinutes: 10,
@@ -262,17 +263,24 @@ export class ListeningService {
       const { data: rows, error } = await query;
 
       if (error) {
-        this.logger.error(`Failed to fetch listening sessions: ${error.message}`);
+        this.logger.error(
+          `Failed to fetch listening sessions: ${error.message}`,
+        );
         return [];
       }
 
-      return (rows || []).map((row: any) => this.mapRowToAttemptDto(row));
+      return (rows || []).map((row: Record<string, unknown>) =>
+        this.mapRowToAttemptDto(
+          row as Parameters<typeof this.mapRowToAttemptDto>[0],
+        ),
+      );
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getExercise(type: string): Promise<ListeningExerciseDto> {
     const entry = CATALOG[type];
     if (!entry) {
@@ -336,7 +344,9 @@ export class ListeningService {
         });
 
       if (error) {
-        this.logger.error(`Failed to persist listening attempt: ${error.message}`);
+        this.logger.error(
+          `Failed to persist listening attempt: ${error.message}`,
+        );
       }
     } catch (err) {
       this.logger.error(`DB error on submit: ${(err as Error).message}`);
