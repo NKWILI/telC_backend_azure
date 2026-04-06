@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { ListeningController } from '../src/modules/listening/listening.controller';
 import { ListeningService } from '../src/modules/listening/listening.service';
 
@@ -21,7 +22,10 @@ describe('ListeningController', () => {
       providers: [
         { provide: ListeningService, useValue: mockListeningService },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ListeningController>(ListeningController);
   });

@@ -6,6 +6,7 @@ import { DatabaseService } from './shared/services/database.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { SpeakingModule } from './modules/speaking/speaking.module';
 import { WritingModule } from './modules/writing/writing.module';
+import { ListeningModule } from './modules/listening/listening.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { WritingModule } from './modules/writing/writing.module';
     AuthModule,
     SpeakingModule,
     WritingModule,
+    ListeningModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
