@@ -4,12 +4,16 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { WritingService } from '../src/modules/writing/writing.service';
-import { DatabaseService } from '../src/shared/services/database.service';
+import { PrismaService } from '../src/shared/services/prisma.service';
 
 describe('WritingService', () => {
   let service: WritingService;
-  const mockDatabaseService = {
-    getClient: jest.fn(),
+
+  const mockPrismaService = {
+    writingAttempt: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
   };
 
   const mockQueue = {
@@ -20,7 +24,7 @@ describe('WritingService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WritingService,
-        { provide: DatabaseService, useValue: mockDatabaseService },
+        { provide: PrismaService, useValue: mockPrismaService },
         { provide: 'WRITING_CORRECTION_QUEUE', useValue: mockQueue },
       ],
     }).compile();
@@ -34,15 +38,7 @@ describe('WritingService', () => {
 
   describe('getTeils', () => {
     it('returns array of exercise types in camelCase with progress', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
 
       const result = await service.getTeils('student-1');
 
@@ -62,18 +58,9 @@ describe('WritingService', () => {
     });
 
     it('sets progress to 100 when student has completed attempt for that exercise', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({
-                data: [{ exercise_id: '1' }],
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue([
+        { exercise_id: '1' },
+      ]);
 
       const result = await service.getTeils('student-1');
 
@@ -84,17 +71,7 @@ describe('WritingService', () => {
 
   describe('getSessions', () => {
     it('returns empty array when no attempts', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
 
       const result = await service.getSessions('student-1');
 
@@ -105,31 +82,20 @@ describe('WritingService', () => {
       const rows = [
         {
           attempt_id: 'attempt-uuid-1',
-          created_at: '2026-03-04T10:00:00.000Z',
-          completed_at: '2026-03-04T10:07:00.000Z',
+          created_at: new Date('2026-03-04T10:00:00.000Z'),
+          completed_at: new Date('2026-03-04T10:07:00.000Z'),
           score: 78,
           feedback: 'Gute Struktur.',
           duration_seconds: 420,
         },
       ];
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue(rows);
 
       const result = await service.getSessions('student-1');
 
       expect(result.length).toBe(1);
       expect(result[0]).toMatchObject({
         id: 'attempt-uuid-1',
-        date: '2026-03-04T10:07:00.000Z',
         score: 78,
         feedback: 'Gute Struktur.',
         durationSeconds: 420,
@@ -137,36 +103,31 @@ describe('WritingService', () => {
       expect(result[0].dateLabel).toBeDefined();
     });
 
-    it('filters by teilNumber (exercise_id) when provided', async () => {
-      const eqExerciseMock = jest
-        .fn()
-        .mockResolvedValue({ data: [], error: null });
-      const limitMock = jest.fn().mockReturnValue({ eq: eqExerciseMock });
-      const orderMock = jest.fn().mockReturnValue({ limit: limitMock });
-      const eqStudentMock = jest.fn().mockReturnValue({ order: orderMock });
-      const selectMock = jest.fn().mockReturnValue({ eq: eqStudentMock });
-      const fromMock = jest.fn().mockReturnValue({
-        select: selectMock,
-        eq: eqStudentMock,
-        order: orderMock,
-        limit: limitMock,
-      });
-
-      mockDatabaseService.getClient.mockReturnValue({ from: fromMock });
+    it('filters by exercise_id when teilNumber is provided', async () => {
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
 
       await service.getSessions('student-1', 1);
 
-      expect(fromMock).toHaveBeenCalledWith('writing_attempts');
-      expect(eqExerciseMock).toHaveBeenCalledWith('exercise_id', '1');
+      expect(mockPrismaService.writingAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ exercise_id: '1' }),
+        }),
+      );
+    });
+
+    it('does not apply exercise_id filter when teilNumber is omitted', async () => {
+      mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
+
+      await service.getSessions('student-1');
+
+      const callArg = mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
+      expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
 
   describe('submit', () => {
     it('creates attempt and enqueues job, returns attemptId and status pending', async () => {
-      const insertMock = jest.fn().mockResolvedValue({ error: null });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ insert: insertMock }),
-      });
+      mockPrismaService.writingAttempt.create.mockResolvedValue({});
 
       const result = await service.submit('student-1', {
         exerciseId: '1',
@@ -176,12 +137,14 @@ describe('WritingService', () => {
       expect(result.attemptId).toBeDefined();
       expect(result.status).toBe('pending');
       expect(result.message).toBeDefined();
-      expect(insertMock).toHaveBeenCalledWith(
+      expect(mockPrismaService.writingAttempt.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          student_id: 'student-1',
-          exercise_id: '1',
-          content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
-          status: 'pending',
+          data: expect.objectContaining({
+            student_id: 'student-1',
+            exercise_id: '1',
+            content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
+            status: 'pending',
+          }),
         }),
       );
       expect(mockQueue.add).toHaveBeenCalledWith(
@@ -195,16 +158,11 @@ describe('WritingService', () => {
 
     it('throws NotFoundException with messageKey for unknown exerciseId', async () => {
       try {
-        await service.submit('student-1', {
-          exerciseId: '99',
-          content: 'Some text',
-        });
+        await service.submit('student-1', { exerciseId: '99', content: 'Some text' });
         expect(true).toBe(false);
       } catch (e: any) {
         expect(e).toBeInstanceOf(NotFoundException);
-        expect(e.getResponse()).toMatchObject({
-          messageKey: 'writingExerciseNotFound',
-        });
+        expect(e.getResponse()).toMatchObject({ messageKey: 'writingExerciseNotFound' });
       }
     });
 
@@ -214,20 +172,12 @@ describe('WritingService', () => {
         expect(true).toBe(false);
       } catch (e: any) {
         expect(e).toBeInstanceOf(UnprocessableEntityException);
-        expect(e.getResponse()).toMatchObject({
-          messageKey: 'writingContentTooShort',
-        });
+        expect(e.getResponse()).toMatchObject({ messageKey: 'writingContentTooShort' });
       }
     });
 
     it('does not call queue when insert fails', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          insert: jest.fn().mockResolvedValue({
-            error: { message: 'DB error' },
-          }),
-        }),
-      });
+      mockPrismaService.writingAttempt.create.mockRejectedValue(new Error('DB error'));
 
       await expect(
         service.submit('student-1', { exerciseId: '1', content: 'Text' }),

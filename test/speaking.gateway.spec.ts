@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SpeakingGateway } from '../src/modules/speaking/speaking.gateway';
 import { SpeakingService } from '../src/modules/speaking/services/speaking.service';
 import { GeminiService } from '../src/modules/speaking/services/gemini.service';
-import { DatabaseService } from '../src/shared/services/database.service';
+import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 
 describe('SpeakingGateway Unit Tests', () => {
@@ -22,8 +22,11 @@ describe('SpeakingGateway Unit Tests', () => {
     closeLiveSession: jest.fn(),
   };
 
-  const mockDatabaseService = {
-    getClient: jest.fn(),
+  const mockPrismaService = {
+    examSession: { findUnique: jest.fn(), update: jest.fn() },
+    student: { findUnique: jest.fn() },
+    activationCode: { findUnique: jest.fn() },
+    teilTranscript: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
   };
 
   const mockTokenService = {
@@ -36,7 +39,7 @@ describe('SpeakingGateway Unit Tests', () => {
         SpeakingGateway,
         { provide: SpeakingService, useValue: mockSpeakingService },
         { provide: GeminiService, useValue: mockGeminiService },
-        { provide: DatabaseService, useValue: mockDatabaseService },
+        { provide: PrismaService, useValue: mockPrismaService },
         { provide: TokenService, useValue: mockTokenService },
       ],
     }).compile();

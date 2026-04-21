@@ -4,17 +4,12 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ListeningService } from '../src/modules/listening/listening.service';
-import { DatabaseService } from '../src/shared/services/database.service';
+import { PrismaService } from '../src/shared/services/prisma.service';
 
-/**
- * Catalog constants mirrored here so tests drive the implementation.
- * If the service changes these values, these tests will catch the drift.
- */
 const TEIL1_REVISION = 'mock-horen-teil-1-v1';
 const TEIL2_REVISION = 'mock-horen-teil-2-v1';
 const TEIL3_REVISION = 'mock-horen-teil-3-v1';
 
-// Answer keys that the implementation must satisfy (drive the service catalog)
 const TEIL1_CORRECT_ANSWERS: Record<string, string> = {
   q11: 'b',
   q12: 'a',
@@ -25,13 +20,19 @@ const TEIL1_CORRECT_ANSWERS: Record<string, string> = {
 
 describe('ListeningService', () => {
   let service: ListeningService;
-  const mockDatabaseService = { getClient: jest.fn() };
+
+  const mockPrismaService = {
+    listeningAttempt: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ListeningService,
-        { provide: DatabaseService, useValue: mockDatabaseService },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 
@@ -47,15 +48,7 @@ describe('ListeningService', () => {
   // ---------------------------------------------------------------------------
   describe('getTeils', () => {
     it('returns 3 items with progress 0 when DB has no completed attempts', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
 
       const result = await service.getTeils('student-1');
 
@@ -66,18 +59,9 @@ describe('ListeningService', () => {
     });
 
     it('returns progress 100 for a Teil that has a completed attempt, 0 for others', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({
-                data: [{ exercise_id: '2' }],
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([
+        { exercise_id: '2' },
+      ]);
 
       const result = await service.getTeils('student-1');
 
@@ -87,15 +71,7 @@ describe('ListeningService', () => {
     });
 
     it('returns all items with required fields', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({ data: [], error: null }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
 
       const result = await service.getTeils('student-1');
 
@@ -107,19 +83,10 @@ describe('ListeningService', () => {
       }
     });
 
-    it('returns progress 0 gracefully when DB returns error', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              eq: jest.fn().mockResolvedValue({
-                data: null,
-                error: { message: 'DB error' },
-              }),
-            }),
-          }),
-        }),
-      });
+    it('returns progress 0 gracefully when DB throws', async () => {
+      mockPrismaService.listeningAttempt.findMany.mockRejectedValue(
+        new Error('DB error'),
+      );
 
       const result = await service.getTeils('student-1');
 
@@ -133,17 +100,7 @@ describe('ListeningService', () => {
   // ---------------------------------------------------------------------------
   describe('getSessions', () => {
     it('returns empty array when there are no attempts', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
 
       const result = await service.getSessions('student-1');
 
@@ -154,52 +111,30 @@ describe('ListeningService', () => {
       const rows = [
         {
           attempt_id: 'uuid-listen-1',
-          created_at: '2026-03-10T09:00:00.000Z',
-          completed_at: '2026-03-10T09:08:00.000Z',
+          created_at: new Date('2026-03-10T09:00:00.000Z'),
+          completed_at: new Date('2026-03-10T09:08:00.000Z'),
           score: 80,
           feedback: null,
           duration_seconds: 480,
         },
       ];
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({ data: rows, error: null }),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue(rows);
 
       const result = await service.getSessions('student-1');
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
         id: 'uuid-listen-1',
-        date: '2026-03-10T09:08:00.000Z',
         score: 80,
         durationSeconds: 480,
       });
       expect(result[0].dateLabel).toBeDefined();
     });
 
-    it('returns empty array (no throw) when DB returns an error', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              order: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'fail' },
-                }),
-              }),
-            }),
-          }),
-        }),
-      });
+    it('returns empty array (no throw) when DB throws', async () => {
+      mockPrismaService.listeningAttempt.findMany.mockRejectedValue(
+        new Error('fail'),
+      );
 
       const result = await service.getSessions('student-1');
 
@@ -207,35 +142,24 @@ describe('ListeningService', () => {
     });
 
     it('applies exercise_id filter when teilNumber is provided', async () => {
-      const eqExerciseMock = jest
-        .fn()
-        .mockResolvedValue({ data: [], error: null });
-      const limitMock = jest.fn().mockReturnValue({ eq: eqExerciseMock });
-      const orderMock = jest.fn().mockReturnValue({ limit: limitMock });
-      const eqStudentMock = jest.fn().mockReturnValue({ order: orderMock });
-      const selectMock = jest.fn().mockReturnValue({ eq: eqStudentMock });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ select: selectMock }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
 
       await service.getSessions('student-1', 2);
 
-      expect(eqExerciseMock).toHaveBeenCalledWith('exercise_id', '2');
+      expect(mockPrismaService.listeningAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ exercise_id: '2' }),
+        }),
+      );
     });
 
     it('does not apply exercise_id filter when teilNumber is omitted', async () => {
-      const limitMock = jest.fn().mockResolvedValue({ data: [], error: null });
-      const orderMock = jest.fn().mockReturnValue({ limit: limitMock });
-      const eqStudentMock = jest.fn().mockReturnValue({ order: orderMock });
-      const selectMock = jest.fn().mockReturnValue({ eq: eqStudentMock });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ select: selectMock }),
-      });
+      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
 
       await service.getSessions('student-1');
 
-      // limit resolves directly — no additional .eq() call on the query
-      expect(limitMock).toHaveBeenCalled();
+      const callArg = mockPrismaService.listeningAttempt.findMany.mock.calls[0][0];
+      expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
 
@@ -291,9 +215,7 @@ describe('ListeningService', () => {
     });
 
     it('throws NotFoundException for unknown type', async () => {
-      await expect(service.getExercise('99')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getExercise('99')).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException for empty string type', async () => {
@@ -339,10 +261,7 @@ describe('ListeningService', () => {
     });
 
     it('returns score 100 when all answers are correct', async () => {
-      const insertMock = jest.fn().mockResolvedValue({ error: null });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ insert: insertMock }),
-      });
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
       const result = await service.submit('student-1', {
         type: '1',
@@ -355,15 +274,11 @@ describe('ListeningService', () => {
     });
 
     it('returns score 0 when all answers are wrong', async () => {
-      const insertMock = jest.fn().mockResolvedValue({ error: null });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ insert: insertMock }),
-      });
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
-      // Pick the wrong option for every question (not in TEIL1_CORRECT_ANSWERS values)
       const allWrong: Record<string, string> = {};
       for (const qId of Object.keys(TEIL1_CORRECT_ANSWERS)) {
-        allWrong[qId] = 'z'; // 'z' is never a valid option → treated as wrong
+        allWrong[qId] = 'z';
       }
 
       const result = await service.submit('student-1', {
@@ -377,15 +292,11 @@ describe('ListeningService', () => {
     });
 
     it('returns a partial score for partially correct answers', async () => {
-      const insertMock = jest.fn().mockResolvedValue({ error: null });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ insert: insertMock }),
-      });
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
-      // Correct answers for q11 and q12 only (2 out of 5 → 40)
       const partial: Record<string, string> = {
-        q11: TEIL1_CORRECT_ANSWERS['q11'],
-        q12: TEIL1_CORRECT_ANSWERS['q12'],
+        q11: TEIL1_CORRECT_ANSWERS['q11']!,
+        q12: TEIL1_CORRECT_ANSWERS['q12']!,
         q13: 'z',
         q14: 'z',
         q15: 'z',
@@ -402,10 +313,7 @@ describe('ListeningService', () => {
     });
 
     it('inserts a completed attempt row and returns score', async () => {
-      const insertMock = jest.fn().mockResolvedValue({ error: null });
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({ insert: insertMock }),
-      });
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
       const result = await service.submit('student-1', {
         type: '1',
@@ -417,26 +325,23 @@ describe('ListeningService', () => {
       expect(typeof result.score).toBe('number');
       expect(result.score).toBeGreaterThanOrEqual(0);
       expect(result.score).toBeLessThanOrEqual(100);
-      expect(insertMock).toHaveBeenCalledWith(
+      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          student_id: 'student-1',
-          exercise_id: '1',
-          status: 'completed',
-          score: expect.any(Number),
+          data: expect.objectContaining({
+            student_id: 'student-1',
+            exercise_id: '1',
+            status: 'completed',
+            score: expect.any(Number),
+          }),
         }),
       );
     });
 
     it('does not throw when DB insert fails — logs and returns score anyway', async () => {
-      mockDatabaseService.getClient.mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          insert: jest
-            .fn()
-            .mockResolvedValue({ error: { message: 'DB down' } }),
-        }),
-      });
+      mockPrismaService.listeningAttempt.create.mockRejectedValue(
+        new Error('DB down'),
+      );
 
-      // Score is computed in-memory; DB failure should be logged but not crash the response
       await expect(
         service.submit('student-1', {
           type: '1',
