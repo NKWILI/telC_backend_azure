@@ -16,7 +16,7 @@ import {
   GeminiService,
   GeminiSessionCallbacks,
 } from './services/gemini.service';
-import { DatabaseService } from '../../shared/services/database.service';
+import { PrismaService } from '../../shared/services/prisma.service';
 import { SessionContext } from './interfaces/session.interface';
 import { AudioChunkDto } from './dto/audio-chunk.dto';
 
@@ -45,7 +45,7 @@ export class SpeakingGateway
   constructor(
     private readonly speakingService: SpeakingService,
     private readonly geminiService: GeminiService,
-    private readonly databaseService: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
   ) {}
 
@@ -184,22 +184,13 @@ export class SpeakingGateway
       }
 
       // Step 1: Validate session exists in database
-      const { data: examSession, error: sessionError } =
-        await this.databaseService
-          .getClient()
-          .from('exam_sessions')
-          .select('*')
-          .eq('session_id', sessionId)
-          .single();
+      const examSession = await this.prisma.examSession.findUnique({
+        where: { session_id: sessionId },
+      });
 
-      if (sessionError || !examSession) {
-        this.logger.warn(
-          `Client ${client.id}: Session not found or error: ${sessionError?.message}`,
-        );
-        client.emit('connection_error', {
-          code: 4001,
-          message: 'Session not found',
-        });
+      if (!examSession) {
+        this.logger.warn(`Client ${client.id}: Session not found: ${sessionId}`);
+        client.emit('connection_error', { code: 4001, message: 'Session not found' });
         client.disconnect(true);
         return;
       }
@@ -232,57 +223,34 @@ export class SpeakingGateway
       }
 
       // Step 3: Validate student's activation code
-      const { data: student, error: studentError } = await this.databaseService
-        .getClient()
-        .from('students')
-        .select('id, activation_code')
-        .eq('id', studentId)
-        .single();
+      const student = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { id: true, activation_code: true },
+      });
 
-      if (studentError || !student) {
-        this.logger.warn(
-          `Client ${client.id}: Student not found or error: ${studentError?.message}`,
-        );
-        client.emit('connection_error', {
-          code: 4003,
-          message: 'Student validation failed',
-        });
+      if (!student) {
+        this.logger.warn(`Client ${client.id}: Student not found: ${studentId}`);
+        client.emit('connection_error', { code: 4003, message: 'Student validation failed' });
         client.disconnect(true);
         return;
       }
 
       // Verify activation code is valid and not expired
-      const { data: activationCode, error: acError } =
-        await this.databaseService
-          .getClient()
-          .from('activation_codes')
-          .select('code, status, expires_at')
-          .eq('code', student.activation_code)
-          .single();
+      const activationCode = await this.prisma.activationCode.findUnique({
+        where: { code: student.activation_code },
+        select: { code: true, status: true, expires_at: true },
+      });
 
-      if (acError || !activationCode || activationCode.status !== 'active') {
-        this.logger.warn(
-          `Client ${client.id}: Student ${studentId} has no active activation code`,
-        );
-        client.emit('connection_error', {
-          code: 4004,
-          message: 'No active activation code',
-        });
+      if (!activationCode || activationCode.status !== 'active') {
+        this.logger.warn(`Client ${client.id}: Student ${studentId} has no active activation code`);
+        client.emit('connection_error', { code: 4004, message: 'No active activation code' });
         client.disconnect(true);
         return;
       }
 
-      if (
-        activationCode.expires_at &&
-        new Date(activationCode.expires_at) < new Date()
-      ) {
-        this.logger.warn(
-          `Client ${client.id}: Student ${studentId} activation code expired`,
-        );
-        client.emit('connection_error', {
-          code: 4005,
-          message: 'Activation code expired',
-        });
+      if (activationCode.expires_at && (activationCode.expires_at as Date) < new Date()) {
+        this.logger.warn(`Client ${client.id}: Student ${studentId} activation code expired`);
+        client.emit('connection_error', { code: 4005, message: 'Activation code expired' });
         client.disconnect(true);
         return;
       }
@@ -304,8 +272,8 @@ export class SpeakingGateway
         teilNumber: examSession.teil_number,
         conversationHistory: [],
         status: 'active',
-        startTime: new Date(examSession.server_start_time),
-        elapsedSeconds: examSession.elapsed_time || 0,
+        startTime: examSession.server_start_time as Date ?? new Date(),
+        elapsedSeconds: examSession.elapsed_time ?? 0,
         timeLimit: examSession.use_timer
           ? examSession.teil_number === 1
             ? 240
@@ -313,7 +281,7 @@ export class SpeakingGateway
           : null,
         expectedEndTime: examSession.use_timer
           ? new Date(
-              new Date(examSession.server_start_time).getTime() +
+              (examSession.server_start_time as Date ?? new Date()).getTime() +
                 (examSession.teil_number === 1 ? 240000 : 360000),
             )
           : null,
@@ -374,7 +342,7 @@ export class SpeakingGateway
       const sessionReadyPayload = {
         sessionId,
         teilNumber: examSession.teil_number,
-        serverStartTime: examSession.server_start_time,
+        serverStartTime: (examSession.server_start_time as Date)?.toISOString() ?? '',
         timeLimit: sessionContext.timeLimit,
         status: 'ready',
         message:
@@ -478,28 +446,22 @@ export class SpeakingGateway
           this.geminiService.closeLiveSession(context.sessionId);
 
           // Update database: mark session as interrupted if still active/paused
-          const { data: session } = await this.databaseService
-            .getClient()
-            .from('exam_sessions')
-            .select('status')
-            .eq('session_id', context.sessionId)
-            .single();
+          const sessionRow = await this.prisma.examSession.findUnique({
+            where: { session_id: context.sessionId },
+            select: { status: true },
+          });
 
-          if (
-            session &&
-            (session.status === 'active' || session.status === 'paused')
-          ) {
+          if (sessionRow && (sessionRow.status === 'active' || sessionRow.status === 'paused')) {
             // Note: Transcript already saved in handleDisconnect before grace period
 
-            await this.databaseService
-              .getClient()
-              .from('exam_sessions')
-              .update({
+            await this.prisma.examSession.update({
+              where: { session_id: context.sessionId },
+              data: {
                 status: 'interrupted',
-                completed_at: new Date().toISOString(),
+                completed_at: new Date(),
                 elapsed_time: context.elapsedSeconds,
-              })
-              .eq('session_id', context.sessionId);
+              },
+            });
 
             this.logger.log(
               `Session ${context.sessionId} marked as interrupted due to disconnect`,
@@ -712,18 +674,17 @@ export class SpeakingGateway
             );
           }
 
-          await this.databaseService
-            .getClient()
-            .from('exam_sessions')
-            .update({
+          await this.prisma.examSession.update({
+            where: { session_id: context.sessionId },
+            data: {
               status: 'interrupted',
-              completed_at: new Date().toISOString(),
+              completed_at: new Date(),
               elapsed_time: this.getElapsedSeconds(context),
-            })
-            .eq('session_id', context.sessionId);
+            },
+          });
         } catch (dbError) {
           this.logger.error(
-            `Failed to update session status in database: ${dbError.message}`,
+            `Failed to update session status in database: ${(dbError as Error).message}`,
           );
         }
 
@@ -809,24 +770,14 @@ export class SpeakingGateway
       context.elapsedSeconds = this.getElapsedSeconds(context);
 
       // Update database
-      const { error } = await this.databaseService
-        .getClient()
-        .from('exam_sessions')
-        .update({
-          status: 'paused',
-          pause_timestamp: new Date().toISOString(),
-          elapsed_time: context.elapsedSeconds,
-        })
-        .eq('session_id', context.sessionId);
-
-      if (error) {
-        this.logger.error(
-          `Failed to update session to paused: ${error.message}`,
-        );
-        client.emit('error', {
-          code: 'DATABASE_ERROR',
-          message: 'Failed to pause session',
+      try {
+        await this.prisma.examSession.update({
+          where: { session_id: context.sessionId },
+          data: { status: 'paused', pause_timestamp: new Date(), elapsed_time: context.elapsedSeconds },
         });
+      } catch (err) {
+        this.logger.error(`Failed to update session to paused: ${(err as Error).message}`);
+        client.emit('error', { code: 'DATABASE_ERROR', message: 'Failed to pause session' });
         return;
       }
 
@@ -976,19 +927,13 @@ export class SpeakingGateway
       }
 
       // Update database
-      const { error } = await this.databaseService
-        .getClient()
-        .from('exam_sessions')
-        .update({
-          status: 'active',
-          pause_timestamp: null,
-        })
-        .eq('session_id', context.sessionId);
-
-      if (error) {
-        this.logger.error(
-          `Failed to update session to active: ${error.message}`,
-        );
+      try {
+        await this.prisma.examSession.update({
+          where: { session_id: context.sessionId },
+          data: { status: 'active', pause_timestamp: null },
+        });
+      } catch (err) {
+        this.logger.error(`Failed to update session to active: ${(err as Error).message}`);
       }
 
       // Emit success
@@ -1242,15 +1187,10 @@ export class SpeakingGateway
         }
 
         // Update database: mark session as completed
-        await this.databaseService
-          .getClient()
-          .from('exam_sessions')
-          .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            elapsed_time: context.timeLimit,
-          })
-          .eq('session_id', context.sessionId);
+        await this.prisma.examSession.update({
+          where: { session_id: context.sessionId },
+          data: { status: 'completed', completed_at: new Date(), elapsed_time: context.timeLimit },
+        });
 
         // Close Gemini session
         this.geminiService.closeLiveSession(context.sessionId);

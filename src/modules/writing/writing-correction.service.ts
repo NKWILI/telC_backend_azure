@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DatabaseService } from '../../shared/services/database.service';
+import { PrismaService } from '../../shared/services/prisma.service';
 import { WritingGateway, CorrectionReadyPayload } from './writing.gateway';
 import { GeminiService } from '../speaking/services/gemini.service';
 
@@ -33,7 +33,7 @@ export class WritingCorrectionService {
   private readonly logger = new Logger(WritingCorrectionService.name);
 
   constructor(
-    private readonly db: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly gateway: WritingGateway,
     private readonly geminiService: GeminiService,
   ) {}
@@ -71,29 +71,17 @@ export class WritingCorrectionService {
       }));
 
     try {
-      const updatePayload: Record<string, unknown> = {
-        status: 'completed',
-        score,
-        feedback,
-        duration_seconds: durationSeconds,
-        completed_at: completedAt,
-      };
-      if (correctionsForDb.length > 0) {
-        updatePayload.corrections = correctionsForDb;
-      }
-
-      const { error: updateError } = await this.db
-        .getClient()
-        .from('writing_attempts')
-        .update(updatePayload)
-        .eq('attempt_id', attemptId);
-
-      if (updateError) {
-        this.logger.error(
-          `Failed to update writing attempt ${attemptId}: ${updateError.message}`,
-        );
-        return;
-      }
+      await this.prisma.writingAttempt.update({
+        where: { attempt_id: attemptId },
+        data: {
+          status: 'completed',
+          score,
+          feedback,
+          duration_seconds: durationSeconds,
+          completed_at: new Date(completedAt),
+          ...(correctionsForDb.length > 0 ? { corrections: correctionsForDb } : {}),
+        },
+      });
 
       const payload: CorrectionReadyPayload = {
         attemptId,

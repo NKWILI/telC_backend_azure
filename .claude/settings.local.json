@@ -8,7 +8,9 @@
       "Bash(npx jest:*)",
       "Bash(npm run:*)",
       "Bash(npm audit:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)"
     ]
   }
 }

@@ -6,7 +6,7 @@ import {
   Optional,
   Inject,
 } from '@nestjs/common';
-import { DatabaseService } from '../../shared/services/database.service';
+import { PrismaService } from '../../shared/services/prisma.service';
 import type {
   ExerciseTypeDto,
   ExerciseAttemptDto,
@@ -54,7 +54,7 @@ export class WritingService {
   private readonly logger = new Logger(WritingService.name);
 
   constructor(
-    private readonly db: DatabaseService,
+    private readonly prisma: PrismaService,
     @Optional()
     @Inject('WRITING_CORRECTION_QUEUE')
     private readonly correctionQueue?: WritingCorrectionQueue,
@@ -80,31 +80,19 @@ export class WritingService {
     limit = 50,
   ): Promise<ExerciseAttemptDto[]> {
     try {
-      let query = this.db
-        .getClient()
-        .from('writing_attempts')
-        .select(
-          'attempt_id, created_at, completed_at, score, feedback, duration_seconds',
-        )
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const exerciseId =
+        teilNumber !== undefined && WRITING_TEIL_IDS.includes(String(teilNumber))
+          ? String(teilNumber)
+          : undefined;
 
-      if (teilNumber !== undefined) {
-        const exerciseId = String(teilNumber);
-        if (WRITING_TEIL_IDS.includes(exerciseId)) {
-          query = query.eq('exercise_id', exerciseId);
-        }
-      }
+      const rows = await this.prisma.writingAttempt.findMany({
+        where: { student_id: studentId, ...(exerciseId ? { exercise_id: exerciseId } : {}) },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        select: { attempt_id: true, created_at: true, completed_at: true, score: true, feedback: true, duration_seconds: true },
+      });
 
-      const { data: rows, error } = await query;
-
-      if (error) {
-        this.logger.error(`Failed to fetch writing sessions: ${error.message}`);
-        return [];
-      }
-
-      return (rows || []).map((row: any) => this.mapRowToAttemptDto(row));
+      return rows.map((row) => this.mapRowToAttemptDto(row));
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
@@ -145,21 +133,19 @@ export class WritingService {
     const attemptId = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
-    const { error: insertError } = await this.db
-      .getClient()
-      .from('writing_attempts')
-      .insert({
-        attempt_id: attemptId,
-        student_id: studentId,
-        exercise_id: exerciseId,
-        content: content.trim(),
-        status: 'pending',
-        created_at: createdAt,
+    try {
+      await this.prisma.writingAttempt.create({
+        data: {
+          attempt_id: attemptId,
+          student_id: studentId,
+          exercise_id: exerciseId,
+          content: content.trim(),
+          status: 'pending',
+        },
       });
-
-    if (insertError) {
+    } catch (err) {
       this.logger.error(
-        `Failed to create writing attempt: ${insertError.message}`,
+        `Failed to create writing attempt: ${(err as Error).message}`,
       );
       throw new UnprocessableEntityException({
         statusCode: 422,
@@ -196,19 +182,13 @@ export class WritingService {
     studentId: string,
   ): Promise<Record<string, number>> {
     const result: Record<string, number> = {};
-    for (const id of WRITING_TEIL_IDS) {
-      result[id] = 0;
-    }
+    for (const id of WRITING_TEIL_IDS) result[id] = 0;
     try {
-      const { data: rows, error } = await this.db
-        .getClient()
-        .from('writing_attempts')
-        .select('exercise_id')
-        .eq('student_id', studentId)
-        .eq('status', 'completed');
-
-      if (error || !rows) return result;
-      for (const row of rows as { exercise_id: string }[]) {
+      const rows = await this.prisma.writingAttempt.findMany({
+        where: { student_id: studentId, status: 'completed' },
+        select: { exercise_id: true },
+      });
+      for (const row of rows) {
         if (WRITING_TEIL_IDS.includes(row.exercise_id)) {
           result[row.exercise_id] = 100;
         }
@@ -221,13 +201,15 @@ export class WritingService {
 
   private mapRowToAttemptDto(row: {
     attempt_id: string;
-    created_at?: string;
-    completed_at?: string | null;
+    created_at?: Date | string | null;
+    completed_at?: Date | string | null;
     score?: number | null;
     feedback?: string | null;
     duration_seconds?: number | null;
   }): ExerciseAttemptDto {
-    const date = row.completed_at || row.created_at || '';
+    const toIso = (d: Date | string | null | undefined) =>
+      d ? (d instanceof Date ? d.toISOString() : d) : '';
+    const date = toIso(row.completed_at) || toIso(row.created_at);
     return {
       id: row.attempt_id,
       date: date || undefined,

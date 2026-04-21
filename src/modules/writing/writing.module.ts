@@ -3,7 +3,6 @@ import { WritingController } from './writing.controller';
 import { WritingService } from './writing.service';
 import { WritingGateway } from './writing.gateway';
 import { WritingCorrectionService } from './writing-correction.service';
-import { DatabaseService } from '../../shared/services/database.service';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { AuthModule } from '../auth/auth.module';
 import { SpeakingModule } from '../speaking/speaking.module';
@@ -20,7 +19,6 @@ import { SpeakingModule } from '../speaking/speaking.module';
     WritingService,
     WritingGateway,
     WritingCorrectionService,
-    DatabaseService,
     RateLimitService,
     {
       provide: 'WRITING_CORRECTION_QUEUE',

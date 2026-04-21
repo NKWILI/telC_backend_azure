@@ -4,7 +4,7 @@ import {
   UnprocessableEntityException,
   Logger,
 } from '@nestjs/common';
-import { DatabaseService } from '../../shared/services/database.service';
+import { PrismaService } from '../../shared/services/prisma.service';
 import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
 import type { ListeningExerciseDto } from './dto/listening-exercise.dto';
@@ -227,7 +227,7 @@ const TEIL_IDS = Object.keys(CATALOG);
 export class ListeningService {
   private readonly logger = new Logger(ListeningService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
     const progress = await this.getProgressByExercise(studentId);
@@ -243,37 +243,19 @@ export class ListeningService {
     limit = 50,
   ): Promise<ExerciseAttemptDto[]> {
     try {
-      let query = this.db
-        .getClient()
-        .from('listening_attempts')
-        .select(
-          'attempt_id, created_at, completed_at, score, feedback, duration_seconds',
-        )
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const exerciseId =
+        teilNumber !== undefined && TEIL_IDS.includes(String(teilNumber))
+          ? String(teilNumber)
+          : undefined;
 
-      if (teilNumber !== undefined) {
-        const exerciseId = String(teilNumber);
-        if (TEIL_IDS.includes(exerciseId)) {
-          query = query.eq('exercise_id', exerciseId);
-        }
-      }
+      const rows = await this.prisma.listeningAttempt.findMany({
+        where: { student_id: studentId, ...(exerciseId ? { exercise_id: exerciseId } : {}) },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        select: { attempt_id: true, created_at: true, completed_at: true, score: true, feedback: true, duration_seconds: true },
+      });
 
-      const { data: rows, error } = await query;
-
-      if (error) {
-        this.logger.error(
-          `Failed to fetch listening sessions: ${error.message}`,
-        );
-        return [];
-      }
-
-      return (rows || []).map((row: Record<string, unknown>) =>
-        this.mapRowToAttemptDto(
-          row as Parameters<typeof this.mapRowToAttemptDto>[0],
-        ),
-      );
+      return rows.map((row) => this.mapRowToAttemptDto(row));
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
@@ -329,25 +311,17 @@ export class ListeningService {
     const score = this.computeScore(dto.answers, entry.answerKey);
 
     try {
-      const { error } = await this.db
-        .getClient()
-        .from('listening_attempts')
-        .insert({
+      await this.prisma.listeningAttempt.create({
+        data: {
           student_id: studentId,
           exercise_id: dto.type,
           status: 'completed',
           score,
           timed: dto.timed,
           content_revision: dto.content_revision,
-          completed_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        });
-
-      if (error) {
-        this.logger.error(
-          `Failed to persist listening attempt: ${error.message}`,
-        );
-      }
+          completed_at: new Date(),
+        },
+      });
     } catch (err) {
       this.logger.error(`DB error on submit: ${(err as Error).message}`);
     }
@@ -379,16 +353,12 @@ export class ListeningService {
     for (const id of TEIL_IDS) result[id] = 0;
 
     try {
-      const { data: rows, error } = await this.db
-        .getClient()
-        .from('listening_attempts')
-        .select('exercise_id')
-        .eq('student_id', studentId)
-        .eq('status', 'completed');
+      const rows = await this.prisma.listeningAttempt.findMany({
+        where: { student_id: studentId, status: 'completed' },
+        select: { exercise_id: true },
+      });
 
-      if (error || !rows) return result;
-
-      for (const row of rows as { exercise_id: string }[]) {
+      for (const row of rows) {
         if (TEIL_IDS.includes(row.exercise_id)) {
           result[row.exercise_id] = 100;
         }
@@ -401,13 +371,15 @@ export class ListeningService {
 
   private mapRowToAttemptDto(row: {
     attempt_id: string;
-    created_at?: string;
-    completed_at?: string | null;
+    created_at?: Date | string | null;
+    completed_at?: Date | string | null;
     score?: number | null;
     feedback?: string | null;
     duration_seconds?: number | null;
   }): ExerciseAttemptDto {
-    const date = row.completed_at || row.created_at || '';
+    const toIso = (d: Date | string | null | undefined) =>
+      d ? (d instanceof Date ? d.toISOString() : d) : '';
+    const date = toIso(row.completed_at) || toIso(row.created_at);
     return {
       id: row.attempt_id,
       date: date || undefined,

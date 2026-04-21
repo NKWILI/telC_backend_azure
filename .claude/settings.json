@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('DATABASE_URL set:', !!process.env.DATABASE_URL, '| starts with:', process.env.DATABASE_URL?.substring\\(0,30\\)\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({quiet:true}\\); console.log\\('starts with:', process.env.DATABASE_URL?.substring\\(0,50\\)\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({quiet:true}\\); console.log\\('Current DATABASE_URL starts with:', process.env.DATABASE_URL?.substring\\(0,60\\)\\)\")",
+      "Bash(psql --version)",
+      "Bash(pg_dump --version)",
+      "Bash(node scripts/inspect-supabase-schema.mjs)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma migrate reset --force)",
+      "Bash(timeout 12 node dist/main.js)",
+      "Bash(npx nest *)",
+      "Bash(rm -rf dist)",
+      "Bash(rm -rf src/generated)",
+      "Bash(timeout 12 node -r dotenv/config dist/main.js)",
+      "Bash(node -e \"const {PrismaClient} = require\\('@prisma/client'\\); const p = new PrismaClient\\(\\); console.log\\(Object.keys\\(p\\)\\)\")",
+      "Bash(timeout 15 node dist/main.js)"
+    ]
+  }
+}

@@ -4,7 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { DatabaseService } from '../../../shared/services/database.service';
+import { PrismaService } from '../../../shared/services/prisma.service';
 import { GeminiService } from './gemini.service';
 import { EvaluationResponseDto } from '../dto/evaluation-response.dto';
 import { ConversationMessage } from '../interfaces/session.interface';
@@ -19,7 +19,7 @@ export class EvaluationService {
   private readonly EVALUATION_TIMEOUT_MS = 30000; // 30 seconds
 
   constructor(
-    private readonly db: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly geminiService: GeminiService,
   ) {}
 
@@ -35,15 +35,12 @@ export class EvaluationService {
       this.logger.log(`Starting evaluation for session ${sessionId}`);
 
       // Step 1: Fetch session and transcript from database
-      const { data: session, error: sessionError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .select('session_id, teil_number, status, student_id')
-        .eq('session_id', sessionId)
-        .eq('student_id', studentId)
-        .single();
+      const session = await this.prisma.examSession.findFirst({
+        where: { session_id: sessionId, student_id: studentId },
+        select: { session_id: true, teil_number: true, status: true, student_id: true },
+      });
 
-      if (sessionError || !session) {
+      if (!session) {
         throw new NotFoundException('SESSION_NOT_FOUND');
       }
 
@@ -53,19 +50,17 @@ export class EvaluationService {
       }
 
       // Fetch transcript
-      const { data: transcript, error: transcriptError } = await this.db
-        .getClient()
-        .from('teil_transcripts')
-        .select('conversation_history')
-        .eq('session_id', sessionId)
-        .single();
+      const transcript = await this.prisma.teilTranscript.findFirst({
+        where: { session_id: sessionId },
+        select: { conversation_history: true },
+      });
 
-      if (transcriptError || !transcript) {
+      if (!transcript) {
         throw new NotFoundException('TRANSCRIPT_NOT_FOUND');
       }
 
       const conversationHistory: ConversationMessage[] =
-        transcript.conversation_history;
+        transcript.conversation_history as unknown as ConversationMessage[];
 
       if (!conversationHistory || conversationHistory.length === 0) {
         throw new Error('EMPTY_TRANSCRIPT');
@@ -85,26 +80,23 @@ export class EvaluationService {
       const parsedEvaluation = this.parseEvaluationResponse(evaluationResult);
 
       // Step 5: Save evaluation to database
-      const { error: insertError } = await this.db
-        .getClient()
-        .from('teil_evaluations')
-        .insert({
-          session_id: sessionId,
-          pronunciation_score: parsedEvaluation.pronunciation_score,
-          fluency_score: parsedEvaluation.fluency_score,
-          grammar_score: parsedEvaluation.grammar_score,
-          vocabulary_score: parsedEvaluation.vocabulary_score,
-          overall_score: parsedEvaluation.overall_score,
-          corrections_json: parsedEvaluation.corrections,
-          strengths: parsedEvaluation.strengths,
-          areas_for_improvement: parsedEvaluation.areas_for_improvement,
-          evaluation_requested_at: new Date().toISOString(),
+      try {
+        await this.prisma.teilEvaluation.create({
+          data: {
+            session_id: sessionId,
+            pronunciation_score: parsedEvaluation.pronunciation_score,
+            fluency_score: parsedEvaluation.fluency_score,
+            grammar_score: parsedEvaluation.grammar_score,
+            vocabulary_score: parsedEvaluation.vocabulary_score,
+            overall_score: parsedEvaluation.overall_score,
+            corrections_json: parsedEvaluation.corrections as object[],
+            strengths: parsedEvaluation.strengths,
+            areas_for_improvement: parsedEvaluation.areas_for_improvement,
+            evaluation_requested_at: new Date(),
+          },
         });
-
-      if (insertError) {
-        this.logger.error(
-          `Failed to save evaluation to database: ${insertError.message}`,
-        );
+      } catch (err) {
+        this.logger.error(`Failed to save evaluation to database: ${(err as Error).message}`);
         throw new BadRequestException('EVALUATION_SAVE_FAILED');
       }
 

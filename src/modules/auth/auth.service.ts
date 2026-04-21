@@ -5,7 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DatabaseService } from '../../shared/services/database.service';
+import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenService } from './token.service';
 import { Student } from '../../shared/interfaces/student.interface';
 import { DeviceSession } from '../../shared/interfaces/device-session.interface';
@@ -13,7 +13,7 @@ import { DeviceSession } from '../../shared/interfaces/device-session.interface'
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly db: DatabaseService,
+    private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
   ) {}
 
@@ -31,43 +31,35 @@ export class AuthService {
     }
 
     try {
-      const { data: acData, error: acError } = await this.db
-        .getClient()
-        .from('activation_codes')
-        .select('code, student_id, status, expires_at')
-        .eq('code', code.trim())
-        .single();
+      const acData = await this.prisma.activationCode.findUnique({
+        where: { code: code.trim() },
+        select: { code: true, student_id: true, status: true, expires_at: true },
+      });
 
-      if (acError || !acData) {
+      if (!acData) {
         throw new BadRequestException('INVALID_ACTIVATION_CODE');
       }
 
       if (acData.status === 'available') {
-        // First-time activation — no student yet
         return { student: null, activationCodeId: acData.code };
       }
 
       if (acData.status === 'active') {
-        // Returning user — check expiry
-        if (acData.expires_at && new Date(acData.expires_at) < new Date()) {
+        if (acData.expires_at && (acData.expires_at as Date) < new Date()) {
           throw new ForbiddenException('MEMBERSHIP_EXPIRED');
         }
 
-        const { data: student, error: studentError } = await this.db
-          .getClient()
-          .from('students')
-          .select('*')
-          .eq('id', acData.student_id)
-          .single();
+        const student = await this.prisma.student.findUnique({
+          where: { id: acData.student_id! },
+        });
 
-        if (studentError || !student) {
+        if (!student) {
           throw new BadRequestException('STUDENT_NOT_FOUND');
         }
 
-        return { student: student as Student, activationCodeId: acData.code };
+        return { student: student as unknown as Student, activationCodeId: acData.code };
       }
 
-      // Any other status (used, revoked, etc.)
       throw new BadRequestException('ACTIVATION_CODE_ALREADY_USED');
     } catch (error) {
       if (
@@ -100,45 +92,33 @@ export class AuthService {
       const { student, activationCodeId } =
         await this.validateActivationCode(activationCode);
 
-      const now = new Date().toISOString();
-
       if (!student) {
         // First-time activation: create student, claim code
-        const { data: newStudent, error: insertError } = await this.db
-          .getClient()
-          .from('students')
-          .insert({
+        const newStudent = await this.prisma.student.create({
+          data: {
             activation_code: activationCode.trim(),
             first_name: firstName.trim(),
             last_name: lastName.trim(),
             email: email.trim().toLowerCase(),
             is_registered: true,
-            created_at: now,
-            updated_at: now,
-          })
-          .select()
-          .single();
-
-        if (insertError || !newStudent) {
-          throw new Error('Failed to create student');
-        }
+          },
+        });
 
         // Claim the activation code: set status, expiry, link student
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
 
-        await this.db
-          .getClient()
-          .from('activation_codes')
-          .update({
+        await this.prisma.activationCode.update({
+          where: { code: activationCodeId },
+          data: {
             status: 'active',
-            claimed_at: now,
-            expires_at: expiresAt.toISOString(),
+            claimed_at: new Date(),
+            expires_at: expiresAt,
             student_id: newStudent.id,
-          })
-          .eq('code', activationCodeId);
+          },
+        });
 
-        return newStudent as Student;
+        return newStudent as unknown as Student;
       }
 
       // Returning user — already registered
@@ -147,25 +127,18 @@ export class AuthService {
       }
 
       // Edge case: code was active but student not yet registered
-      const { data: updatedStudent, error: updateError } = await this.db
-        .getClient()
-        .from('students')
-        .update({
+      const updatedStudent = await this.prisma.student.update({
+        where: { id: student.id },
+        data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           email: email.trim().toLowerCase(),
           is_registered: true,
-          updated_at: now,
-        })
-        .eq('id', student.id)
-        .select()
-        .single();
+          updated_at: new Date(),
+        },
+      });
 
-      if (updateError || !updatedStudent) {
-        throw new Error('Failed to update student');
-      }
-
-      return updatedStudent as Student;
+      return updatedStudent as unknown as Student;
     } catch (error) {
       if (
         error instanceof BadRequestException ||
@@ -210,57 +183,38 @@ export class AuthService {
 
     try {
       // 1. Revoke existing session for same device (re-login)
-      const { data: existingSessions } = await this.db
-        .getClient()
-        .from('device_sessions')
-        .select('id')
-        .eq('student_id', studentId)
-        .eq('device_id', deviceId)
-        .is('revoked_at', null);
+      const existingSessions = await this.prisma.deviceSession.findMany({
+        where: { student_id: studentId, device_id: deviceId, revoked_at: null },
+        select: { id: true },
+      });
 
-      if (existingSessions && existingSessions.length > 0) {
-        await this.db
-          .getClient()
-          .from('device_sessions')
-          .update({ revoked_at: new Date().toISOString() })
-          .in(
-            'id',
-            existingSessions.map((s) => s.id),
-          );
+      if (existingSessions.length > 0) {
+        await this.prisma.deviceSession.updateMany({
+          where: { id: { in: existingSessions.map((s) => s.id) } },
+          data: { revoked_at: new Date() },
+        });
       }
 
       // 2. Check device limit (max 3 active sessions)
-      const { count, error: countError } = await this.db
-        .getClient()
-        .from('device_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('student_id', studentId)
-        .is('revoked_at', null);
+      const activeCount = await this.prisma.deviceSession.count({
+        where: { student_id: studentId, revoked_at: null },
+      });
 
-      if (!countError && count !== null && count >= 3) {
+      if (activeCount >= 3) {
         throw new ForbiddenException('DEVICE_LIMIT_REACHED');
       }
 
       // 3. Create new device session
-      const { data: session, error } = await this.db
-        .getClient()
-        .from('device_sessions')
-        .insert({
+      const session = await this.prisma.deviceSession.create({
+        data: {
           student_id: studentId,
           device_id: deviceId,
           device_name: deviceName?.trim() || null,
           refresh_token_hash: refreshTokenHash,
-          last_used_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+        },
+      });
 
-      if (error || !session) {
-        throw new Error('Failed to create device session');
-      }
-
-      return session as DeviceSession;
+      return session as unknown as DeviceSession;
     } catch (error) {
       if (error instanceof ForbiddenException) {
         throw error;
@@ -283,36 +237,24 @@ export class AuthService {
     }
 
     try {
-      // Fetch the device session
-      const { data: session, error } = await this.db
-        .getClient()
-        .from('device_sessions')
-        .select('*')
-        .eq('id', sessionId)
-        .eq('student_id', studentId)
-        .single();
+      const session = await this.prisma.deviceSession.findFirst({
+        where: { id: sessionId, student_id: studentId },
+      });
 
-      if (error || !session) {
+      if (!session) {
         throw new UnauthorizedException('INVALID_SESSION');
       }
 
-      // Check if session is revoked
       if (session.revoked_at !== null) {
         throw new UnauthorizedException('SESSION_REVOKED');
       }
 
-      // Update last_used_at timestamp
-      const { error: updateError } = await this.db
-        .getClient()
-        .from('device_sessions')
-        .update({ last_used_at: new Date().toISOString() })
-        .eq('id', sessionId);
+      await this.prisma.deviceSession.update({
+        where: { id: sessionId },
+        data: { last_used_at: new Date() },
+      });
 
-      if (updateError) {
-        throw new Error('Failed to update session');
-      }
-
-      return session as DeviceSession;
+      return session as unknown as DeviceSession;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -325,18 +267,15 @@ export class AuthService {
    * Fetch a student by id
    */
   async getStudentById(studentId: string): Promise<Student> {
-    const { data: student, error } = await this.db
-      .getClient()
-      .from('students')
-      .select('*')
-      .eq('id', studentId)
-      .single();
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+    });
 
-    if (error || !student) {
+    if (!student) {
       throw new BadRequestException('STUDENT_NOT_FOUND');
     }
 
-    return student as Student;
+    return student as unknown as Student;
   }
 
   /**
@@ -346,38 +285,26 @@ export class AuthService {
     studentId: string,
     updates: { firstName?: string; lastName?: string; email?: string },
   ): Promise<Student> {
-    const updatePayload: {
+    const data: {
       first_name?: string;
       last_name?: string;
       email?: string;
-      updated_at: string;
-    } = {
-      updated_at: new Date().toISOString(),
-    };
+      updated_at: Date;
+    } = { updated_at: new Date() };
 
-    if (updates.firstName?.trim()) {
-      updatePayload.first_name = updates.firstName.trim();
-    }
-    if (updates.lastName?.trim()) {
-      updatePayload.last_name = updates.lastName.trim();
-    }
-    if (updates.email?.trim()) {
-      updatePayload.email = updates.email.trim().toLowerCase();
-    }
+    if (updates.firstName?.trim()) data.first_name = updates.firstName.trim();
+    if (updates.lastName?.trim()) data.last_name = updates.lastName.trim();
+    if (updates.email?.trim()) data.email = updates.email.trim().toLowerCase();
 
-    const { data: student, error } = await this.db
-      .getClient()
-      .from('students')
-      .update(updatePayload)
-      .eq('id', studentId)
-      .select()
-      .single();
-
-    if (error || !student) {
+    try {
+      const student = await this.prisma.student.update({
+        where: { id: studentId },
+        data,
+      });
+      return student as unknown as Student;
+    } catch {
       throw new BadRequestException('PROFILE_UPDATE_FAILED');
     }
-
-    return student as Student;
   }
 
   /**
@@ -387,16 +314,12 @@ export class AuthService {
     sessionId: string,
     refreshTokenHash: string,
   ): Promise<void> {
-    const { error } = await this.db
-      .getClient()
-      .from('device_sessions')
-      .update({
-        refresh_token_hash: refreshTokenHash,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId);
-
-    if (error) {
+    try {
+      await this.prisma.deviceSession.update({
+        where: { id: sessionId },
+        data: { refresh_token_hash: refreshTokenHash, last_used_at: new Date() },
+      });
+    } catch {
       throw new BadRequestException('SESSION_UPDATE_FAILED');
     }
   }
@@ -405,13 +328,12 @@ export class AuthService {
    * Revoke a device session
    */
   async revokeDeviceSession(sessionId: string): Promise<void> {
-    const { error } = await this.db
-      .getClient()
-      .from('device_sessions')
-      .update({ revoked_at: new Date().toISOString() })
-      .eq('id', sessionId);
-
-    if (error) {
+    try {
+      await this.prisma.deviceSession.update({
+        where: { id: sessionId },
+        data: { revoked_at: new Date() },
+      });
+    } catch {
       throw new BadRequestException('SESSION_REVOKE_FAILED');
     }
   }
@@ -424,40 +346,32 @@ export class AuthService {
     studentId: string,
     deviceId: string,
   ): Promise<DeviceSession> {
-    const { data: session, error } = await this.db
-      .getClient()
-      .from('device_sessions')
-      .select('*')
-      .eq('student_id', studentId)
-      .eq('device_id', deviceId)
-      .is('revoked_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    const session = await this.prisma.deviceSession.findFirst({
+      where: { student_id: studentId, device_id: deviceId, revoked_at: null },
+      orderBy: { created_at: 'desc' },
+    });
 
-    if (error || !session) {
+    if (!session) {
       throw new UnauthorizedException('NO_ACTIVE_SESSION');
     }
 
-    return session as DeviceSession;
+    return session as unknown as DeviceSession;
   }
 
   /**
    * Get activation code expiry date for a given code
    */
   async getActivationCodeExpiry(activationCode: string): Promise<string> {
-    const { data, error } = await this.db
-      .getClient()
-      .from('activation_codes')
-      .select('expires_at')
-      .eq('code', activationCode.trim())
-      .single();
+    const data = await this.prisma.activationCode.findUnique({
+      where: { code: activationCode.trim() },
+      select: { expires_at: true },
+    });
 
-    if (error || !data?.expires_at) {
+    if (!data?.expires_at) {
       throw new BadRequestException('INVALID_ACTIVATION_CODE');
     }
 
-    return data.expires_at;
+    return (data.expires_at as Date).toISOString();
   }
 
   /**
@@ -465,19 +379,16 @@ export class AuthService {
    * Queries activation_codes by student_id and checks expires_at.
    */
   async checkMembershipExpiry(studentId: string): Promise<void> {
-    const { data, error } = await this.db
-      .getClient()
-      .from('activation_codes')
-      .select('expires_at')
-      .eq('student_id', studentId)
-      .eq('status', 'active')
-      .single();
+    const data = await this.prisma.activationCode.findFirst({
+      where: { student_id: studentId, status: 'active' },
+      select: { expires_at: true },
+    });
 
-    if (error || !data) {
+    if (!data) {
       throw new UnauthorizedException('INVALID_SESSION');
     }
 
-    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    if (data.expires_at && (data.expires_at as Date) < new Date()) {
       throw new ForbiddenException('MEMBERSHIP_EXPIRED');
     }
   }

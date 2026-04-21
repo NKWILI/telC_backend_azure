@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { DatabaseService } from '../../../shared/services/database.service';
+import { PrismaService } from '../../../shared/services/prisma.service';
 import {
   StartSessionResponseDto,
   PauseSessionResponseDto,
@@ -37,7 +37,7 @@ export class SpeakingService {
   // In-memory session state (will be expanded when WebSocket gateway is added)
   private sessionStates: Map<string, SessionState> = new Map();
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Endpoint 1: POST /api/speaking/session/start
@@ -59,26 +59,19 @@ export class SpeakingService {
       }
 
       // If student already has an active/paused session, close it so a new one can start
-      const { data: existingSession } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .select('session_id, status')
-        .eq('student_id', studentId)
-        .in('status', ['active', 'paused'])
-        .maybeSingle();
+      const existingSession = await this.prisma.examSession.findFirst({
+        where: { student_id: studentId, status: { in: ['active', 'paused'] } },
+        select: { session_id: true, status: true },
+      });
 
       if (existingSession) {
         this.logger.log(
           `Closing existing session ${existingSession.session_id} (status: ${existingSession.status}) before starting new one for student ${studentId}`,
         );
-        await this.db
-          .getClient()
-          .from('exam_sessions')
-          .update({
-            status: 'interrupted',
-            completed_at: new Date().toISOString(),
-          })
-          .eq('session_id', existingSession.session_id);
+        await this.prisma.examSession.update({
+          where: { session_id: existingSession.session_id },
+          data: { status: 'interrupted', completed_at: new Date() },
+        });
       }
 
       // Determine time limit based on Teil
@@ -92,29 +85,25 @@ export class SpeakingService {
       const serverStartTime = new Date();
 
       // Create session in database
-      const { data: session, error: insertError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .insert({
-          student_id: studentId,
-          teil_number: teilNumber,
-          status: 'active',
-          use_timer: useTimer,
-          time_limit_seconds: timeLimit,
-          server_start_time: serverStartTime.toISOString(),
-          elapsed_time: 0,
-        })
-        .select('session_id')
-        .single();
-
-      if (insertError) {
-        this.logger.error(
-          `Failed to create exam session: ${insertError.message}`,
-        );
+      let sessionId: string;
+      try {
+        const session = await this.prisma.examSession.create({
+          data: {
+            student_id: studentId,
+            teil_number: teilNumber,
+            status: 'active',
+            use_timer: useTimer,
+            time_limit_seconds: timeLimit,
+            server_start_time: serverStartTime,
+            elapsed_time: 0,
+          },
+          select: { session_id: true },
+        });
+        sessionId = session.session_id;
+      } catch (err) {
+        this.logger.error(`Failed to create exam session: ${(err as Error).message}`);
         throw new BadRequestException('FAILED_TO_CREATE_SESSION');
       }
-
-      const sessionId = session.session_id;
 
       // Store in-memory state for WebSocket integration
       this.sessionStates.set(sessionId, {
@@ -160,17 +149,12 @@ export class SpeakingService {
       this.logger.log(`Pausing session ${sessionId}`);
 
       // Verify session exists and belongs to student
-      const { data: session, error: fetchError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .select(
-          'session_id, status, server_start_time, time_limit_seconds, use_timer',
-        )
-        .eq('session_id', sessionId)
-        .eq('student_id', studentId)
-        .single();
+      const session = await this.prisma.examSession.findFirst({
+        where: { session_id: sessionId, student_id: studentId },
+        select: { session_id: true, status: true, server_start_time: true, time_limit_seconds: true, use_timer: true },
+      });
 
-      if (fetchError || !session) {
+      if (!session) {
         throw new NotFoundException('SESSION_NOT_FOUND');
       }
 
@@ -181,24 +165,19 @@ export class SpeakingService {
       }
 
       // Calculate elapsed time
-      const startTime = new Date(session.server_start_time);
+      const startTime = session.server_start_time as Date;
       const now = new Date();
       const elapsedSeconds = Math.floor(
         (now.getTime() - startTime.getTime()) / 1000,
       );
 
       // Update session in database
-      const { error: updateError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .update({
-          status: 'paused',
-          pause_timestamp: now.toISOString(),
-          elapsed_time: elapsedSeconds,
-        })
-        .eq('session_id', sessionId);
-
-      if (updateError) {
+      try {
+        await this.prisma.examSession.update({
+          where: { session_id: sessionId },
+          data: { status: 'paused', pause_timestamp: now, elapsed_time: elapsedSeconds },
+        });
+      } catch {
         throw new BadRequestException('FAILED_TO_PAUSE_SESSION');
       }
 
@@ -245,17 +224,12 @@ export class SpeakingService {
       this.logger.log(`Resuming session ${sessionId}`);
 
       // Verify session exists and belongs to student
-      const { data: session, error: fetchError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .select(
-          'session_id, status, server_start_time, time_limit_seconds, use_timer, pause_timestamp, elapsed_time',
-        )
-        .eq('session_id', sessionId)
-        .eq('student_id', studentId)
-        .single();
+      const session = await this.prisma.examSession.findFirst({
+        where: { session_id: sessionId, student_id: studentId },
+        select: { session_id: true, status: true, pause_timestamp: true, elapsed_time: true, time_limit_seconds: true, use_timer: true },
+      });
 
-      if (fetchError || !session) {
+      if (!session) {
         throw new NotFoundException('SESSION_NOT_FOUND');
       }
 
@@ -266,23 +240,19 @@ export class SpeakingService {
       }
 
       // Calculate pause duration
-      const pauseTime = new Date(session.pause_timestamp);
+      const pauseTime = session.pause_timestamp as Date;
       const now = new Date();
       const pauseDuration = Math.floor(
         (now.getTime() - pauseTime.getTime()) / 1000,
       );
 
       // Update session in database
-      const { error: updateError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .update({
-          status: 'active',
-          pause_timestamp: null,
-        })
-        .eq('session_id', sessionId);
-
-      if (updateError) {
+      try {
+        await this.prisma.examSession.update({
+          where: { session_id: sessionId },
+          data: { status: 'active', pause_timestamp: null },
+        });
+      } catch {
         throw new BadRequestException('FAILED_TO_RESUME_SESSION');
       }
 
@@ -296,7 +266,7 @@ export class SpeakingService {
       let remainingSeconds: number | null = null;
       if (session.use_timer && session.time_limit_seconds) {
         // Total elapsed = previous elapsed + pause duration
-        const totalElapsed = session.elapsed_time + pauseDuration;
+        const totalElapsed = (session.elapsed_time ?? 0) + pauseDuration;
         remainingSeconds = Math.max(
           0,
           session.time_limit_seconds - totalElapsed,
@@ -330,22 +300,17 @@ export class SpeakingService {
       );
 
       // Verify session exists and belongs to student
-      const { data: session, error: fetchError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .select(
-          'session_id, status, server_start_time, elapsed_time, use_timer, time_limit_seconds, pause_timestamp, teil_number',
-        )
-        .eq('session_id', sessionId)
-        .eq('student_id', studentId)
-        .single();
+      const session = await this.prisma.examSession.findFirst({
+        where: { session_id: sessionId, student_id: studentId },
+        select: { session_id: true, status: true, server_start_time: true, elapsed_time: true, use_timer: true, time_limit_seconds: true, pause_timestamp: true, teil_number: true },
+      });
 
-      if (fetchError || !session) {
+      if (!session) {
         throw new NotFoundException('SESSION_NOT_FOUND');
       }
 
       // Calculate final elapsed time
-      const startTime = new Date(session.server_start_time);
+      const startTime = session.server_start_time as Date;
       const now = new Date();
       let totalElapsedSeconds = Math.floor(
         (now.getTime() - startTime.getTime()) / 1000,
@@ -353,29 +318,28 @@ export class SpeakingService {
 
       // If session is currently paused, add the pause time to elapsed
       if (session.status === 'paused' && session.pause_timestamp) {
-        const pauseTime = new Date(session.pause_timestamp);
+        const pauseTime = session.pause_timestamp as Date;
         const pausedDurationSeconds = Math.floor(
           (now.getTime() - pauseTime.getTime()) / 1000,
         );
         // Don't count the pause duration that happened after pausing
-        totalElapsedSeconds = session.elapsed_time + pausedDurationSeconds;
+        totalElapsedSeconds = (session.elapsed_time ?? 0) + pausedDurationSeconds;
       }
 
       // Determine if evaluable (minimum 120 seconds = 2 minutes)
       const isEvaluable = totalElapsedSeconds >= 120;
 
       // Update session in database
-      const { error: updateError } = await this.db
-        .getClient()
-        .from('exam_sessions')
-        .update({
-          status: reason === 'cancelled' ? 'cancelled' : 'completed',
-          completed_at: now.toISOString(),
-          elapsed_time: totalElapsedSeconds,
-        })
-        .eq('session_id', sessionId);
-
-      if (updateError) {
+      try {
+        await this.prisma.examSession.update({
+          where: { session_id: sessionId },
+          data: {
+            status: reason === 'cancelled' ? 'cancelled' : 'completed',
+            completed_at: now,
+            elapsed_time: totalElapsedSeconds,
+          },
+        });
+      } catch {
         throw new BadRequestException('FAILED_TO_END_SESSION');
       }
 
@@ -399,15 +363,13 @@ export class SpeakingService {
         }, 0);
       } else {
         // Fetch from teil_transcripts if session was ended via REST without history
-        const { data: transcript } = await this.db
-          .getClient()
-          .from('teil_transcripts')
-          .select('word_count, conversation_history')
-          .eq('session_id', sessionId)
-          .single();
+        const transcript = await this.prisma.teilTranscript.findFirst({
+          where: { session_id: sessionId },
+          select: { word_count: true, conversation_history: true },
+        });
 
         if (transcript) {
-          wordCount = transcript.word_count || 0;
+          wordCount = transcript.word_count ?? 0;
           messageCount = Array.isArray(transcript.conversation_history)
             ? transcript.conversation_history.length
             : 0;
@@ -513,46 +475,33 @@ export class SpeakingService {
     limit = 50,
   ): Promise<SessionHistoryItemDto[]> {
     try {
-      let query = this.db
-        .getClient()
-        .from('exam_sessions')
-        .select(
-          'session_id, teil_number, completed_at, teil_evaluations(overall_score, strengths, areas_for_improvement)',
-        )
-        .eq('student_id', studentId)
-        .in('status', ['completed', 'interrupted'])
-        .not('completed_at', 'is', null)
-        .order('completed_at', { ascending: false })
-        .limit(limit);
+      const rows = await this.prisma.examSession.findMany({
+        where: {
+          student_id: studentId,
+          status: { in: ['completed', 'interrupted'] },
+          completed_at: { not: null },
+          ...(teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3
+            ? { teil_number: teilNumber }
+            : {}),
+        },
+        include: { teil_evaluations: { select: { overall_score: true, strengths: true, areas_for_improvement: true } } },
+        orderBy: { completed_at: 'desc' },
+        take: limit,
+      });
 
-      if (teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3) {
-        query = query.eq('teil_number', teilNumber);
-      }
-
-      const { data: rows, error } = await query;
-
-      if (error) {
-        this.logger.error(`Failed to fetch sessions: ${error.message}`);
-        return [];
-      }
-
-      const result: SessionHistoryItemDto[] = (rows || []).map((row: any) => {
-        const evalRow = Array.isArray(row.teil_evaluations)
-          ? row.teil_evaluations[0]
-          : row.teil_evaluations;
+      return rows.map((row) => {
+        const evalRow = row.teil_evaluations[0];
         return {
           sessionId: row.session_id,
           teilNumber: row.teil_number,
-          completedAt: row.completed_at || '',
+          completedAt: (row.completed_at as Date)?.toISOString() ?? '',
           overallScore: evalRow?.overall_score ?? null,
           strengths: evalRow?.strengths ?? null,
           areasForImprovement: evalRow?.areas_for_improvement ?? null,
         };
       });
-
-      return result;
     } catch (err) {
-      this.logger.error(`Error in getSessions: ${err.message}`);
+      this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
     }
   }
@@ -617,28 +566,24 @@ export class SpeakingService {
         return count + msg.text.split(/\s+/).filter(Boolean).length;
       }, 0);
 
-      const { error } = await this.db
-        .getClient()
-        .from('teil_transcripts')
-        .upsert(
-          {
-            session_id: sessionId,
-            transcript_text: transcriptText,
-            conversation_history: conversationHistory,
-            word_count: wordCount,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: 'session_id' },
-        );
+      const existing = await this.prisma.teilTranscript.findFirst({
+        where: { session_id: sessionId },
+        select: { id: true },
+      });
 
-      if (error) {
-        this.logger.error(`Failed to save transcript: ${error.message}`, error);
-        // Don't throw - transcript save failure shouldn't block session end
+      const transcriptData = {
+        transcript_text: transcriptText,
+        conversation_history: conversationHistory as object[],
+        word_count: wordCount,
+      };
+
+      if (existing) {
+        await this.prisma.teilTranscript.update({ where: { id: existing.id }, data: transcriptData });
       } else {
-        this.logger.log(
-          `Transcript saved successfully for session ${sessionId}`,
-        );
+        await this.prisma.teilTranscript.create({ data: { session_id: sessionId, ...transcriptData } });
       }
+
+      this.logger.log(`Transcript saved successfully for session ${sessionId}`);
     } catch (error) {
       this.logger.error(
         `Error saving transcript: ${error.message}`,

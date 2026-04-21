@@ -1,0 +1,218 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Student {
+  id              String    @id @default(uuid())
+  activation_code String
+  first_name      String?
+  last_name       String?
+  email           String?
+  is_registered   Boolean   @default(false)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+  last_seen_at    DateTime  @default(now())
+
+  activation_codes   ActivationCode[]
+  device_sessions    DeviceSession[]
+  exam_sessions      ExamSession[]
+  lesen_sessions     LesenSession[]
+
+  @@map("students")
+}
+
+model ActivationCode {
+  code       String    @id
+  student_id String?
+  status     String
+  created_at DateTime? @default(now())
+  claimed_at DateTime?
+  expires_at DateTime?
+
+  student Student? @relation(fields: [student_id], references: [id])
+
+  @@map("activation_codes")
+}
+
+model DeviceSession {
+  id                 String    @id @default(uuid())
+  student_id         String
+  device_id          String
+  refresh_token_hash String
+  device_name        String?
+  last_used_at       DateTime  @default(now())
+  created_at         DateTime  @default(now())
+  revoked_at         DateTime?
+
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@map("device_sessions")
+}
+
+model ExamSession {
+  session_id                 String    @id @default(uuid())
+  user_id                    String?
+  student_id                 String?
+  teil_number                Int
+  status                     String
+  use_timer                  Boolean?  @default(true)
+  time_limit_seconds         Int?
+  server_start_time          DateTime?
+  pause_timestamp            DateTime?
+  elapsed_time               Int?      @default(0)
+  context_from_previous_teil Boolean?  @default(false)
+  created_at                 DateTime? @default(now())
+  updated_at                 DateTime? @default(now())
+  completed_at               DateTime?
+
+  student          Student?         @relation(fields: [student_id], references: [id])
+  teil_transcripts TeilTranscript[]
+  teil_evaluations TeilEvaluation[]
+  gemini_sessions  GeminiSession[]
+
+  @@map("exam_sessions")
+}
+
+model GeminiSession {
+  id                String    @id @default(uuid())
+  exam_session_id   String
+  gemini_session_id String?
+  status            String?
+  created_at        DateTime? @default(now())
+  closed_at         DateTime?
+  error_message     String?
+
+  exam_session ExamSession @relation(fields: [exam_session_id], references: [session_id])
+
+  @@map("gemini_sessions")
+}
+
+model TeilTranscript {
+  id                   String    @id @default(uuid())
+  session_id           String
+  transcript_text      String
+  conversation_history Json?
+  word_count           Int?      @default(0)
+  interrupted_at       DateTime?
+  created_at           DateTime? @default(now())
+
+  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
+
+  @@map("teil_transcripts")
+}
+
+model TeilEvaluation {
+  id                      String    @id @default(uuid())
+  session_id              String
+  pronunciation_score     Float?
+  fluency_score           Float?
+  grammar_score           Float?
+  vocabulary_score        Float?
+  overall_score           Float?
+  corrections_json        Json?
+  strengths               String?
+  areas_for_improvement   String?
+  evaluation_requested_at DateTime?
+  created_at              DateTime? @default(now())
+
+  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
+
+  @@map("teil_evaluations")
+}
+
+model WritingAttempt {
+  attempt_id        String    @id @default(uuid())
+  student_id        String
+  exercise_id       String
+  content           String
+  status            String    @default("pending")
+  score             Int?
+  feedback          String?
+  corrections       Json?
+  duration_seconds  Int?
+  notification_sent Boolean   @default(false)
+  created_at        DateTime  @default(now())
+  completed_at      DateTime?
+
+  @@map("writing_attempts")
+}
+
+model ListeningAttempt {
+  attempt_id       String    @id @default(uuid())
+  student_id       String
+  exercise_id      String
+  status           String    @default("completed")
+  score            Int?
+  feedback         String?
+  duration_seconds Int?
+  content_revision String?
+  timed            Boolean?
+  created_at       DateTime  @default(now())
+  completed_at     DateTime?
+
+  @@map("listening_attempts")
+}
+
+model LesenPassage {
+  id         String    @id @default(uuid())
+  title      String
+  content    String
+  cefr_level String    @default("B1")
+  topic      String?
+  word_count Int?
+  created_at DateTime? @default(now())
+
+  questions LesenQuestion[]
+
+  @@map("lesen_passages")
+}
+
+model LesenQuestion {
+  id             String    @id @default(uuid())
+  passage_id     String
+  question_text  String
+  question_type  String
+  options        Json
+  correct_answer String
+  explanation    String?
+  difficulty     Int?
+  created_at     DateTime? @default(now())
+
+  passage LesenPassage @relation(fields: [passage_id], references: [id])
+
+  @@map("lesen_questions")
+}
+
+model LesenSession {
+  session_id   String    @id @default(uuid())
+  user_id      String?
+  student_id   String?
+  question_ids String[]
+  status       String
+  started_at   DateTime? @default(now())
+  completed_at DateTime?
+
+  student  Student?       @relation(fields: [student_id], references: [id])
+  results  LesenResult[]
+
+  @@map("lesen_sessions")
+}
+
+model LesenResult {
+  id              String    @id @default(uuid())
+  session_id      String
+  user_answers    Json
+  score           Float
+  correct_count   Int
+  total_questions Int
+  created_at      DateTime? @default(now())
+
+  session LesenSession @relation(fields: [session_id], references: [session_id])
+
+  @@map("lesen_results")
+}
