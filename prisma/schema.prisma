@@ -216,3 +216,44 @@ model LesenResult {
 
   @@map("lesen_results")
 }
+
+model SprachbausteineExercise {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  teil_number      Int
+  content_revision String
+  label            String?
+  instruction      String
+  duration_minutes Int
+  body             String
+  created_at       DateTime @default(now())
+
+  gaps SprachbausteineGap[]
+
+  @@map("sprachbausteine_exercises")
+}
+
+model SprachbausteineGap {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exercise_id String @db.Uuid
+  gap_key     String
+  gap_number  Int
+  sort_order  Int
+
+  exercise SprachbausteineExercise    @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+  options  SprachbausteineGapOption[]
+
+  @@unique([exercise_id, gap_key])
+  @@map("sprachbausteine_gaps")
+}
+
+model SprachbausteineGapOption {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gap_id     String  @db.Uuid
+  content    String
+  is_correct Boolean @default(false)
+  sort_order Int
+
+  gap SprachbausteineGap @relation(fields: [gap_id], references: [id], onDelete: Cascade)
+
+  @@map("sprachbausteine_gap_options")
+}
