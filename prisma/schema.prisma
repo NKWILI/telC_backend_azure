@@ -217,6 +217,48 @@ model LesenResult {
   @@map("lesen_results")
 }
 
+model LesenTeil2Exercise {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contentRevision String
+  label           String
+  instruction     String
+  cautionNote     String
+  topSender       String
+  topReceiver     String
+  topBody         String
+  quotedThread    String
+  createdAt       DateTime @default(now())
+
+  questions LesenTeil2Question[]
+
+  @@map("lesen_teil2_exercises")
+}
+
+model LesenTeil2Question {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId     String @db.Uuid
+  questionNumber Int
+  prompt         String
+  sortOrder      Int
+
+  exercise LesenTeil2Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  options  LesenTeil2Option[]
+
+  @@map("lesen_teil2_questions")
+}
+
+model LesenTeil2Option {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  questionId String  @db.Uuid
+  content    String
+  isCorrect  Boolean @default(false)
+  sortOrder  Int
+
+  question LesenTeil2Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("lesen_teil2_options")
+}
+
 model SprachbausteineExercise {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   teil_number      Int

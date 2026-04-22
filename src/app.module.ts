@@ -9,6 +9,7 @@ import { SpeakingModule } from './modules/speaking/speaking.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { ListeningModule } from './modules/listening/listening.module';
 import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine.module';
+import { LesenModule } from './modules/lesen/lesen.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine
     WritingModule,
     ListeningModule,
     SprachbausteineModule,
+    LesenModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
