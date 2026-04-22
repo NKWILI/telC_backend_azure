@@ -29,14 +29,17 @@ export class SprachbausteineService {
       throw new NotFoundException('No Sprachbausteine exercise found');
     }
 
+    const letters = ['a', 'b', 'c'];
     const gaps: SprachbausteineGapDto[] = exercise.gaps.map((gap) => {
+      const options = gap.options.map((o) => ({
+        id: `${gap.gap_key}${letters[o.sort_order]}`,
+        content: o.content,
+      }));
       const correctOption = gap.options.find((o) => o.is_correct);
-      return {
-        id: gap.id,
-        gapKey: gap.gap_key,
-        options: gap.options.map((o) => ({ id: o.id, content: o.content })),
-        correctOptionId: correctOption?.id ?? '',
-      };
+      const correctOptionId = correctOption
+        ? `${gap.gap_key}${letters[correctOption.sort_order]}`
+        : '';
+      return { id: gap.gap_key, options, correctOptionId };
     });
 
     return {

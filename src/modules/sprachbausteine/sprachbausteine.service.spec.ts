@@ -47,12 +47,17 @@ describe('SprachbausteineService', () => {
       expect(result.contentRevision).toBe('modelltest-1-v1');
       expect(typeof result.issuedAt).toBe('string');
       expect(result.teil1.gaps).toHaveLength(10);
-      result.teil1.gaps.forEach((gap) => {
+      result.teil1.gaps.forEach((gap, i) => {
+        const gapKey = String(21 + i);
+        expect(gap.id).toBe(gapKey);
         expect(gap.options).toHaveLength(3);
-        expect(gap.correctOptionId).not.toBeNull();
-        expect(typeof gap.correctOptionId).toBe('string');
-        const optionIds = gap.options.map((o) => o.id);
-        expect(optionIds).toContain(gap.correctOptionId);
+        expect(gap.options.map((o) => o.id)).toEqual([
+          `${gapKey}a`,
+          `${gapKey}b`,
+          `${gapKey}c`,
+        ]);
+        // correct option is sort_order=1 (b) in mock data
+        expect(gap.correctOptionId).toBe(`${gapKey}b`);
       });
     });
 
