@@ -299,3 +299,44 @@ model SprachbausteineGapOption {
 
   @@map("sprachbausteine_gap_options")
 }
+
+model LesenTeil1Exercise {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contentRevision String
+  label           String
+  instruction     String
+  createdAt       DateTime @default(now())
+
+  texts  LesenTeil1Text[]
+  titles LesenTeil1Title[]
+
+  @@map("lesen_teil1_exercises")
+}
+
+model LesenTeil1Text {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId     String  @db.Uuid
+  textNumber     Int
+  von            String?
+  an             String?
+  body           String
+  sortOrder      Int
+  correctTitleId String  @db.Uuid
+
+  exercise     LesenTeil1Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  correctTitle LesenTeil1Title    @relation("CorrectTitle", fields: [correctTitleId], references: [id])
+
+  @@map("lesen_teil1_texts")
+}
+
+model LesenTeil1Title {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId String @db.Uuid
+  content    String
+  sortOrder  Int
+
+  exercise   LesenTeil1Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  correctFor LesenTeil1Text[]   @relation("CorrectTitle")
+
+  @@map("lesen_teil1_titles")
+}

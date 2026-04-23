@@ -46,6 +46,7 @@ describe('SprachbausteineService', () => {
 
       expect(result.contentRevision).toBe('modelltest-1-v1');
       expect(typeof result.issuedAt).toBe('string');
+      expect(result.teil2).toEqual({});
       expect(result.teil1.gaps).toHaveLength(10);
       result.teil1.gaps.forEach((gap, i) => {
         const gapKey = String(21 + i);

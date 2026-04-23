@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
-import type { LesenExerciseResponseDto, LesenTeil2QuestionDto, LesenSubmitResponseDto } from './dto';
+import type { LesenExerciseResponseDto, LesenTeil1Dto, LesenTeil2QuestionDto, LesenSubmitResponseDto } from './dto';
 import type { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
 const LETTERS = ['a', 'b', 'c'];
@@ -11,7 +11,36 @@ export class LesenService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getTeil2Exercise(): Promise<LesenExerciseResponseDto> {
+  async getTeil1Exercise(): Promise<LesenTeil1Dto> {
+    const exercise = await this.prisma.lesenTeil1Exercise.findFirst({
+      include: {
+        texts:  { orderBy: { sortOrder: 'asc' } },
+        titles: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('No Lesen Teil 1 exercise found');
+    }
+
+    const correctMatches: Record<string, string> = {};
+    const texts = exercise.texts.map((t) => {
+      correctMatches[String(t.textNumber)] = t.correctTitleId;
+      return { id: t.id, textNumber: t.textNumber, von: t.von, an: t.an, body: t.body };
+    });
+
+    const titles = exercise.titles.map((t) => ({ id: t.id, content: t.content }));
+
+    return {
+      label: exercise.label,
+      instruction: exercise.instruction,
+      texts,
+      titles,
+      correctMatches,
+    };
+  }
+
+  async getTeil2Exercise(): Promise<Omit<LesenExerciseResponseDto, 'teil1'>> {
     const exercise = await this.prisma.lesenTeil2Exercise.findFirst({
       include: {
         questions: {

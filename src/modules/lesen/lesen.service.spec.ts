@@ -42,7 +42,37 @@ const mockExercise = {
   ],
 };
 
+const TERMINABSAGE_ID = 'ffffffff-0007-0001-0001-000000000001';
+
+const mockTeil1Exercise = {
+  id: 'eeeeeeee-0001-0001-0001-000000000001',
+  contentRevision: 'modelltest-1-lesen-teil1-v1',
+  label: 'Leseverstehen, Teil 1',
+  instruction: 'Lesen Sie…',
+  createdAt: new Date(),
+  titles: [
+    { id: 'ffffffff-0001-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Anfrage',             sortOrder: 0 },
+    { id: 'ffffffff-0002-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Lieferschein',        sortOrder: 1 },
+    { id: 'ffffffff-0003-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Reklamation',         sortOrder: 2 },
+    { id: 'ffffffff-0004-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Schadensmeldung',     sortOrder: 3 },
+    { id: 'ffffffff-0005-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Schließregelung',     sortOrder: 4 },
+    { id: 'ffffffff-0006-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Sommerfest',          sortOrder: 5 },
+    { id: TERMINABSAGE_ID,                        exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminabsage',        sortOrder: 6 },
+    { id: 'ffffffff-0008-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminverschiebung',  sortOrder: 7 },
+    { id: 'ffffffff-0009-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminzusage',        sortOrder: 8 },
+    { id: 'ffffffff-0010-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Übernachtung',        sortOrder: 9 },
+  ],
+  texts: [
+    { id: '44444444-0001-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 1, von: 'r.fazli@grb.com',          an: 'v.gruedle@grb.com', body: 'body1', sortOrder: 0, correctTitleId: TERMINABSAGE_ID },
+    { id: '44444444-0002-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 2, von: null,                       an: null,                body: 'body2', sortOrder: 1, correctTitleId: 'ffffffff-0005-0001-0001-000000000001' },
+    { id: '44444444-0003-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 3, von: 'rene.gallack@fa-rzw.de',    an: 's.gerke@web.de',    body: 'body3', sortOrder: 2, correctTitleId: 'ffffffff-0003-0001-0001-000000000001' },
+    { id: '44444444-0004-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 4, von: 'i.villa@kompsit.net',       an: 'aurum@gaestehaus.com', body: 'body4', sortOrder: 3, correctTitleId: 'ffffffff-0001-0001-0001-000000000001' },
+    { id: '44444444-0005-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 5, von: 'michaela.rojka@rett-platt.de', an: 'nella.weber@rett-platt.de', body: 'body5', sortOrder: 4, correctTitleId: 'ffffffff-0008-0001-0001-000000000001' },
+  ],
+};
+
 const mockPrisma = {
+  lesenTeil1Exercise: { findFirst: jest.fn() },
   lesenTeil2Exercise: { findFirst: jest.fn() },
 };
 
@@ -52,6 +82,34 @@ describe('LesenService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new LesenService(mockPrisma as any);
+  });
+
+  describe('getTeil1Exercise', () => {
+    it('returns correct shape — 5 texts, 10 titles, correctMatches map, no correctTitleId on texts', async () => {
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+
+      const result = await (service as any).getTeil1Exercise();
+
+      expect(result.texts).toHaveLength(5);
+      expect(result.titles).toHaveLength(10);
+
+      // text 2 (index 1) has null von/an
+      expect(result.texts[1].von).toBeNull();
+      expect(result.texts[1].an).toBeNull();
+
+      // correctTitleId must NOT appear on text objects
+      expect(result.texts[0]).not.toHaveProperty('correctTitleId');
+
+      // correctMatches map at teil1 level
+      expect(Object.keys(result.correctMatches)).toHaveLength(5);
+      expect(result.correctMatches['1']).toBe(TERMINABSAGE_ID);
+    });
+
+    it('throws NotFoundException when no exercise exists', async () => {
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(null);
+
+      await expect((service as any).getTeil1Exercise()).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('getTeil2Exercise', () => {

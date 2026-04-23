@@ -52,6 +52,7 @@ export class SprachbausteineService {
         body: exercise.body,
         gaps,
       },
+      teil2: {} as Record<string, never>,
     };
   }
 

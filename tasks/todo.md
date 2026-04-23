@@ -1,37 +1,42 @@
-# Todo — Sprachbausteine Module
+# Todo — Lesen Teil 1 Module
 
 ## Task 1 — Database: schema, migration, seed
-- [ ] Add `SprachbausteineExercise` model to `prisma/schema.prisma`
-- [ ] Add `SprachbausteineGap` model to `prisma/schema.prisma` (FK → exercise, `sort_order`)
-- [ ] Add `SprachbausteineGapOption` model to `prisma/schema.prisma` (FK → gap, `is_correct`, `sort_order`)
-- [ ] Run `npx prisma migrate dev --name sprachbausteine_schema`
-- [ ] Run `002_seed_modelltest1.sql` against the database
-- [ ] Verify: 1 exercise, 10 gaps, 30 options in DB
+- [x] Add `LesenTeil1Exercise` model to `prisma/schema.prisma`
+- [x] Add `LesenTeil1Title` model to `prisma/schema.prisma` (FK → exercise, `sortOrder`)
+- [x] Add `LesenTeil1Text` model to `prisma/schema.prisma` (FK → exercise, FK `correctTitleId` → title, `von?`, `an?`)
+- [x] Run `npx prisma migrate dev --name lesen_teil1_schema`
+- [x] Run `npx prisma generate`
+- [x] Verify `von` and `an` columns are nullable in DB
+- [x] Run `004_seed_lesen_teil1_modelltest1.sql`
+- [x] Verify: 1 exercise, 10 titles, 5 texts, each text has non-null `correctTitleId`
+- [x] Verify: text 2 `von` and `an` are NULL
 
-## Task 2 — GET /exercise: DTOs + service + controller
-- [ ] Create `src/modules/sprachbausteine/dto/sprachbausteine-option.dto.ts`
-- [ ] Create `src/modules/sprachbausteine/dto/sprachbausteine-gap.dto.ts`
-- [ ] Create `src/modules/sprachbausteine/dto/sprachbausteine-exercise-response.dto.ts`
-- [ ] Create `src/modules/sprachbausteine/dto/index.ts`
-- [ ] Create `src/modules/sprachbausteine/sprachbausteine.service.ts` with `getExercise()`
-- [ ] Create `src/modules/sprachbausteine/sprachbausteine.controller.ts` with `GET /exercise`
-- [ ] Create `src/modules/sprachbausteine/sprachbausteine.module.ts`
-- [ ] Register `SprachbausteineModule` in `src/app.module.ts`
-- [ ] Manual test: `GET /api/sprachbausteine/exercise` returns 10 gaps, 3 options each, non-null `correctOptionId`
+## Task 2 — DTOs + service + controller (full vertical slice)
+- [x] Write failing test in `lesen.service.spec.ts` for `getTeil1Exercise()` (RED)
+- [x] Create `src/modules/lesen/dto/lesen-teil1-title.dto.ts`
+- [x] Create `src/modules/lesen/dto/lesen-teil1-text.dto.ts`
+- [x] Create `src/modules/lesen/dto/lesen-teil1.dto.ts`
+- [x] Update `lesen-exercise-response.dto.ts` to add `teil1: LesenTeil1Dto`
+- [x] Update `dto/index.ts` to export new DTOs
+- [x] Add `getTeil1Exercise()` to `LesenService`
+- [x] Update `LesenController GET /exercise` to call both methods in parallel and merge
+- [x] Run tests → GREEN
+- [ ] Manual: `jq '.teil1.texts | length'` → 5
+- [ ] Manual: `jq '.teil1.titles | length'` → 10
+- [ ] Manual: `jq '.teil1.texts[1].von'` → null
+- [ ] Manual: `jq '.teil1.texts[0] | has("correctTitleId")'` → false
+- [ ] Manual: `jq '.teil1.correctMatches["1"]'` matches `Terminabsage` title id
+- [ ] Manual: `jq '.teil1.correctMatches | keys | length'` → 5
+- [ ] Manual: `jq '.teil1.titles[0].content'` → "Anfrage"
+- [ ] Manual: `jq '.teil1.titles[9].content'` → "Übernachtung"
+- [ ] Manual: `jq '.teil2.questions | length'` → 5 (no regression)
 
-## ✦ CHECKPOINT 1 — Review GET endpoint before continuing
+## ✦ CHECKPOINT 1 — All curl checks pass, `npm run build` exits 0
 
-## Task 3 — POST /submit: DTO + service stub + controller
-- [ ] Create `src/modules/sprachbausteine/dto/submit-sprachbausteine.dto.ts` with class-validator decorators
-- [ ] Add `submit()` stub to `SprachbausteineService` (returns `{ score: 0 }`)
-- [ ] Add `POST /submit` to `SprachbausteineController`
-- [ ] Manual test: valid body → `{ score: 0 }`, missing field → 400
+## Task 3 — Extend unit tests
+- [x] Add `getTeil1Exercise` shape test (5 texts, 10 titles, null von/an on text 2, correctMatches map with 5 keys, no correctTitleId on texts)
+- [x] Add `getTeil1Exercise` 404 test
+- [x] Confirm existing Teil 2 tests still pass
+- [x] Run `npm test` → all suites green
 
-## ✦ CHECKPOINT 2 — Review full API, run `npm run build`
-
-## Task 4 — Unit tests
-- [ ] Create `src/modules/sprachbausteine/sprachbausteine.service.spec.ts`
-- [ ] Test: `getExercise` returns correct DTO shape (10 gaps, correctOptionId non-null)
-- [ ] Test: `getExercise` throws 404 when no exercise in DB
-- [ ] Test: `submit` returns `{ score: 0 }`
-- [ ] Run `npm test` — all pass
+## ✦ CHECKPOINT 2 — `npm test` green, build clean, commit

@@ -1,3 +1,6 @@
+export * from './lesen-teil1-title.dto';
+export * from './lesen-teil1-text.dto';
+export * from './lesen-teil1.dto';
 export * from './lesen-teil2-option.dto';
 export * from './lesen-teil2-question.dto';
 export * from './lesen-teil2-thread.dto';
