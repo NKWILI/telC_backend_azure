@@ -14,7 +14,20 @@
       "Bash(rm -rf src/generated)",
       "Bash(timeout 12 node -r dotenv/config dist/main.js)",
       "Bash(node -e \"const {PrismaClient} = require\\('@prisma/client'\\); const p = new PrismaClient\\(\\); console.log\\(Object.keys\\(p\\)\\)\")",
-      "Bash(timeout 15 node dist/main.js)"
+      "Bash(timeout 15 node dist/main.js)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k: d[k] for k in ['scripts','dependencies','devDependencies'] if k in d}, indent=2\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\(process.env.DATABASE_URL ? 'DB URL set' : 'NOT SET'\\)\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\({quiet:true}\\); const url = process.env.DATABASE_URL; const { execSync } = require\\('child_process'\\); execSync\\('psql \\\\\"' + url + '\\\\\" -f 004_seed_lesen_teil1_modelltest1.sql', {stdio:'inherit'}\\);\")",
+      "Bash(node -r dotenv/config -e ' *)",
+      "Bash(npm run *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(curl -s http://localhost:3000/api/sprachbausteine/exercise)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure"
     ]
   }
 }
