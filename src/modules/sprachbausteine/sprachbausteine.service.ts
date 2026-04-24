@@ -3,6 +3,7 @@ import { PrismaService } from '../../shared/services/prisma.service';
 import type {
   SprachbausteineExerciseResponseDto,
   SprachbausteineGapDto,
+  SprachbausteineTeil2Dto,
   SubmitSprachbausteineResponseDto,
 } from './dto';
 import type { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
@@ -14,16 +15,19 @@ export class SprachbausteineService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getExercise(): Promise<SprachbausteineExerciseResponseDto> {
-    const exercise = await this.prisma.sprachbausteineExercise.findFirst({
-      include: {
-        gaps: {
-          orderBy: { sort_order: 'asc' },
-          include: {
-            options: { orderBy: { sort_order: 'asc' } },
+    const [exercise, teil2] = await Promise.all([
+      this.prisma.sprachbausteineExercise.findFirst({
+        include: {
+          gaps: {
+            orderBy: { sort_order: 'asc' },
+            include: {
+              options: { orderBy: { sort_order: 'asc' } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.getTeil2Exercise(),
+    ]);
 
     if (!exercise) {
       throw new NotFoundException('No Sprachbausteine exercise found');
@@ -52,7 +56,41 @@ export class SprachbausteineService {
         body: exercise.body,
         gaps,
       },
-      teil2: {} as Record<string, never>,
+      teil2,
+    };
+  }
+
+  async getTeil2Exercise(): Promise<SprachbausteineTeil2Dto> {
+    const exercise = await this.prisma.sprachbausteineTeil2Exercise.findFirst({
+      include: {
+        words: { orderBy: { sortOrder: 'asc' } },
+        gaps:  { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('No Sprachbausteine Teil 2 exercise found');
+    }
+
+    const wordIdMap = new Map<string, string>();
+    const wordBank = exercise.words.map((w) => {
+      const wordId = 'w' + String.fromCharCode(97 + w.sortOrder);
+      wordIdMap.set(w.id, wordId);
+      return { id: wordId, letter: String.fromCharCode(97 + w.sortOrder), content: w.content };
+    });
+
+    const gaps = exercise.gaps.map((g) => ({
+      id: g.gapKey,
+      correctWordId: wordIdMap.get(g.correctWordId) ?? '',
+    }));
+
+    return {
+      label: exercise.label,
+      instruction: exercise.instruction,
+      durationMinutes: exercise.durationMinutes,
+      body: exercise.body,
+      wordBank,
+      gaps,
     };
   }
 

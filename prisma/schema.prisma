@@ -300,6 +300,49 @@ model SprachbausteineGapOption {
   @@map("sprachbausteine_gap_options")
 }
 
+model SprachbausteineTeil2Exercise {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contentRevision String
+  label           String
+  instruction     String
+  durationMinutes Int
+  body            String
+  createdAt       DateTime @default(now())
+
+  words SprachbausteineTeil2Word[]
+  gaps  SprachbausteineTeil2Gap[]
+
+  @@map("sprachbausteine_teil2_exercises")
+}
+
+model SprachbausteineTeil2Word {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId String @db.Uuid
+  letter     String
+  content    String
+  sortOrder  Int
+
+  exercise SprachbausteineTeil2Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  gaps     SprachbausteineTeil2Gap[]
+
+  @@map("sprachbausteine_teil2_words")
+}
+
+model SprachbausteineTeil2Gap {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId    String @db.Uuid
+  gapKey        String
+  gapNumber     Int
+  correctWordId String @db.Uuid
+  sortOrder     Int
+
+  exercise    SprachbausteineTeil2Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  correctWord SprachbausteineTeil2Word     @relation(fields: [correctWordId], references: [id], onDelete: Restrict)
+
+  @@unique([exerciseId, gapKey])
+  @@map("sprachbausteine_teil2_gaps")
+}
+
 model LesenTeil1Exercise {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   contentRevision String
