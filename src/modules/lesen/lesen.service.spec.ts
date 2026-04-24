@@ -71,9 +71,47 @@ const mockTeil1Exercise = {
   ],
 };
 
+const mockTeil3Exercise = {
+  id: 'bbbbbbbb-0001-0003-0003-000000000001',
+  contentRevision: 'modelltest-1-lesen-teil3-v1',
+  label: 'Leseverstehen, Teil 3',
+  instruction: 'Lesen Sie die Situationen 11–20…',
+  createdAt: new Date(),
+  announcements: Array.from({ length: 12 }, (_, i) => ({
+    id: `dddddddd-${String(i + 1).padStart(4, '0')}-0003-0003-000000000001`,
+    exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+    title: `Title ${i}`,
+    content: `Content ${i}`,
+    sortOrder: i,
+  })),
+  situations: [
+    // 11 → "j" (sortOrder 9)
+    { id: 'eeeeeeee-0011-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 11, content: 'Situation 11', noMatch: false, correctAnnouncementId: 'dddddddd-0010-0003-0003-000000000001', sortOrder: 0 },
+    // 12 → "g" (sortOrder 6)
+    { id: 'eeeeeeee-0012-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 12, content: 'Situation 12', noMatch: false, correctAnnouncementId: 'dddddddd-0007-0003-0003-000000000001', sortOrder: 1 },
+    // 13 → "d" (sortOrder 3)
+    { id: 'eeeeeeee-0013-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 13, content: 'Situation 13', noMatch: false, correctAnnouncementId: 'dddddddd-0004-0003-0003-000000000001', sortOrder: 2 },
+    // 14 → "h" (sortOrder 7)
+    { id: 'eeeeeeee-0014-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 14, content: 'Situation 14', noMatch: false, correctAnnouncementId: 'dddddddd-0008-0003-0003-000000000001', sortOrder: 3 },
+    // 15 → "X" (no match)
+    { id: 'eeeeeeee-0015-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 15, content: 'Situation 15', noMatch: true,  correctAnnouncementId: null,                                        sortOrder: 4 },
+    // 16 → "e" (sortOrder 4)
+    { id: 'eeeeeeee-0016-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 16, content: 'Situation 16', noMatch: false, correctAnnouncementId: 'dddddddd-0005-0003-0003-000000000001', sortOrder: 5 },
+    // 17 → "k" (sortOrder 10)
+    { id: 'eeeeeeee-0017-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 17, content: 'Situation 17', noMatch: false, correctAnnouncementId: 'dddddddd-0011-0003-0003-000000000001', sortOrder: 6 },
+    // 18 → "l" (sortOrder 11)
+    { id: 'eeeeeeee-0018-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 18, content: 'Situation 18', noMatch: false, correctAnnouncementId: 'dddddddd-0012-0003-0003-000000000001', sortOrder: 7 },
+    // 19 → "b" (sortOrder 1)
+    { id: 'eeeeeeee-0019-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 19, content: 'Situation 19', noMatch: false, correctAnnouncementId: 'dddddddd-0002-0003-0003-000000000001', sortOrder: 8 },
+    // 20 → "c" (sortOrder 2)
+    { id: 'eeeeeeee-0020-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 20, content: 'Situation 20', noMatch: false, correctAnnouncementId: 'dddddddd-0003-0003-0003-000000000001', sortOrder: 9 },
+  ],
+};
+
 const mockPrisma = {
   lesenTeil1Exercise: { findFirst: jest.fn() },
   lesenTeil2Exercise: { findFirst: jest.fn() },
+  lesenTeil3Exercise: { findFirst: jest.fn() },
 };
 
 describe('LesenService', () => {
@@ -96,6 +134,10 @@ describe('LesenService', () => {
       // text 2 (index 1) has null von/an
       expect(result.texts[1].von).toBeNull();
       expect(result.texts[1].an).toBeNull();
+
+      // id is textNumber as string, no textNumber field
+      expect(result.texts[0].id).toBe('1');
+      expect(result.texts[0]).not.toHaveProperty('textNumber');
 
       // correctTitleId must NOT appear on text objects
       expect(result.texts[0]).not.toHaveProperty('correctTitleId');
@@ -128,11 +170,12 @@ describe('LesenService', () => {
       expect(q6.options.map((o) => o.id)).toEqual(['6a', '6b', '6c']);
       expect(q6.correctOptionId).toBe('6c');
 
-      // thread fields present
-      expect(result.teil2.thread.topSender).toBe('k.weisshaupt@web.de');
-      expect(result.teil2.thread.topReceiver).toBe('j.baric@freenet.com');
-      expect(typeof result.teil2.thread.topBody).toBe('string');
-      expect(typeof result.teil2.thread.quotedThread).toBe('string');
+      // flat thread fields (no nested thread object)
+      expect(result.teil2).not.toHaveProperty('thread');
+      expect(result.teil2.sender).toBe('k.weisshaupt@web.de');
+      expect(result.teil2.receiver).toBe('j.baric@freenet.com');
+      expect(typeof result.teil2.content).toBe('string');
+      expect(typeof result.teil2.quotedThread).toBe('string');
 
       // no isCorrect in output
       const json = JSON.stringify(result);
@@ -158,6 +201,48 @@ describe('LesenService', () => {
       });
 
       expect(result).toEqual({ score: 0 });
+    });
+  });
+
+  describe('getTeil3Exercise', () => {
+    it('returns correct shape — 10 situations, 12 announcements, no UUIDs in ids', async () => {
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(mockTeil3Exercise);
+
+      const result = await (service as any).getTeil3Exercise();
+
+      expect(result.situations).toHaveLength(10);
+      expect(result.announcements).toHaveLength(12);
+      expect(Object.keys(result.correctMatches)).toHaveLength(10);
+      expect(result.situations[0].id).toBe('11');
+      expect(result.situations[9].id).toBe('20');
+      expect(result.announcements[0].id).toBe('a');
+      expect(result.announcements[11].id).toBe('l');
+
+      const json = JSON.stringify(result);
+      expect(json).not.toMatch(/"id":"[0-9a-f]{8}-/);
+    });
+
+    it('maps noMatch to "X" and derives correct letter from announcement sortOrder', async () => {
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(mockTeil3Exercise);
+
+      const result = await (service as any).getTeil3Exercise();
+
+      expect(result.correctMatches['15']).toBe('X');
+      expect(result.correctMatches['11']).toBe('j');
+      expect(result.correctMatches['12']).toBe('g');
+      expect(result.correctMatches['13']).toBe('d');
+      expect(result.correctMatches['14']).toBe('h');
+      expect(result.correctMatches['16']).toBe('e');
+      expect(result.correctMatches['17']).toBe('k');
+      expect(result.correctMatches['18']).toBe('l');
+      expect(result.correctMatches['19']).toBe('b');
+      expect(result.correctMatches['20']).toBe('c');
+    });
+
+    it('throws NotFoundException when no exercise exists', async () => {
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(null);
+
+      await expect((service as any).getTeil3Exercise()).rejects.toThrow(NotFoundException);
     });
   });
 });

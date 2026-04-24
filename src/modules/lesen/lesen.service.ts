@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
-import type { LesenExerciseResponseDto, LesenTeil1Dto, LesenTeil2QuestionDto, LesenSubmitResponseDto } from './dto';
+import type { LesenExerciseResponseDto, LesenTeil1Dto, LesenTeil2QuestionDto, LesenTeil3Dto, LesenSubmitResponseDto } from './dto';
 import type { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
 const LETTERS = ['a', 'b', 'c'];
@@ -26,7 +26,7 @@ export class LesenService {
     const correctMatches: Record<string, string> = {};
     const texts = exercise.texts.map((t) => {
       correctMatches[String(t.textNumber)] = t.correctTitleId;
-      return { id: t.id, textNumber: t.textNumber, von: t.von, an: t.an, body: t.body };
+      return { id: String(t.textNumber), von: t.von, an: t.an, body: t.body };
     });
 
     const titles = exercise.titles.map((t) => ({ id: t.id, content: t.content }));
@@ -40,7 +40,7 @@ export class LesenService {
     };
   }
 
-  async getTeil2Exercise(): Promise<Omit<LesenExerciseResponseDto, 'teil1'>> {
+  async getTeil2Exercise(): Promise<Omit<LesenExerciseResponseDto, 'teil1' | 'teil3'>> {
     const exercise = await this.prisma.lesenTeil2Exercise.findFirst({
       include: {
         questions: {
@@ -80,14 +80,48 @@ export class LesenService {
         label: exercise.label,
         instruction: exercise.instruction,
         cautionNote: exercise.cautionNote,
-        thread: {
-          topSender: exercise.topSender,
-          topReceiver: exercise.topReceiver,
-          topBody: exercise.topBody,
-          quotedThread: exercise.quotedThread,
-        },
+        sender: exercise.topSender,
+        receiver: exercise.topReceiver,
+        content: exercise.topBody,
+        quotedThread: exercise.quotedThread,
         questions,
       },
+    };
+  }
+
+  async getTeil3Exercise(): Promise<LesenTeil3Dto> {
+    const exercise = await this.prisma.lesenTeil3Exercise.findFirst({
+      include: {
+        announcements: { orderBy: { sortOrder: 'asc' } },
+        situations:    { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+
+    if (!exercise) {
+      throw new NotFoundException('No Lesen Teil 3 exercise found');
+    }
+
+    const letterMap = new Map<string, string>();
+    const announcements = exercise.announcements.map((a) => {
+      const letter = String.fromCharCode(97 + a.sortOrder);
+      letterMap.set(a.id, letter);
+      return { id: letter, title: a.title, content: a.content };
+    });
+
+    const correctMatches: Record<string, string> = {};
+    const situations = exercise.situations.map((s) => {
+      correctMatches[String(s.situationNumber)] = s.noMatch
+        ? 'X'
+        : (letterMap.get(s.correctAnnouncementId!) ?? '');
+      return { id: String(s.situationNumber), content: s.content };
+    });
+
+    return {
+      label: exercise.label,
+      instruction: exercise.instruction,
+      situations,
+      announcements,
+      correctMatches,
     };
   }
 

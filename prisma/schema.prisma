@@ -340,3 +340,44 @@ model LesenTeil1Title {
 
   @@map("lesen_teil1_titles")
 }
+
+model LesenTeil3Exercise {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contentRevision String
+  label           String
+  instruction     String
+  createdAt       DateTime @default(now())
+
+  situations    LesenTeil3Situation[]
+  announcements LesenTeil3Announcement[]
+
+  @@map("lesen_teil3_exercises")
+}
+
+model LesenTeil3Announcement {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId String @db.Uuid
+  title      String
+  content    String
+  sortOrder  Int
+
+  exercise   LesenTeil3Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  situations LesenTeil3Situation[]
+
+  @@map("lesen_teil3_announcements")
+}
+
+model LesenTeil3Situation {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId            String   @db.Uuid
+  situationNumber       Int
+  content               String
+  noMatch               Boolean  @default(false)
+  correctAnnouncementId String?  @db.Uuid
+  sortOrder             Int
+
+  exercise            LesenTeil3Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  correctAnnouncement LesenTeil3Announcement?  @relation(fields: [correctAnnouncementId], references: [id], onDelete: Restrict)
+
+  @@map("lesen_teil3_situations")
+}

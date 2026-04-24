@@ -9,15 +9,17 @@ export class LesenController {
 
   @Get('exercise')
   async getExercise(): Promise<LesenExerciseResponseDto> {
-    const [teil1, teil2Result] = await Promise.all([
+    const [teil1, teil2Result, teil3] = await Promise.all([
       this.lesenService.getTeil1Exercise(),
       this.lesenService.getTeil2Exercise(),
+      this.lesenService.getTeil3Exercise(),
     ]);
     return {
       contentRevision: teil2Result.contentRevision,
       issuedAt: teil2Result.issuedAt,
       teil1,
       teil2: teil2Result.teil2,
+      teil3,
     };
   }
 
