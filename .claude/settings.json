@@ -31,7 +31,8 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(p.dependencies['@nestjs/swagger']\\)\")",
       "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
       "Bash(sed -n '20,35p' src/modules/speaking/speaking.gateway.ts)",
-      "Bash(sed -n '25,40p' src/modules/writing/writing.gateway.ts)"
+      "Bash(sed -n '25,40p' src/modules/writing/writing.gateway.ts)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('start:prod:', p.scripts['start:prod']\\); console.log\\('prisma in deps:', !!p.dependencies.prisma\\); console.log\\('prisma in devDeps:', !!p.devDependencies.prisma\\);\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure"
