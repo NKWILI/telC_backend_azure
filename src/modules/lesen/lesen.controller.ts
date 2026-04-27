@@ -1,13 +1,16 @@
 import { Controller, Get, Post, Body } from '@nestjs/common';
+import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { LesenService } from './lesen.service';
-import type { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
+import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
 import { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
+@ApiTags('Reading')
 @Controller('api/reading')
 export class LesenController {
   constructor(private readonly lesenService: LesenService) {}
 
   @Get('exercise')
+  @ApiOkResponse({ type: LesenExerciseResponseDto })
   async getExercise(): Promise<LesenExerciseResponseDto> {
     const [teil1, teil2Result, teil3] = await Promise.all([
       this.lesenService.getTeil1Exercise(),
@@ -24,6 +27,8 @@ export class LesenController {
   }
 
   @Post('submit')
+  @ApiBody({ type: LesenSubmitRequestDto })
+  @ApiOkResponse({ type: LesenSubmitResponseDto })
   submitTeil2(@Body() dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
     return this.lesenService.submitTeil2(dto);
   }

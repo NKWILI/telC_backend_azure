@@ -1,12 +1,28 @@
-import type { LesenTeil2QuestionDto } from './lesen-teil2-question.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { LesenTeil2QuestionDto } from './lesen-teil2-question.dto';
 
-export interface LesenTeil2Dto {
-  label: string;
-  instruction: string;
-  cautionNote: string;
-  sender: string;
-  receiver: string;
-  content: string;
-  quotedThread: string;
-  questions: LesenTeil2QuestionDto[];
+export class LesenTeil2Dto {
+  @ApiProperty()
+  label!: string;
+
+  @ApiProperty()
+  instruction!: string;
+
+  @ApiProperty()
+  cautionNote!: string;
+
+  @ApiProperty()
+  sender!: string;
+
+  @ApiProperty()
+  receiver!: string;
+
+  @ApiProperty()
+  content!: string;
+
+  @ApiProperty()
+  quotedThread!: string;
+
+  @ApiProperty({ type: () => LesenTeil2QuestionDto, isArray: true })
+  questions!: LesenTeil2QuestionDto[];
 }

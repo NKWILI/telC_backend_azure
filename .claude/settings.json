@@ -24,7 +24,14 @@
       "Bash(node -r dotenv/config -e ' *)",
       "Bash(npm run *)",
       "Bash(echo \"PID: $!\")",
-      "Bash(curl -s http://localhost:3000/api/sprachbausteine/exercise)"
+      "Bash(curl -s http://localhost:3000/api/sprachbausteine/exercise)",
+      "Bash(grep -r \"swagger\\\\|openapi\\\\|SwaggerModule\" src/ --include=\"*.ts\" -l)",
+      "Bash(grep \"swagger\" package.json)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@nestjs/swagger' in \\(p.dependencies||{}\\), '@nestjs/swagger' in \\(p.devDependencies||{}\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(p.dependencies['@nestjs/swagger']\\)\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
+      "Bash(sed -n '20,35p' src/modules/speaking/speaking.gateway.ts)",
+      "Bash(sed -n '25,40p' src/modules/writing/writing.gateway.ts)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure"

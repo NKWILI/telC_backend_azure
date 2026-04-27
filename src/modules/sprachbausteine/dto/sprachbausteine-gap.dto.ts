@@ -1,7 +1,13 @@
-import type { SprachbausteineOptionDto } from './sprachbausteine-option.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { SprachbausteineOptionDto } from './sprachbausteine-option.dto';
 
-export interface SprachbausteineGapDto {
-  id: string;
-  options: SprachbausteineOptionDto[];
-  correctOptionId: string;
+export class SprachbausteineGapDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty({ type: () => SprachbausteineOptionDto, isArray: true })
+  options!: SprachbausteineOptionDto[];
+
+  @ApiProperty()
+  correctOptionId!: string;
 }

@@ -1,8 +1,16 @@
-import type { LesenTeil2OptionDto } from './lesen-teil2-option.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import { LesenTeil2OptionDto } from './lesen-teil2-option.dto';
 
-export interface LesenTeil2QuestionDto {
-  id: string;
-  content: string;
-  options: LesenTeil2OptionDto[];
-  correctOptionId: string;
+export class LesenTeil2QuestionDto {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  content!: string;
+
+  @ApiProperty({ type: () => LesenTeil2OptionDto, isArray: true })
+  options!: LesenTeil2OptionDto[];
+
+  @ApiProperty()
+  correctOptionId!: string;
 }
