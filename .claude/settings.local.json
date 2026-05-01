@@ -10,7 +10,13 @@
       "Bash(npm audit:*)",
       "Bash(npx eslint:*)",
       "Bash(npm install *)",
-      "Bash(npx prisma *)"
+      "Bash(npx prisma *)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\\\\src\\\\shared\\\\services\\\\database.service.ts\")",
+      "Bash(git rm *)",
+      "Bash(ls *.md)",
+      "Bash(ls Dockerfile* docker-compose* azure* .github/)",
+      "Bash(node -e \"require\\('@nestjs/helmet'\\)\")",
+      "Bash(node -e \"require\\('helmet'\\)\")"
     ]
   }
 }

@@ -81,15 +81,26 @@ export class WritingService {
   ): Promise<ExerciseAttemptDto[]> {
     try {
       const exerciseId =
-        teilNumber !== undefined && WRITING_TEIL_IDS.includes(String(teilNumber))
+        teilNumber !== undefined &&
+        WRITING_TEIL_IDS.includes(String(teilNumber))
           ? String(teilNumber)
           : undefined;
 
       const rows = await this.prisma.writingAttempt.findMany({
-        where: { student_id: studentId, ...(exerciseId ? { exercise_id: exerciseId } : {}) },
+        where: {
+          student_id: studentId,
+          ...(exerciseId ? { exercise_id: exerciseId } : {}),
+        },
         orderBy: { created_at: 'desc' },
         take: limit,
-        select: { attempt_id: true, created_at: true, completed_at: true, score: true, feedback: true, duration_seconds: true },
+        select: {
+          attempt_id: true,
+          created_at: true,
+          completed_at: true,
+          score: true,
+          feedback: true,
+          duration_seconds: true,
+        },
       });
 
       return rows.map((row) => this.mapRowToAttemptDto(row));

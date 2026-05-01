@@ -32,7 +32,23 @@
       "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
       "Bash(sed -n '20,35p' src/modules/speaking/speaking.gateway.ts)",
       "Bash(sed -n '25,40p' src/modules/writing/writing.gateway.ts)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('start:prod:', p.scripts['start:prod']\\); console.log\\('prisma in deps:', !!p.dependencies.prisma\\); console.log\\('prisma in devDeps:', !!p.devDependencies.prisma\\);\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\('start:prod:', p.scripts['start:prod']\\); console.log\\('prisma in deps:', !!p.dependencies.prisma\\); console.log\\('prisma in devDeps:', !!p.devDependencies.prisma\\);\")",
+      "Bash(curl -sS -i \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health\")",
+      "Bash(curl -sS -i -X POST \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/auth/login-with-code\" -H \"Content-Type: application/json\" -d '{\"activationCode\":\"TELC-TEST-001\",\"deviceId\":\"flutter-dev-telC\"}')",
+      "Bash(curl -sS -i --max-time 30 \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health\")",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(curl -sS -i --max-time 15 \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health\")",
+      "Bash(curl -sS -i --max-time 10 \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health\")",
+      "Bash(curl -sS --max-time 10 \"https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health\" -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health)",
+      "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/speaking/teils)",
+      "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/speaking/sessions)",
+      "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/writing/teils)",
+      "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/writing/sessions)",
+      "Bash(curl -sS https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
+      "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health)",
+      "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure"

@@ -64,7 +64,7 @@ export class SprachbausteineService {
     const exercise = await this.prisma.sprachbausteineTeil2Exercise.findFirst({
       include: {
         words: { orderBy: { sortOrder: 'asc' } },
-        gaps:  { orderBy: { sortOrder: 'asc' } },
+        gaps: { orderBy: { sortOrder: 'asc' } },
       },
     });
 
@@ -76,7 +76,11 @@ export class SprachbausteineService {
     const wordBank = exercise.words.map((w) => {
       const wordId = 'w' + String.fromCharCode(97 + w.sortOrder);
       wordIdMap.set(w.id, wordId);
-      return { id: wordId, letter: String.fromCharCode(97 + w.sortOrder), content: w.content };
+      return {
+        id: wordId,
+        letter: String.fromCharCode(97 + w.sortOrder),
+        content: w.content,
+      };
     });
 
     const gaps = exercise.gaps.map((g) => ({
@@ -95,7 +99,9 @@ export class SprachbausteineService {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
-  async submit(_dto: SubmitSprachbausteineDto): Promise<SubmitSprachbausteineResponseDto> {
+  async submit(
+    _dto: SubmitSprachbausteineDto,
+  ): Promise<SubmitSprachbausteineResponseDto> {
     return { score: 0 };
   }
 }

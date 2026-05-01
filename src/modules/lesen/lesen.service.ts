@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
-import type { LesenExerciseResponseDto, LesenTeil1Dto, LesenTeil2QuestionDto, LesenTeil3Dto, LesenSubmitResponseDto } from './dto';
+import type {
+  LesenExerciseResponseDto,
+  LesenTeil1Dto,
+  LesenTeil2QuestionDto,
+  LesenTeil3Dto,
+  LesenSubmitResponseDto,
+} from './dto';
 import type { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
 const LETTERS = ['a', 'b', 'c'];
@@ -14,7 +20,7 @@ export class LesenService {
   async getTeil1Exercise(): Promise<LesenTeil1Dto> {
     const exercise = await this.prisma.lesenTeil1Exercise.findFirst({
       include: {
-        texts:  { orderBy: { sortOrder: 'asc' } },
+        texts: { orderBy: { sortOrder: 'asc' } },
         titles: { orderBy: { sortOrder: 'asc' } },
       },
     });
@@ -29,7 +35,10 @@ export class LesenService {
       return { id: String(t.textNumber), von: t.von, an: t.an, body: t.body };
     });
 
-    const titles = exercise.titles.map((t) => ({ id: t.id, content: t.content }));
+    const titles = exercise.titles.map((t) => ({
+      id: t.id,
+      content: t.content,
+    }));
 
     return {
       label: exercise.label,
@@ -40,7 +49,9 @@ export class LesenService {
     };
   }
 
-  async getTeil2Exercise(): Promise<Omit<LesenExerciseResponseDto, 'teil1' | 'teil3'>> {
+  async getTeil2Exercise(): Promise<
+    Omit<LesenExerciseResponseDto, 'teil1' | 'teil3'>
+  > {
     const exercise = await this.prisma.lesenTeil2Exercise.findFirst({
       include: {
         questions: {
@@ -93,7 +104,7 @@ export class LesenService {
     const exercise = await this.prisma.lesenTeil3Exercise.findFirst({
       include: {
         announcements: { orderBy: { sortOrder: 'asc' } },
-        situations:    { orderBy: { sortOrder: 'asc' } },
+        situations: { orderBy: { sortOrder: 'asc' } },
       },
     });
 
@@ -125,8 +136,10 @@ export class LesenService {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async submitTeil2(_dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
+  // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-unused-vars
+  async submitTeil2(
+    _dto: LesenSubmitRequestDto,
+  ): Promise<LesenSubmitResponseDto> {
     return { score: 0 };
   }
 }

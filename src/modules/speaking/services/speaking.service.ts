@@ -101,7 +101,9 @@ export class SpeakingService {
         });
         sessionId = session.session_id;
       } catch (err) {
-        this.logger.error(`Failed to create exam session: ${(err as Error).message}`);
+        this.logger.error(
+          `Failed to create exam session: ${(err as Error).message}`,
+        );
         throw new BadRequestException('FAILED_TO_CREATE_SESSION');
       }
 
@@ -151,7 +153,13 @@ export class SpeakingService {
       // Verify session exists and belongs to student
       const session = await this.prisma.examSession.findFirst({
         where: { session_id: sessionId, student_id: studentId },
-        select: { session_id: true, status: true, server_start_time: true, time_limit_seconds: true, use_timer: true },
+        select: {
+          session_id: true,
+          status: true,
+          server_start_time: true,
+          time_limit_seconds: true,
+          use_timer: true,
+        },
       });
 
       if (!session) {
@@ -175,7 +183,11 @@ export class SpeakingService {
       try {
         await this.prisma.examSession.update({
           where: { session_id: sessionId },
-          data: { status: 'paused', pause_timestamp: now, elapsed_time: elapsedSeconds },
+          data: {
+            status: 'paused',
+            pause_timestamp: now,
+            elapsed_time: elapsedSeconds,
+          },
         });
       } catch {
         throw new BadRequestException('FAILED_TO_PAUSE_SESSION');
@@ -226,7 +238,14 @@ export class SpeakingService {
       // Verify session exists and belongs to student
       const session = await this.prisma.examSession.findFirst({
         where: { session_id: sessionId, student_id: studentId },
-        select: { session_id: true, status: true, pause_timestamp: true, elapsed_time: true, time_limit_seconds: true, use_timer: true },
+        select: {
+          session_id: true,
+          status: true,
+          pause_timestamp: true,
+          elapsed_time: true,
+          time_limit_seconds: true,
+          use_timer: true,
+        },
       });
 
       if (!session) {
@@ -302,7 +321,16 @@ export class SpeakingService {
       // Verify session exists and belongs to student
       const session = await this.prisma.examSession.findFirst({
         where: { session_id: sessionId, student_id: studentId },
-        select: { session_id: true, status: true, server_start_time: true, elapsed_time: true, use_timer: true, time_limit_seconds: true, pause_timestamp: true, teil_number: true },
+        select: {
+          session_id: true,
+          status: true,
+          server_start_time: true,
+          elapsed_time: true,
+          use_timer: true,
+          time_limit_seconds: true,
+          pause_timestamp: true,
+          teil_number: true,
+        },
       });
 
       if (!session) {
@@ -318,12 +346,13 @@ export class SpeakingService {
 
       // If session is currently paused, add the pause time to elapsed
       if (session.status === 'paused' && session.pause_timestamp) {
-        const pauseTime = session.pause_timestamp as Date;
+        const pauseTime = session.pause_timestamp;
         const pausedDurationSeconds = Math.floor(
           (now.getTime() - pauseTime.getTime()) / 1000,
         );
         // Don't count the pause duration that happened after pausing
-        totalElapsedSeconds = (session.elapsed_time ?? 0) + pausedDurationSeconds;
+        totalElapsedSeconds =
+          (session.elapsed_time ?? 0) + pausedDurationSeconds;
       }
 
       // Determine if evaluable (minimum 120 seconds = 2 minutes)
@@ -484,7 +513,15 @@ export class SpeakingService {
             ? { teil_number: teilNumber }
             : {}),
         },
-        include: { teil_evaluations: { select: { overall_score: true, strengths: true, areas_for_improvement: true } } },
+        include: {
+          teil_evaluations: {
+            select: {
+              overall_score: true,
+              strengths: true,
+              areas_for_improvement: true,
+            },
+          },
+        },
         orderBy: { completed_at: 'desc' },
         take: limit,
       });
@@ -578,9 +615,14 @@ export class SpeakingService {
       };
 
       if (existing) {
-        await this.prisma.teilTranscript.update({ where: { id: existing.id }, data: transcriptData });
+        await this.prisma.teilTranscript.update({
+          where: { id: existing.id },
+          data: transcriptData,
+        });
       } else {
-        await this.prisma.teilTranscript.create({ data: { session_id: sessionId, ...transcriptData } });
+        await this.prisma.teilTranscript.create({
+          data: { session_id: sessionId, ...transcriptData },
+        });
       }
 
       this.logger.log(`Transcript saved successfully for session ${sessionId}`);

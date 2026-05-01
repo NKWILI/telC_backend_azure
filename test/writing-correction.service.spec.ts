@@ -144,7 +144,9 @@ describe('WritingCorrectionService', () => {
     });
 
     it('falls back to stub when generateTextResponse returns invalid JSON', async () => {
-      mockGeminiService.generateTextResponse.mockResolvedValue('No JSON here at all');
+      mockGeminiService.generateTextResponse.mockResolvedValue(
+        'No JSON here at all',
+      );
 
       await service.runCorrection(jobData);
 

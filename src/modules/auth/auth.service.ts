@@ -33,7 +33,12 @@ export class AuthService {
     try {
       const acData = await this.prisma.activationCode.findUnique({
         where: { code: code.trim() },
-        select: { code: true, student_id: true, status: true, expires_at: true },
+        select: {
+          code: true,
+          student_id: true,
+          status: true,
+          expires_at: true,
+        },
       });
 
       if (!acData) {
@@ -45,7 +50,7 @@ export class AuthService {
       }
 
       if (acData.status === 'active') {
-        if (acData.expires_at && (acData.expires_at as Date) < new Date()) {
+        if (acData.expires_at && acData.expires_at < new Date()) {
           throw new ForbiddenException('MEMBERSHIP_EXPIRED');
         }
 
@@ -57,7 +62,10 @@ export class AuthService {
           throw new BadRequestException('STUDENT_NOT_FOUND');
         }
 
-        return { student: student as unknown as Student, activationCodeId: acData.code };
+        return {
+          student: student as unknown as Student,
+          activationCodeId: acData.code,
+        };
       }
 
       throw new BadRequestException('ACTIVATION_CODE_ALREADY_USED');
@@ -317,7 +325,10 @@ export class AuthService {
     try {
       await this.prisma.deviceSession.update({
         where: { id: sessionId },
-        data: { refresh_token_hash: refreshTokenHash, last_used_at: new Date() },
+        data: {
+          refresh_token_hash: refreshTokenHash,
+          last_used_at: new Date(),
+        },
       });
     } catch {
       throw new BadRequestException('SESSION_UPDATE_FAILED');
@@ -371,7 +382,7 @@ export class AuthService {
       throw new BadRequestException('INVALID_ACTIVATION_CODE');
     }
 
-    return (data.expires_at as Date).toISOString();
+    return data.expires_at.toISOString();
   }
 
   /**
@@ -388,7 +399,7 @@ export class AuthService {
       throw new UnauthorizedException('INVALID_SESSION');
     }
 
-    if (data.expires_at && (data.expires_at as Date) < new Date()) {
+    if (data.expires_at && data.expires_at < new Date()) {
       throw new ForbiddenException('MEMBERSHIP_EXPIRED');
     }
   }

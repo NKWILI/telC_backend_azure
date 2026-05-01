@@ -26,7 +26,11 @@ describe('SpeakingGateway Unit Tests', () => {
     examSession: { findUnique: jest.fn(), update: jest.fn() },
     student: { findUnique: jest.fn() },
     activationCode: { findUnique: jest.fn() },
-    teilTranscript: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
+    teilTranscript: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
   };
 
   const mockTokenService = {

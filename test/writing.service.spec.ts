@@ -120,7 +120,8 @@ describe('WritingService', () => {
 
       await service.getSessions('student-1');
 
-      const callArg = mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
+      const callArg =
+        mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
       expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
@@ -158,11 +159,16 @@ describe('WritingService', () => {
 
     it('throws NotFoundException with messageKey for unknown exerciseId', async () => {
       try {
-        await service.submit('student-1', { exerciseId: '99', content: 'Some text' });
+        await service.submit('student-1', {
+          exerciseId: '99',
+          content: 'Some text',
+        });
         expect(true).toBe(false);
       } catch (e: any) {
         expect(e).toBeInstanceOf(NotFoundException);
-        expect(e.getResponse()).toMatchObject({ messageKey: 'writingExerciseNotFound' });
+        expect(e.getResponse()).toMatchObject({
+          messageKey: 'writingExerciseNotFound',
+        });
       }
     });
 
@@ -172,12 +178,16 @@ describe('WritingService', () => {
         expect(true).toBe(false);
       } catch (e: any) {
         expect(e).toBeInstanceOf(UnprocessableEntityException);
-        expect(e.getResponse()).toMatchObject({ messageKey: 'writingContentTooShort' });
+        expect(e.getResponse()).toMatchObject({
+          messageKey: 'writingContentTooShort',
+        });
       }
     });
 
     it('does not call queue when insert fails', async () => {
-      mockPrismaService.writingAttempt.create.mockRejectedValue(new Error('DB error'));
+      mockPrismaService.writingAttempt.create.mockRejectedValue(
+        new Error('DB error'),
+      );
 
       await expect(
         service.submit('student-1', { exerciseId: '1', content: 'Text' }),

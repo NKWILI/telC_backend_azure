@@ -37,7 +37,12 @@ export class EvaluationService {
       // Step 1: Fetch session and transcript from database
       const session = await this.prisma.examSession.findFirst({
         where: { session_id: sessionId, student_id: studentId },
-        select: { session_id: true, teil_number: true, status: true, student_id: true },
+        select: {
+          session_id: true,
+          teil_number: true,
+          status: true,
+          student_id: true,
+        },
       });
 
       if (!session) {
@@ -96,7 +101,9 @@ export class EvaluationService {
           },
         });
       } catch (err) {
-        this.logger.error(`Failed to save evaluation to database: ${(err as Error).message}`);
+        this.logger.error(
+          `Failed to save evaluation to database: ${(err as Error).message}`,
+        );
         throw new BadRequestException('EVALUATION_SAVE_FAILED');
       }
 

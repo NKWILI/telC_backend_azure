@@ -158,7 +158,8 @@ describe('ListeningService', () => {
 
       await service.getSessions('student-1');
 
-      const callArg = mockPrismaService.listeningAttempt.findMany.mock.calls[0][0];
+      const callArg =
+        mockPrismaService.listeningAttempt.findMany.mock.calls[0][0];
       expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
@@ -215,7 +216,9 @@ describe('ListeningService', () => {
     });
 
     it('throws NotFoundException for unknown type', async () => {
-      await expect(service.getExercise('99')).rejects.toThrow(NotFoundException);
+      await expect(service.getExercise('99')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws NotFoundException for empty string type', async () => {
@@ -295,8 +298,8 @@ describe('ListeningService', () => {
       mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
       const partial: Record<string, string> = {
-        q11: TEIL1_CORRECT_ANSWERS['q11']!,
-        q12: TEIL1_CORRECT_ANSWERS['q12']!,
+        q11: TEIL1_CORRECT_ANSWERS['q11'],
+        q12: TEIL1_CORRECT_ANSWERS['q12'],
         q13: 'z',
         q14: 'z',
         q15: 'z',

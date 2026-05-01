@@ -109,7 +109,8 @@ export class AuthController {
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new BadRequestException(error?.message || 'ACTIVATION_FAILED');
+      const msg = error instanceof Error ? error.message : 'ACTIVATION_FAILED';
+      throw new BadRequestException(msg);
     }
   }
 

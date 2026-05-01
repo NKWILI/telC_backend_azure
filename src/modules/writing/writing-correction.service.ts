@@ -79,7 +79,9 @@ export class WritingCorrectionService {
           feedback,
           duration_seconds: durationSeconds,
           completed_at: new Date(completedAt),
-          ...(correctionsForDb.length > 0 ? { corrections: correctionsForDb } : {}),
+          ...(correctionsForDb.length > 0
+            ? { corrections: correctionsForDb }
+            : {}),
         },
       });
 

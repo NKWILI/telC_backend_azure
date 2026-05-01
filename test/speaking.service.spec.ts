@@ -39,7 +39,9 @@ describe('SpeakingService', () => {
   describe('startSession', () => {
     it('should successfully create a new session with timer', async () => {
       mockPrismaService.examSession.findFirst.mockResolvedValue(null);
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'session-123' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'session-123',
+      });
 
       const result = await service.startSession('student-123', 1, true);
 
@@ -53,7 +55,9 @@ describe('SpeakingService', () => {
 
     it('should create session without timer if useTimer is false', async () => {
       mockPrismaService.examSession.findFirst.mockResolvedValue(null);
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'session-456' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'session-456',
+      });
 
       const result = await service.startSession('student-123', 2, false);
 
@@ -62,23 +66,29 @@ describe('SpeakingService', () => {
     });
 
     it('should throw error for invalid Teil number', async () => {
-      await expect(service.startSession('student-123', 4, true)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.startSession('student-123', 4, true),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should set correct time limits per Teil', async () => {
       mockPrismaService.examSession.findFirst.mockResolvedValue(null);
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'session-1' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'session-1',
+      });
 
       let result = await service.startSession('student-123', 1, true);
       expect(result.timeLimit).toBe(240);
 
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'session-2' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'session-2',
+      });
       result = await service.startSession('student-123', 2, true);
       expect(result.timeLimit).toBe(360);
 
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'session-3' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'session-3',
+      });
       result = await service.startSession('student-123', 3, true);
       expect(result.timeLimit).toBe(360);
     });
@@ -89,7 +99,9 @@ describe('SpeakingService', () => {
         status: 'active',
       });
       mockPrismaService.examSession.update.mockResolvedValue({});
-      mockPrismaService.examSession.create.mockResolvedValue({ session_id: 'new-session' });
+      mockPrismaService.examSession.create.mockResolvedValue({
+        session_id: 'new-session',
+      });
 
       const result = await service.startSession('student-123', 1, true);
 
@@ -122,9 +134,9 @@ describe('SpeakingService', () => {
     it('should throw error if session not found', async () => {
       mockPrismaService.examSession.findFirst.mockResolvedValue(null);
 
-      await expect(service.pauseSession('non-existent', 'student-123')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.pauseSession('non-existent', 'student-123'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -150,9 +162,9 @@ describe('SpeakingService', () => {
     it('should throw error if session not found', async () => {
       mockPrismaService.examSession.findFirst.mockResolvedValue(null);
 
-      await expect(service.resumeSession('non-existent', 'student-123')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.resumeSession('non-existent', 'student-123'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -171,7 +183,11 @@ describe('SpeakingService', () => {
       mockPrismaService.examSession.update.mockResolvedValue({});
       mockPrismaService.teilTranscript.findFirst.mockResolvedValue(null);
 
-      const result = await service.endSession('session-123', 'student-123', 'completed');
+      const result = await service.endSession(
+        'session-123',
+        'student-123',
+        'completed',
+      );
 
       expect(result).toBeDefined();
       expect(result.duration).toBeGreaterThanOrEqual(120);
@@ -193,7 +209,11 @@ describe('SpeakingService', () => {
       mockPrismaService.examSession.update.mockResolvedValue({});
       mockPrismaService.teilTranscript.findFirst.mockResolvedValue(null);
 
-      const result = await service.endSession('session-456', 'student-123', 'completed');
+      const result = await service.endSession(
+        'session-456',
+        'student-123',
+        'completed',
+      );
 
       expect(result.isEvaluable).toBe(false);
     });
@@ -243,7 +263,10 @@ describe('SpeakingService', () => {
       };
 
       service.updateSessionState(sessionId, initialState);
-      service.updateSessionState(sessionId, { status: 'paused', elapsedSeconds: 30 });
+      service.updateSessionState(sessionId, {
+        status: 'paused',
+        elapsedSeconds: 30,
+      });
 
       const updated = service.getSessionState(sessionId);
       expect(updated!.status).toBe('paused');

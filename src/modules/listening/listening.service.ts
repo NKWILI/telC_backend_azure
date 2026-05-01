@@ -34,7 +34,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-1-v1',
-      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      audio_url:
+        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
       bundled_audio_asset: '',
       questions: [
         {
@@ -98,7 +99,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-2-v1',
-      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      audio_url:
+        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
       bundled_audio_asset: '',
       questions: [
         {
@@ -163,7 +165,8 @@ const CATALOG: Record<string, CatalogEntry> = {
     },
     exercise: {
       content_revision: 'mock-horen-teil-3-v1',
-      audio_url: 'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      audio_url:
+        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
       bundled_audio_asset: '',
       questions: [
         {
@@ -249,10 +252,20 @@ export class ListeningService {
           : undefined;
 
       const rows = await this.prisma.listeningAttempt.findMany({
-        where: { student_id: studentId, ...(exerciseId ? { exercise_id: exerciseId } : {}) },
+        where: {
+          student_id: studentId,
+          ...(exerciseId ? { exercise_id: exerciseId } : {}),
+        },
         orderBy: { created_at: 'desc' },
         take: limit,
-        select: { attempt_id: true, created_at: true, completed_at: true, score: true, feedback: true, duration_seconds: true },
+        select: {
+          attempt_id: true,
+          created_at: true,
+          completed_at: true,
+          score: true,
+          feedback: true,
+          duration_seconds: true,
+        },
       });
 
       return rows.map((row) => this.mapRowToAttemptDto(row));

@@ -189,8 +189,13 @@ export class SpeakingGateway
       });
 
       if (!examSession) {
-        this.logger.warn(`Client ${client.id}: Session not found: ${sessionId}`);
-        client.emit('connection_error', { code: 4001, message: 'Session not found' });
+        this.logger.warn(
+          `Client ${client.id}: Session not found: ${sessionId}`,
+        );
+        client.emit('connection_error', {
+          code: 4001,
+          message: 'Session not found',
+        });
         client.disconnect(true);
         return;
       }
@@ -229,8 +234,13 @@ export class SpeakingGateway
       });
 
       if (!student) {
-        this.logger.warn(`Client ${client.id}: Student not found: ${studentId}`);
-        client.emit('connection_error', { code: 4003, message: 'Student validation failed' });
+        this.logger.warn(
+          `Client ${client.id}: Student not found: ${studentId}`,
+        );
+        client.emit('connection_error', {
+          code: 4003,
+          message: 'Student validation failed',
+        });
         client.disconnect(true);
         return;
       }
@@ -242,15 +252,25 @@ export class SpeakingGateway
       });
 
       if (!activationCode || activationCode.status !== 'active') {
-        this.logger.warn(`Client ${client.id}: Student ${studentId} has no active activation code`);
-        client.emit('connection_error', { code: 4004, message: 'No active activation code' });
+        this.logger.warn(
+          `Client ${client.id}: Student ${studentId} has no active activation code`,
+        );
+        client.emit('connection_error', {
+          code: 4004,
+          message: 'No active activation code',
+        });
         client.disconnect(true);
         return;
       }
 
-      if (activationCode.expires_at && (activationCode.expires_at as Date) < new Date()) {
-        this.logger.warn(`Client ${client.id}: Student ${studentId} activation code expired`);
-        client.emit('connection_error', { code: 4005, message: 'Activation code expired' });
+      if (activationCode.expires_at && activationCode.expires_at < new Date()) {
+        this.logger.warn(
+          `Client ${client.id}: Student ${studentId} activation code expired`,
+        );
+        client.emit('connection_error', {
+          code: 4005,
+          message: 'Activation code expired',
+        });
         client.disconnect(true);
         return;
       }
@@ -272,7 +292,7 @@ export class SpeakingGateway
         teilNumber: examSession.teil_number,
         conversationHistory: [],
         status: 'active',
-        startTime: examSession.server_start_time as Date ?? new Date(),
+        startTime: (examSession.server_start_time as Date) ?? new Date(),
         elapsedSeconds: examSession.elapsed_time ?? 0,
         timeLimit: examSession.use_timer
           ? examSession.teil_number === 1
@@ -281,8 +301,9 @@ export class SpeakingGateway
           : null,
         expectedEndTime: examSession.use_timer
           ? new Date(
-              (examSession.server_start_time as Date ?? new Date()).getTime() +
-                (examSession.teil_number === 1 ? 240000 : 360000),
+              (
+                (examSession.server_start_time as Date) ?? new Date()
+              ).getTime() + (examSession.teil_number === 1 ? 240000 : 360000),
             )
           : null,
         disconnectTimer: null,
@@ -342,7 +363,8 @@ export class SpeakingGateway
       const sessionReadyPayload = {
         sessionId,
         teilNumber: examSession.teil_number,
-        serverStartTime: (examSession.server_start_time as Date)?.toISOString() ?? '',
+        serverStartTime:
+          (examSession.server_start_time as Date)?.toISOString() ?? '',
         timeLimit: sessionContext.timeLimit,
         status: 'ready',
         message:
@@ -451,7 +473,10 @@ export class SpeakingGateway
             select: { status: true },
           });
 
-          if (sessionRow && (sessionRow.status === 'active' || sessionRow.status === 'paused')) {
+          if (
+            sessionRow &&
+            (sessionRow.status === 'active' || sessionRow.status === 'paused')
+          ) {
             // Note: Transcript already saved in handleDisconnect before grace period
 
             await this.prisma.examSession.update({
@@ -773,11 +798,20 @@ export class SpeakingGateway
       try {
         await this.prisma.examSession.update({
           where: { session_id: context.sessionId },
-          data: { status: 'paused', pause_timestamp: new Date(), elapsed_time: context.elapsedSeconds },
+          data: {
+            status: 'paused',
+            pause_timestamp: new Date(),
+            elapsed_time: context.elapsedSeconds,
+          },
         });
       } catch (err) {
-        this.logger.error(`Failed to update session to paused: ${(err as Error).message}`);
-        client.emit('error', { code: 'DATABASE_ERROR', message: 'Failed to pause session' });
+        this.logger.error(
+          `Failed to update session to paused: ${(err as Error).message}`,
+        );
+        client.emit('error', {
+          code: 'DATABASE_ERROR',
+          message: 'Failed to pause session',
+        });
         return;
       }
 
@@ -933,7 +967,9 @@ export class SpeakingGateway
           data: { status: 'active', pause_timestamp: null },
         });
       } catch (err) {
-        this.logger.error(`Failed to update session to active: ${(err as Error).message}`);
+        this.logger.error(
+          `Failed to update session to active: ${(err as Error).message}`,
+        );
       }
 
       // Emit success
@@ -1189,7 +1225,11 @@ export class SpeakingGateway
         // Update database: mark session as completed
         await this.prisma.examSession.update({
           where: { session_id: context.sessionId },
-          data: { status: 'completed', completed_at: new Date(), elapsed_time: context.timeLimit },
+          data: {
+            status: 'completed',
+            completed_at: new Date(),
+            elapsed_time: context.timeLimit,
+          },
         });
 
         // Close Gemini session

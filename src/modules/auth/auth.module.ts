@@ -7,12 +7,7 @@ import { RateLimitService } from '../../shared/services/rate-limit.service';
 
 @Module({
   controllers: [AuthController],
-  providers: [
-    TokenService,
-    AuthService,
-    JwtAuthGuard,
-    RateLimitService,
-  ],
+  providers: [TokenService, AuthService, JwtAuthGuard, RateLimitService],
   exports: [TokenService, AuthService],
 })
 export class AuthModule {}

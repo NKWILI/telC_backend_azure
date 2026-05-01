@@ -21,9 +21,27 @@ const mockExercise = {
       prompt: 'Die Arbeiten können in der Werkstatt durchgeführt werden, wenn',
       sortOrder: 0,
       options: [
-        { id: 'opt-6-0', questionId: 'q6', content: 'der Termin nicht abgesprochen werden muss',           isCorrect: false, sortOrder: 0 },
-        { id: 'opt-6-1', questionId: 'q6', content: 'der Termin von der Werkstatt festgelegt werden kann', isCorrect: false, sortOrder: 1 },
-        { id: 'opt-6-2', questionId: 'q6', content: 'der Termin vorher mit Frau Weisshaupt abgesprochen wird', isCorrect: true, sortOrder: 2 },
+        {
+          id: 'opt-6-0',
+          questionId: 'q6',
+          content: 'der Termin nicht abgesprochen werden muss',
+          isCorrect: false,
+          sortOrder: 0,
+        },
+        {
+          id: 'opt-6-1',
+          questionId: 'q6',
+          content: 'der Termin von der Werkstatt festgelegt werden kann',
+          isCorrect: false,
+          sortOrder: 1,
+        },
+        {
+          id: 'opt-6-2',
+          questionId: 'q6',
+          content: 'der Termin vorher mit Frau Weisshaupt abgesprochen wird',
+          isCorrect: true,
+          sortOrder: 2,
+        },
       ],
     },
     // questions 7–10 with correct at sort_order 0 (a)
@@ -34,9 +52,27 @@ const mockExercise = {
       prompt: `Frage ${n}`,
       sortOrder: i + 1,
       options: [
-        { id: `opt-${n}-0`, questionId: `q${n}`, content: `option-a-${n}`, isCorrect: true,  sortOrder: 0 },
-        { id: `opt-${n}-1`, questionId: `q${n}`, content: `option-b-${n}`, isCorrect: false, sortOrder: 1 },
-        { id: `opt-${n}-2`, questionId: `q${n}`, content: `option-c-${n}`, isCorrect: false, sortOrder: 2 },
+        {
+          id: `opt-${n}-0`,
+          questionId: `q${n}`,
+          content: `option-a-${n}`,
+          isCorrect: true,
+          sortOrder: 0,
+        },
+        {
+          id: `opt-${n}-1`,
+          questionId: `q${n}`,
+          content: `option-b-${n}`,
+          isCorrect: false,
+          sortOrder: 1,
+        },
+        {
+          id: `opt-${n}-2`,
+          questionId: `q${n}`,
+          content: `option-c-${n}`,
+          isCorrect: false,
+          sortOrder: 2,
+        },
       ],
     })),
   ],
@@ -51,23 +87,118 @@ const mockTeil1Exercise = {
   instruction: 'Lesen Sie…',
   createdAt: new Date(),
   titles: [
-    { id: 'ffffffff-0001-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Anfrage',             sortOrder: 0 },
-    { id: 'ffffffff-0002-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Lieferschein',        sortOrder: 1 },
-    { id: 'ffffffff-0003-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Reklamation',         sortOrder: 2 },
-    { id: 'ffffffff-0004-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Schadensmeldung',     sortOrder: 3 },
-    { id: 'ffffffff-0005-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Schließregelung',     sortOrder: 4 },
-    { id: 'ffffffff-0006-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Sommerfest',          sortOrder: 5 },
-    { id: TERMINABSAGE_ID,                        exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminabsage',        sortOrder: 6 },
-    { id: 'ffffffff-0008-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminverschiebung',  sortOrder: 7 },
-    { id: 'ffffffff-0009-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Terminzusage',        sortOrder: 8 },
-    { id: 'ffffffff-0010-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', content: 'Übernachtung',        sortOrder: 9 },
+    {
+      id: 'ffffffff-0001-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Anfrage',
+      sortOrder: 0,
+    },
+    {
+      id: 'ffffffff-0002-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Lieferschein',
+      sortOrder: 1,
+    },
+    {
+      id: 'ffffffff-0003-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Reklamation',
+      sortOrder: 2,
+    },
+    {
+      id: 'ffffffff-0004-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Schadensmeldung',
+      sortOrder: 3,
+    },
+    {
+      id: 'ffffffff-0005-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Schließregelung',
+      sortOrder: 4,
+    },
+    {
+      id: 'ffffffff-0006-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Sommerfest',
+      sortOrder: 5,
+    },
+    {
+      id: TERMINABSAGE_ID,
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Terminabsage',
+      sortOrder: 6,
+    },
+    {
+      id: 'ffffffff-0008-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Terminverschiebung',
+      sortOrder: 7,
+    },
+    {
+      id: 'ffffffff-0009-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Terminzusage',
+      sortOrder: 8,
+    },
+    {
+      id: 'ffffffff-0010-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      content: 'Übernachtung',
+      sortOrder: 9,
+    },
   ],
   texts: [
-    { id: '44444444-0001-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 1, von: 'r.fazli@grb.com',          an: 'v.gruedle@grb.com', body: 'body1', sortOrder: 0, correctTitleId: TERMINABSAGE_ID },
-    { id: '44444444-0002-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 2, von: null,                       an: null,                body: 'body2', sortOrder: 1, correctTitleId: 'ffffffff-0005-0001-0001-000000000001' },
-    { id: '44444444-0003-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 3, von: 'rene.gallack@fa-rzw.de',    an: 's.gerke@web.de',    body: 'body3', sortOrder: 2, correctTitleId: 'ffffffff-0003-0001-0001-000000000001' },
-    { id: '44444444-0004-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 4, von: 'i.villa@kompsit.net',       an: 'aurum@gaestehaus.com', body: 'body4', sortOrder: 3, correctTitleId: 'ffffffff-0001-0001-0001-000000000001' },
-    { id: '44444444-0005-0001-0001-000000000001', exerciseId: 'eeeeeeee-0001-0001-0001-000000000001', textNumber: 5, von: 'michaela.rojka@rett-platt.de', an: 'nella.weber@rett-platt.de', body: 'body5', sortOrder: 4, correctTitleId: 'ffffffff-0008-0001-0001-000000000001' },
+    {
+      id: '44444444-0001-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      textNumber: 1,
+      von: 'r.fazli@grb.com',
+      an: 'v.gruedle@grb.com',
+      body: 'body1',
+      sortOrder: 0,
+      correctTitleId: TERMINABSAGE_ID,
+    },
+    {
+      id: '44444444-0002-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      textNumber: 2,
+      von: null,
+      an: null,
+      body: 'body2',
+      sortOrder: 1,
+      correctTitleId: 'ffffffff-0005-0001-0001-000000000001',
+    },
+    {
+      id: '44444444-0003-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      textNumber: 3,
+      von: 'rene.gallack@fa-rzw.de',
+      an: 's.gerke@web.de',
+      body: 'body3',
+      sortOrder: 2,
+      correctTitleId: 'ffffffff-0003-0001-0001-000000000001',
+    },
+    {
+      id: '44444444-0004-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      textNumber: 4,
+      von: 'i.villa@kompsit.net',
+      an: 'aurum@gaestehaus.com',
+      body: 'body4',
+      sortOrder: 3,
+      correctTitleId: 'ffffffff-0001-0001-0001-000000000001',
+    },
+    {
+      id: '44444444-0005-0001-0001-000000000001',
+      exerciseId: 'eeeeeeee-0001-0001-0001-000000000001',
+      textNumber: 5,
+      von: 'michaela.rojka@rett-platt.de',
+      an: 'nella.weber@rett-platt.de',
+      body: 'body5',
+      sortOrder: 4,
+      correctTitleId: 'ffffffff-0008-0001-0001-000000000001',
+    },
   ],
 };
 
@@ -86,25 +217,105 @@ const mockTeil3Exercise = {
   })),
   situations: [
     // 11 → "j" (sortOrder 9)
-    { id: 'eeeeeeee-0011-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 11, content: 'Situation 11', noMatch: false, correctAnnouncementId: 'dddddddd-0010-0003-0003-000000000001', sortOrder: 0 },
+    {
+      id: 'eeeeeeee-0011-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 11,
+      content: 'Situation 11',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0010-0003-0003-000000000001',
+      sortOrder: 0,
+    },
     // 12 → "g" (sortOrder 6)
-    { id: 'eeeeeeee-0012-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 12, content: 'Situation 12', noMatch: false, correctAnnouncementId: 'dddddddd-0007-0003-0003-000000000001', sortOrder: 1 },
+    {
+      id: 'eeeeeeee-0012-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 12,
+      content: 'Situation 12',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0007-0003-0003-000000000001',
+      sortOrder: 1,
+    },
     // 13 → "d" (sortOrder 3)
-    { id: 'eeeeeeee-0013-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 13, content: 'Situation 13', noMatch: false, correctAnnouncementId: 'dddddddd-0004-0003-0003-000000000001', sortOrder: 2 },
+    {
+      id: 'eeeeeeee-0013-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 13,
+      content: 'Situation 13',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0004-0003-0003-000000000001',
+      sortOrder: 2,
+    },
     // 14 → "h" (sortOrder 7)
-    { id: 'eeeeeeee-0014-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 14, content: 'Situation 14', noMatch: false, correctAnnouncementId: 'dddddddd-0008-0003-0003-000000000001', sortOrder: 3 },
+    {
+      id: 'eeeeeeee-0014-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 14,
+      content: 'Situation 14',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0008-0003-0003-000000000001',
+      sortOrder: 3,
+    },
     // 15 → "X" (no match)
-    { id: 'eeeeeeee-0015-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 15, content: 'Situation 15', noMatch: true,  correctAnnouncementId: null,                                        sortOrder: 4 },
+    {
+      id: 'eeeeeeee-0015-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 15,
+      content: 'Situation 15',
+      noMatch: true,
+      correctAnnouncementId: null,
+      sortOrder: 4,
+    },
     // 16 → "e" (sortOrder 4)
-    { id: 'eeeeeeee-0016-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 16, content: 'Situation 16', noMatch: false, correctAnnouncementId: 'dddddddd-0005-0003-0003-000000000001', sortOrder: 5 },
+    {
+      id: 'eeeeeeee-0016-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 16,
+      content: 'Situation 16',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0005-0003-0003-000000000001',
+      sortOrder: 5,
+    },
     // 17 → "k" (sortOrder 10)
-    { id: 'eeeeeeee-0017-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 17, content: 'Situation 17', noMatch: false, correctAnnouncementId: 'dddddddd-0011-0003-0003-000000000001', sortOrder: 6 },
+    {
+      id: 'eeeeeeee-0017-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 17,
+      content: 'Situation 17',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0011-0003-0003-000000000001',
+      sortOrder: 6,
+    },
     // 18 → "l" (sortOrder 11)
-    { id: 'eeeeeeee-0018-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 18, content: 'Situation 18', noMatch: false, correctAnnouncementId: 'dddddddd-0012-0003-0003-000000000001', sortOrder: 7 },
+    {
+      id: 'eeeeeeee-0018-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 18,
+      content: 'Situation 18',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0012-0003-0003-000000000001',
+      sortOrder: 7,
+    },
     // 19 → "b" (sortOrder 1)
-    { id: 'eeeeeeee-0019-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 19, content: 'Situation 19', noMatch: false, correctAnnouncementId: 'dddddddd-0002-0003-0003-000000000001', sortOrder: 8 },
+    {
+      id: 'eeeeeeee-0019-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 19,
+      content: 'Situation 19',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0002-0003-0003-000000000001',
+      sortOrder: 8,
+    },
     // 20 → "c" (sortOrder 2)
-    { id: 'eeeeeeee-0020-0003-0003-000000000001', exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001', situationNumber: 20, content: 'Situation 20', noMatch: false, correctAnnouncementId: 'dddddddd-0003-0003-0003-000000000001', sortOrder: 9 },
+    {
+      id: 'eeeeeeee-0020-0003-0003-000000000001',
+      exerciseId: 'bbbbbbbb-0001-0003-0003-000000000001',
+      situationNumber: 20,
+      content: 'Situation 20',
+      noMatch: false,
+      correctAnnouncementId: 'dddddddd-0003-0003-0003-000000000001',
+      sortOrder: 9,
+    },
   ],
 };
 
@@ -124,7 +335,9 @@ describe('LesenService', () => {
 
   describe('getTeil1Exercise', () => {
     it('returns correct shape — 5 texts, 10 titles, correctMatches map, no correctTitleId on texts', async () => {
-      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(
+        mockTeil1Exercise,
+      );
 
       const result = await (service as any).getTeil1Exercise();
 
@@ -150,7 +363,9 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(null);
 
-      await expect((service as any).getTeil1Exercise()).rejects.toThrow(NotFoundException);
+      await expect((service as any).getTeil1Exercise()).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -185,7 +400,9 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(null);
 
-      await expect(service.getTeil2Exercise()).rejects.toThrow(NotFoundException);
+      await expect(service.getTeil2Exercise()).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -206,7 +423,9 @@ describe('LesenService', () => {
 
   describe('getTeil3Exercise', () => {
     it('returns correct shape — 10 situations, 12 announcements, no UUIDs in ids', async () => {
-      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(mockTeil3Exercise);
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(
+        mockTeil3Exercise,
+      );
 
       const result = await (service as any).getTeil3Exercise();
 
@@ -223,7 +442,9 @@ describe('LesenService', () => {
     });
 
     it('maps noMatch to "X" and derives correct letter from announcement sortOrder', async () => {
-      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(mockTeil3Exercise);
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(
+        mockTeil3Exercise,
+      );
 
       const result = await (service as any).getTeil3Exercise();
 
@@ -242,7 +463,9 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(null);
 
-      await expect((service as any).getTeil3Exercise()).rejects.toThrow(NotFoundException);
+      await expect((service as any).getTeil3Exercise()).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
