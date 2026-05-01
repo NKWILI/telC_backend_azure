@@ -34,5 +34,8 @@ yarn-error.log*
 # Misc
 .env.production.local
 
+# Claude Code local settings (machine-specific, not for sharing)
+.claude/settings.local.json
+
 /generated/prisma
 docs/api-contract.md
