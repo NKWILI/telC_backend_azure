@@ -7,3 +7,11 @@ export interface Student {
   updated_at: string;
   last_seen_at: string;
 }
+
+export interface AuthStudentResponse {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  emailVerified: boolean;
+}

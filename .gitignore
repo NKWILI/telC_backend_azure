@@ -39,3 +39,7 @@ yarn-error.log*
 
 /generated/prisma
 docs/api-contract.md
+.github/
+
+#ignore agent-skills
+agent-skills/
