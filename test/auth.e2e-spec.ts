@@ -4,6 +4,7 @@ import {
   ValidationPipe,
   ForbiddenException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -296,6 +297,51 @@ describe('AuthController (e2e)', () => {
       .expect(201)
       .expect((res) => {
         expect(res.body.success).toBe(true);
+      });
+  });
+
+  it('POST /api/auth/login returns tokens for valid credentials', async () => {
+    authService.login = jest.fn().mockResolvedValueOnce({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    });
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'john.doe@example.com', password: 'password123', deviceId: 'device-1' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.accessToken).toBe('access-token');
+        expect(res.body.refreshToken).toBe('refresh-token');
+      });
+  });
+
+  it('POST /api/auth/login returns 403 for unverified email', async () => {
+    authService.login = jest.fn().mockRejectedValueOnce(
+      new ForbiddenException('EMAIL_NOT_VERIFIED'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'john.doe@example.com', password: 'password123', deviceId: 'device-1' })
+      .expect(403)
+      .expect((res) => {
+        expect(res.body.error).toBe('EMAIL_NOT_VERIFIED');
+        expect(res.body.message).toBe('Please verify your email to continue.');
+      });
+  });
+
+  it('POST /api/auth/login returns 401 for invalid credentials', async () => {
+    authService.login = jest.fn().mockRejectedValueOnce(
+      new UnauthorizedException('INVALID_CREDENTIALS'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'john.doe@example.com', password: 'wrongpass', deviceId: 'device-1' })
+      .expect(401)
+      .expect((res) => {
+        expect(res.body.error).toBe('INVALID_CREDENTIALS');
       });
   });
 });

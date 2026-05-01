@@ -11,6 +11,7 @@ import {
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
 import { RegisterRequestDto } from './dto/register-request.dto';
+import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
@@ -55,6 +56,15 @@ export class AuthController {
     @Body() dto: VerifyEmailRequestDto,
   ): Promise<AuthTokenResponse> {
     return this.authService.verifyEmail(dto);
+  }
+
+  /**
+   * POST /api/auth/login
+   * Login with email and password and issue tokens
+   */
+  @Post('login')
+  async login(@Body() dto: LoginRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.login(dto);
   }
 
   /**

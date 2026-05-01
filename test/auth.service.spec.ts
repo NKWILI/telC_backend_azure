@@ -1,4 +1,5 @@
-import { BadGatewayException, BadRequestException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../src/modules/auth/auth.service';
 
 describe('AuthService', () => {
@@ -360,6 +361,88 @@ describe('AuthService', () => {
         response: { message: 'VERIFICATION_TOKEN_EXPIRED' },
       });
       expect(prismaMock.student.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('login', () => {
+    const dto = {
+      email: 'john.doe@example.com',
+      password: 'password123',
+      deviceId: 'device-1',
+      deviceName: 'Pixel',
+    };
+
+    it('returns tokens for valid credentials and verified email', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('password123', 10),
+        email_verified: true,
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+      });
+
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+
+      const result = await service.login(dto as any);
+
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+    });
+
+    it('throws INVALID_CREDENTIALS for unknown user', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        response: { message: 'INVALID_CREDENTIALS' },
+      });
+    });
+
+    it('throws INVALID_CREDENTIALS for wrong password', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('not-the-password', 10),
+        email_verified: true,
+        email: 'john.doe@example.com',
+      });
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        response: { message: 'INVALID_CREDENTIALS' },
+      });
+    });
+
+    it('throws EMAIL_NOT_VERIFIED if recently sent verification', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('password123', 10),
+        email_verified: false,
+        email_verification_expires: recentExpiry,
+        email: 'john.doe@example.com',
+      });
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        response: { message: 'EMAIL_NOT_VERIFIED' },
+      });
+    });
+
+    it('resends verification for unverified email past cooldown and throws EMAIL_NOT_VERIFIED', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('password123', 10),
+        email_verified: false,
+        email_verification_expires: oldExpiry,
+        email: 'john.doe@example.com',
+      });
+      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        response: { message: 'EMAIL_NOT_VERIFIED' },
+      });
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(emailServiceMock.sendVerificationEmail).toHaveBeenCalledTimes(1);
     });
   });
 });

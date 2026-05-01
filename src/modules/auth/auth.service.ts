@@ -3,6 +3,7 @@ import {
   BadRequestException,
   UnauthorizedException,
   BadGatewayException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
@@ -13,6 +14,7 @@ import { Student } from '../../shared/interfaces/student.interface';
 import { DeviceSession } from '../../shared/interfaces/device-session.interface';
 import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RegisterRequestDto } from './dto/register-request.dto';
+import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -25,6 +27,7 @@ type VerificationStudentRecord = {
   email: string | null;
   email_verified: boolean;
   email_verification_expires: Date | null;
+  password_hash?: string | null;
 };
 
 type AuthStudentRecord = {
@@ -125,6 +128,67 @@ export class AuthService {
     });
 
     return { message: 'verification email sent' };
+  }
+
+  async login(dto: LoginRequestDto): Promise<AuthTokenResponse> {
+    const student = (await this.prisma.student.findUnique({
+      where: { email: dto.email },
+      select: {
+        id: true,
+        password_hash: true,
+        email_verified: true,
+        email_verification_token: true,
+        email_verification_expires: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+      },
+    })) as VerificationStudentRecord | null;
+
+    if (!student) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    const isValid = student.password_hash
+      ? await bcrypt.compare(dto.password, student.password_hash)
+      : false;
+
+    if (!isValid) {
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
+    }
+
+    if (!student.email_verified) {
+      if (
+        student.email_verification_expires &&
+        this.wasVerificationSentRecently(student.email_verification_expires)
+      ) {
+        throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+      }
+
+      const rawToken = this.tokenCrypto.generateToken();
+      const tokenHash = this.tokenCrypto.hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS);
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.student.update({
+          where: { id: student.id },
+          data: {
+            email_verification_token: tokenHash,
+            email_verification_expires: expiresAt,
+          },
+        });
+
+        try {
+          await this.emailService.sendVerificationEmail(student.email ?? '', rawToken);
+        } catch {
+          throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
+        }
+      });
+
+      throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+    }
+
+    return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
   }
 
   async verifyEmail(dto: VerifyEmailRequestDto): Promise<AuthTokenResponse> {
