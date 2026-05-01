@@ -12,3 +12,11 @@ export interface RefreshTokenPayload {
   iat?: number;
   exp?: number;
 }
+
+export interface LinkingTokenPayload {
+  email: string;
+  provider: string;
+  providerId: string;
+  iat?: number;
+  exp?: number;
+}

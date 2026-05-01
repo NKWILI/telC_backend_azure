@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import {
   AccessTokenPayload,
   RefreshTokenPayload,
+  LinkingTokenPayload,
 } from '../../shared/interfaces/token-payload.interface';
 
 @Injectable()
@@ -128,5 +129,43 @@ export class TokenService {
    */
   async compareRefreshToken(token: string, hash: string): Promise<boolean> {
     return bcrypt.compare(token, hash);
+  }
+
+  /**
+   * Generate a linking token for OAuth account linking (30 minutes)
+   * Contains: email, provider, providerId
+   */
+  generateLinkingToken(payload: {
+    email: string;
+    provider: string;
+    providerId: string;
+  }): string {
+    return jwt.sign(
+      {
+        email: payload.email,
+        provider: payload.provider,
+        providerId: payload.providerId,
+      },
+      this.jwtSecret,
+      { expiresIn: '30m' },
+    );
+  }
+
+  /**
+   * Verify and decode a linking token
+   */
+  verifyLinkingToken(token: string): LinkingTokenPayload {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as LinkingTokenPayload;
+      return decoded;
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new UnauthorizedException('LINKING_TOKEN_EXPIRED');
+      }
+      if (error instanceof jwt.JsonWebTokenError) {
+        throw new UnauthorizedException('LINKING_TOKEN_INVALID');
+      }
+      throw new UnauthorizedException('LINKING_TOKEN_INVALID');
+    }
   }
 }

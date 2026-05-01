@@ -218,6 +218,49 @@ describe('TokenService', () => {
     });
   });
 
+  // ─── Default Expiry Tests ────────────────────────────
+
+  describe('default expiry values (no env override)', () => {
+    let savedAccess: string | undefined;
+    let savedRefresh: string | undefined;
+
+    beforeEach(() => {
+      savedAccess = process.env.JWT_ACCESS_TOKEN_EXPIRY;
+      savedRefresh = process.env.JWT_REFRESH_TOKEN_EXPIRY;
+      delete process.env.JWT_ACCESS_TOKEN_EXPIRY;
+      delete process.env.JWT_REFRESH_TOKEN_EXPIRY;
+      tokenService = new TokenService();
+    });
+
+    afterEach(() => {
+      if (savedAccess !== undefined)
+        process.env.JWT_ACCESS_TOKEN_EXPIRY = savedAccess;
+      if (savedRefresh !== undefined)
+        process.env.JWT_REFRESH_TOKEN_EXPIRY = savedRefresh;
+    });
+
+    it('access token default expiry is 15 minutes', () => {
+      const jwtLib = require('jsonwebtoken');
+      const token = tokenService.generateAccessToken({
+        studentId: 'x',
+        deviceId: 'y',
+      });
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(15 * 60);
+    });
+
+    it('refresh token default expiry is 7 days', () => {
+      const jwtLib = require('jsonwebtoken');
+      const token = tokenService.generateRefreshToken({
+        studentId: 'x',
+        deviceId: 'y',
+        sessionId: 'z',
+      });
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(7 * 24 * 60 * 60);
+    });
+  });
+
   // ─── Refresh Token Hashing Tests ─────────────────────
 
   describe('hashRefreshToken', () => {

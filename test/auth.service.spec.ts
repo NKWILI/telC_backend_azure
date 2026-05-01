@@ -27,6 +27,9 @@ describe('AuthService', () => {
         upsert: jest.fn(),
         update: jest.fn(),
       },
+      oAuthAccount: {
+        create: jest.fn(),
+      },
     };
 
     prismaMock = {
@@ -45,6 +48,9 @@ describe('AuthService', () => {
         deleteMany: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(),
+      },
+      oAuthAccount: {
+        findFirst: jest.fn(),
       },
     };
 
@@ -69,11 +75,16 @@ describe('AuthService', () => {
       sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
     };
 
+    const googleServiceMock = {
+      verifyIdToken: jest.fn(),
+    };
+
     service = new AuthService(
       prismaMock,
       tokenServiceMock,
       tokenCryptoMock,
       emailServiceMock,
+      googleServiceMock,
     );
   });
 
@@ -364,6 +375,86 @@ describe('AuthService', () => {
     });
   });
 
+  describe('forgotPassword', () => {
+    it('returns generic success when email not found', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.forgotPassword({ email: 'noone@example.com' } as any),
+      ).resolves.toEqual({ message: 'password reset sent' });
+    });
+
+    it('updates reset token and sends email when email exists', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
+      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await expect(
+        service.forgotPassword({ email: 'john.doe@example.com' } as any),
+      ).resolves.toEqual({ message: 'password reset sent' });
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(emailServiceMock.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('resetPassword', () => {
+    const dto = {
+      token: 'reset-token',
+      newPassword: 'newpassword123',
+      deviceId: 'device-1',
+      deviceName: 'Pixel',
+    };
+
+    it('resets password, revokes sessions, and returns token pair', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce({
+        id: 'student-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+        password_reset_expires: new Date(Date.now() + 60_000),
+      });
+
+      txMock.deviceSession.deleteMany.mockResolvedValueOnce(undefined);
+      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+
+      await expect(service.resetPassword(dto as any)).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        student: {
+          id: 'student-1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john.doe@example.com',
+          emailVerified: true,
+        },
+      });
+    });
+
+    it('throws RESET_TOKEN_INVALID for unknown token', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce(null);
+      await expect(service.resetPassword(dto as any)).rejects.toMatchObject({
+        response: { message: 'RESET_TOKEN_INVALID' },
+      });
+    });
+
+    it('throws RESET_TOKEN_EXPIRED for expired token', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce({
+        id: 'student-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+        password_reset_expires: new Date(Date.now() - 1000),
+      });
+      tokenCryptoMock.isExpired.mockReturnValueOnce(true);
+
+      await expect(service.resetPassword(dto as any)).rejects.toMatchObject({
+        response: { message: 'RESET_TOKEN_EXPIRED' },
+      });
+    });
+  });
+
   describe('login', () => {
     const dto = {
       email: 'john.doe@example.com',
@@ -443,6 +534,239 @@ describe('AuthService', () => {
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(emailServiceMock.sendVerificationEmail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('googleLogin', () => {
+    it('returns tokens for returning user (existing OAuthAccount)', async () => {
+      const googleService = (service as any).googleService;
+      googleService.verifyIdToken = jest
+        .fn()
+        .mockResolvedValueOnce({
+          sub: 'google-user-123',
+          email: 'john@example.com',
+          email_verified: true,
+        });
+
+      const oauthAccount = {
+        id: 'oauth-1',
+        student: {
+          id: 'student-1',
+          first_name: 'John',
+          last_name: 'Doe',
+          email: 'john@example.com',
+        },
+      };
+
+      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(oauthAccount);
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+
+      const result = await service.googleLogin({
+        idToken: 'google-token',
+        deviceId: 'device-1',
+        deviceName: 'Chrome',
+      });
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect((result as any).student.email).toBe('john@example.com');
+    });
+
+    it('returns LINKING_REQUIRED for existing unverified student email with no OAuth', async () => {
+      const googleService = (service as any).googleService;
+      googleService.verifyIdToken = jest
+        .fn()
+        .mockResolvedValueOnce({
+          sub: 'google-user-123',
+          email: 'john@example.com',
+          email_verified: false,
+        });
+
+      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john@example.com',
+        email_verified: false,
+      });
+
+      const tokenService = (service as any).tokenService;
+      tokenService.generateLinkingToken = jest
+        .fn()
+        .mockReturnValueOnce('linking-token-jwt');
+
+      const result = await service.googleLogin({
+        idToken: 'google-token',
+        deviceId: 'device-1',
+      });
+
+      expect(result).toEqual({
+        status: 'LINKING_REQUIRED',
+        linkingToken: 'linking-token-jwt',
+      });
+    });
+
+    it('returns LINKING_REQUIRED for existing verified student email with no OAuth', async () => {
+      const googleService = (service as any).googleService;
+      googleService.verifyIdToken = jest
+        .fn()
+        .mockResolvedValueOnce({
+          sub: 'google-user-456',
+          email: 'verified@example.com',
+          email_verified: true,
+        });
+
+      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-2',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        email: 'verified@example.com',
+        email_verified: true,
+      });
+
+      const tokenService = (service as any).tokenService;
+      tokenService.generateLinkingToken = jest
+        .fn()
+        .mockReturnValueOnce('linking-token-for-verified');
+
+      const result = await service.googleLogin({
+        idToken: 'google-token',
+        deviceId: 'device-1',
+      });
+
+      expect(result).toEqual({
+        status: 'LINKING_REQUIRED',
+        linkingToken: 'linking-token-for-verified',
+      });
+    });
+
+    it('creates new student for brand new email', async () => {
+      const googleService = (service as any).googleService;
+      googleService.verifyIdToken = jest
+        .fn()
+        .mockResolvedValueOnce({
+          sub: 'google-user-123',
+          email: 'newuser@example.com',
+          email_verified: true,
+          given_name: 'John',
+          family_name: 'Doe',
+        });
+
+      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
+      prismaMock.student.findUnique.mockResolvedValueOnce(null);
+
+      txMock.student.create.mockResolvedValueOnce({
+        id: 'student-new',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'newuser@example.com',
+      });
+      txMock.oAuthAccount.create.mockResolvedValueOnce({});
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+
+      const result = await service.googleLogin({
+        idToken: 'google-token',
+        deviceId: 'device-1',
+      });
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect((result as any).student.email).toBe('newuser@example.com');
+    });
+
+    it('throws INVALID_GOOGLE_TOKEN for invalid token', async () => {
+      const googleService = (service as any).googleService;
+      const error = new Error('INVALID_GOOGLE_TOKEN');
+      googleService.verifyIdToken = jest
+        .fn()
+        .mockRejectedValueOnce(error);
+
+      await expect(
+        service.googleLogin({
+          idToken: 'invalid-token',
+          deviceId: 'device-1',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('googleLink', () => {
+    it('links OAuth account and returns tokens', async () => {
+      const tokenService = (service as any).tokenService;
+      tokenService.verifyLinkingToken = jest
+        .fn()
+        .mockReturnValueOnce({
+          email: 'john@example.com',
+          provider: 'google',
+          providerId: 'google-user-123',
+        });
+
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john@example.com',
+      });
+
+      txMock.oAuthAccount.create.mockResolvedValueOnce({});
+      txMock.student.update.mockResolvedValueOnce({});
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+
+      const result = await service.googleLink({
+        linkingToken: 'linking-jwt',
+        deviceId: 'device-1',
+      });
+
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result.student.email).toBe('john@example.com');
+    });
+
+    it('throws error for invalid linking token', async () => {
+      const tokenService = (service as any).tokenService;
+      const error = new Error('LINKING_TOKEN_INVALID');
+      tokenService.verifyLinkingToken = jest
+        .fn()
+        .mockImplementationOnce(() => {
+          throw error;
+        });
+
+      await expect(
+        service.googleLink({
+          linkingToken: 'invalid-linking-token',
+          deviceId: 'device-1',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('throws STUDENT_NOT_FOUND if email not in system', async () => {
+      const tokenService = (service as any).tokenService;
+      tokenService.verifyLinkingToken = jest
+        .fn()
+        .mockReturnValueOnce({
+          email: 'unknown@example.com',
+          provider: 'google',
+          providerId: 'google-user-123',
+        });
+
+      prismaMock.student.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.googleLink({
+          linkingToken: 'linking-jwt',
+          deviceId: 'device-1',
+        }),
+      ).rejects.toMatchObject({
+        response: { message: 'STUDENT_NOT_FOUND' },
+      });
     });
   });
 });

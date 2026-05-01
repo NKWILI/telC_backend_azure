@@ -62,6 +62,8 @@ describe('AuthController (e2e)', () => {
     }),
     revokeDeviceSession: jest.fn().mockResolvedValue(undefined),
     getActiveDeviceSession: jest.fn().mockResolvedValue(session),
+    googleLogin: jest.fn(),
+    googleLink: jest.fn(),
   };
 
   const tokenService = {
@@ -342,6 +344,111 @@ describe('AuthController (e2e)', () => {
       .expect(401)
       .expect((res) => {
         expect(res.body.error).toBe('INVALID_CREDENTIALS');
+      });
+  });
+
+  it('POST /api/auth/forgot-password always returns success', async () => {
+    authService.forgotPassword = jest.fn().mockResolvedValueOnce({ message: 'password reset sent' });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/forgot-password')
+      .send({ email: 'john.doe@example.com' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.message).toBe('password reset sent');
+      });
+  });
+
+  it('POST /api/auth/reset-password returns tokens for valid reset', async () => {
+    authService.resetPassword = jest.fn().mockResolvedValueOnce({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/reset-password')
+      .send({ token: 'reset-token', newPassword: 'newpassword123', deviceId: 'device-1' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.accessToken).toBe('access-token');
+      });
+  });
+
+  it('POST /api/auth/google returns tokens for returning user', async () => {
+    authService.googleLogin = jest.fn().mockResolvedValueOnce({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/google')
+      .send({ idToken: 'google-token', deviceId: 'device-1' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.accessToken).toBe('access-token');
+        expect(res.body.refreshToken).toBe('refresh-token');
+      });
+  });
+
+  it('POST /api/auth/google returns LINKING_REQUIRED for existing student', async () => {
+    authService.googleLogin = jest.fn().mockResolvedValueOnce({
+      status: 'LINKING_REQUIRED',
+      linkingToken: 'linking-jwt',
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/google')
+      .send({ idToken: 'google-token', deviceId: 'device-1' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.status).toBe('LINKING_REQUIRED');
+        expect(res.body.linkingToken).toBe('linking-jwt');
+      });
+  });
+
+  it('POST /api/auth/google returns 401 for invalid token', async () => {
+    authService.googleLogin = jest.fn().mockRejectedValueOnce(
+      new UnauthorizedException('INVALID_GOOGLE_TOKEN'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/google')
+      .send({ idToken: 'invalid-token', deviceId: 'device-1' })
+      .expect(401)
+      .expect((res) => {
+        expect(res.body.error).toBe('INVALID_GOOGLE_TOKEN');
+      });
+  });
+
+  it('POST /api/auth/google/link returns tokens for valid linking token', async () => {
+    authService.googleLink = jest.fn().mockResolvedValueOnce({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/google/link')
+      .send({ linkingToken: 'linking-jwt', deviceId: 'device-1' })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.accessToken).toBe('access-token');
+      });
+  });
+
+  it('POST /api/auth/google/link returns 401 for invalid linking token', async () => {
+    authService.googleLink = jest.fn().mockRejectedValueOnce(
+      new UnauthorizedException('LINKING_TOKEN_INVALID'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/google/link')
+      .send({ linkingToken: 'invalid-linking-token', deviceId: 'device-1' })
+      .expect(401)
+      .expect((res) => {
+        expect(res.body.error).toBe('LINKING_TOKEN_INVALID');
       });
   });
 });

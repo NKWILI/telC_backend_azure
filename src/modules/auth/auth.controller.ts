@@ -13,6 +13,10 @@ import { TokenService } from './token.service';
 import { RegisterRequestDto } from './dto/register-request.dto';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
+import { ResetPasswordRequestDto } from './dto/reset-password-request.dto';
+import { GoogleLoginRequestDto } from './dto/google-login-request.dto';
+import { GoogleLinkRequestDto } from './dto/google-link-request.dto';
 import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
@@ -56,6 +60,22 @@ export class AuthController {
     @Body() dto: VerifyEmailRequestDto,
   ): Promise<AuthTokenResponse> {
     return this.authService.verifyEmail(dto);
+  }
+
+  /**
+   * POST /api/auth/forgot-password
+   */
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordRequestDto): Promise<{ message: string }> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  /**
+   * POST /api/auth/reset-password
+   */
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.resetPassword(dto);
   }
 
   /**
@@ -224,5 +244,23 @@ export class AuthController {
       }
       throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
     }
+  }
+
+  /**
+   * POST /api/auth/google
+   * Login or request linking with Google OAuth
+   */
+  @Post('google')
+  async googleLogin(@Body() dto: GoogleLoginRequestDto): Promise<AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }> {
+    return this.authService.googleLogin(dto);
+  }
+
+  /**
+   * POST /api/auth/google/link
+   * Link Google account to existing student
+   */
+  @Post('google/link')
+  async googleLink(@Body() dto: GoogleLinkRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.googleLink(dto);
   }
 }

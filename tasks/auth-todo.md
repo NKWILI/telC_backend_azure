@@ -56,11 +56,11 @@
 
 ## Task 5 — Login (Slice B)
 
-- [ ] Create `src/modules/auth/dto/login-request.dto.ts` — `email` (`@Transform`), `password`, `deviceId`, `deviceName?`
-- [ ] Implement `AuthService.login()`: `INVALID_CREDENTIALS` for bad creds (no enumeration); 403 `EMAIL_NOT_VERIFIED` for unverified + auto-resend if > 2 min; verified → `upsertDeviceSession` → token pair
-- [ ] Wire `POST /api/auth/login` in `auth.controller.ts`
-- [ ] Unit tests — `login`: 6 cases (see plan)
-- [ ] E2E tests — `login`: 4 cases (see plan)
+- [x] Create `src/modules/auth/dto/login-request.dto.ts` — `email` (`@Transform`), `password`, `deviceId`, `deviceName?`
+- [x] Implement `AuthService.login()`: `INVALID_CREDENTIALS` for bad creds (no enumeration); 403 `EMAIL_NOT_VERIFIED` for unverified + auto-resend if > 2 min; verified → `upsertDeviceSession` → token pair
+- [x] Wire `POST /api/auth/login` in `auth.controller.ts`
+- [x] Unit tests — `login`: 6 cases (see plan)
+- [x] E2E tests — `login`: 4 cases (see plan)
 
 ### ✦ CHECKPOINT 5 — Slice B e2e tests pass; prior slices still pass
 
@@ -68,13 +68,14 @@
 
 ## Task 6 — Forgot Password + Reset Password (Slice C)
 
-- [ ] Create `src/modules/auth/dto/forgot-password-request.dto.ts` — `email` (`@Transform`)
-- [ ] Create `src/modules/auth/dto/reset-password-request.dto.ts` — `token`, `newPassword` (`@MinLength(8)`), `deviceId`, `deviceName?`
-- [ ] Implement `AuthService.forgotPassword()`: generic success always; if email exists → overwrite reset token (HMAC) + expiry in `$transaction` + send email
-- [ ] Implement `AuthService.resetPassword()`: HMAC lookup → `RESET_TOKEN_INVALID` / `RESET_TOKEN_EXPIRED`; `$transaction`(delete all sessions + bcrypt new password + clear token fields); then `upsertDeviceSession`; return token pair
-- [ ] Wire `POST /api/auth/forgot-password` and `POST /api/auth/reset-password` in `auth.controller.ts`
-- [ ] Unit tests — `forgotPassword`: 4 cases; `resetPassword`: 4 cases (see plan)
-- [ ] E2E tests — `forgot-password`: 2 cases; `reset-password`: 3 cases (see plan)
+- [x] Create `src/modules/auth/dto/forgot-password-request.dto.ts` — `email` (`@Transform`)
+- [x] Create `src/modules/auth/dto/reset-password-request.dto.ts` — `token`, `newPassword` (`@MinLength(8)`), `deviceId`, `deviceName?`
+- [x] Implement `AuthService.forgotPassword()`: generic success always; if email exists → overwrite reset token (HMAC) + expiry in `$transaction` + send email
+- [x] Implement `AuthService.resetPassword()`: HMAC lookup → `RESET_TOKEN_INVALID` / `RESET_TOKEN_EXPIRED`; `$transaction`(delete all sessions + bcrypt new password + clear token fields); then `upsertDeviceSession`; return token pair
+- [x] Wire `POST /api/auth/forgot-password` and `POST /api/auth/reset-password` in `auth.controller.ts`
+- [x] Unit tests — `forgotPassword`: 4 cases; `resetPassword`: 4 cases (see plan)
+- [x] E2E tests — `forgot-password`: 2 cases; `reset-password`: 3 cases (see plan)
+- [x] Task 6 completed and validated
 
 ### ✦ CHECKPOINT 6 — Slice C e2e tests pass; prior slices still pass
 
@@ -82,13 +83,13 @@
 
 ## Task 7 — Google OAuth (Slice D)
 
-- [ ] Create `src/modules/auth/dto/google-login-request.dto.ts` — `idToken`, `deviceId`, `deviceName?`
-- [ ] Create `src/modules/auth/dto/google-link-request.dto.ts` — `linkingToken`, `deviceId`, `deviceName?`
-- [ ] Implement `AuthService.googleLogin()`: verify token → lookup path (returning / LINKING_REQUIRED / new user) → `upsertDeviceSession` → return token pair or `{ status: 'LINKING_REQUIRED', linkingToken }`
-- [ ] Implement `AuthService.googleLink()`: verify + consume `linkingToken` JWT → create `OAuthAccount` → set `email_verified = true` → `upsertDeviceSession` → return token pair
-- [ ] Wire `POST /api/auth/google` and `POST /api/auth/google/link` in `auth.controller.ts`
-- [ ] Unit tests — `googleLogin`: 5 cases; `googleLink`: 2 cases (see plan)
-- [ ] E2E tests — `google`: 3 cases; `google/link`: 2 cases (see plan)
+- [x] Create `src/modules/auth/dto/google-login-request.dto.ts` — `idToken`, `deviceId`, `deviceName?`
+- [x] Create `src/modules/auth/dto/google-link-request.dto.ts` — `linkingToken`, `deviceId`, `deviceName?`
+- [x] Implement `AuthService.googleLogin()`: verify token → lookup path (returning / LINKING_REQUIRED / new user) → `upsertDeviceSession` → return token pair or `{ status: 'LINKING_REQUIRED', linkingToken }`
+- [x] Implement `AuthService.googleLink()`: verify + consume `linkingToken` JWT → create `OAuthAccount` → set `email_verified = true` → `upsertDeviceSession` → return token pair
+- [x] Wire `POST /api/auth/google` and `POST /api/auth/google/link` in `auth.controller.ts`
+- [x] Unit tests — `googleLogin`: 5 cases; `googleLink`: 3 cases (see plan)
+- [x] E2E tests — `google`: 3 cases; `google/link`: 2 cases (see plan)
 
 ### ✦ CHECKPOINT 7 — Slice D e2e tests pass; prior slices still pass
 
