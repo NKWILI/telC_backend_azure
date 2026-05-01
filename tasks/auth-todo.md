@@ -20,20 +20,20 @@
 
 ## Task 2 — Shared Primitives
 
-- [ ] Create `src/modules/auth/token-crypto.service.ts` — `generateToken()`, `hashToken(raw)` (HMAC-SHA256), `isExpired(date)`
-- [ ] Create `src/modules/auth/email.service.ts` — `sendVerificationEmail(to, rawToken)` and `sendPasswordResetEmail(to, rawToken)` using Resend; build full `FRONTEND_URL` link internally
-- [ ] Create `src/modules/auth/google.service.ts` — `verifyIdToken(idToken): GooglePayload`; normalizes email; throws `INVALID_GOOGLE_TOKEN` on failure
-- [ ] Update `src/modules/auth/token.service.ts`: change access token expiry to `15m`, refresh token expiry to `7d`
-- [ ] Create `test/token-crypto.service.spec.ts`: cover `generateToken` (random, 64-char hex), `hashToken` (deterministic, different inputs → different output), `isExpired` (past → true, future → false)
+- [x] Create `src/modules/auth/token-crypto.service.ts` — `generateToken()`, `hashToken(raw)` (HMAC-SHA256), `isExpired(date)`
+- [x] Create `src/modules/auth/email.service.ts` — `sendVerificationEmail(to, rawToken)` and `sendPasswordResetEmail(to, rawToken)` using Resend; build full `FRONTEND_URL` link internally
+- [x] Create `src/modules/auth/google.service.ts` — `verifyIdToken(idToken): GooglePayload`; normalizes email; throws `INVALID_GOOGLE_TOKEN` on failure
+- [x] Update `src/modules/auth/token.service.ts`: change access token expiry to `15m`, refresh token expiry to `7d`
+- [x] Create `test/token-crypto.service.spec.ts`: cover `generateToken` (random, 64-char hex), `hashToken` (deterministic, different inputs → different output), `isExpired` (past → true, future → false)
 
-### ✦ CHECKPOINT 2 — `npm test -- --testPathPattern=token-crypto` passes; `npm run build` exits 0
+### ✦ CHECKPOINT 2 — `npm test -- --testPathPatterns=token-crypto` passes; `npm run build` exits 0
 
 ---
 
 ## Task 3 — Device Session Infrastructure
 
-- [ ] Add `upsertDeviceSession(studentId, deviceId, refreshTokenHash, deviceName?)` to `AuthService` — inside a single `$transaction`: count active sessions → evict earliest `created_at` if count >= 3 → upsert on `device_id`
-- [ ] Add unit tests in `test/auth.service.spec.ts` for `upsertDeviceSession`: creates when count < 3; evicts oldest when count = 3; reuses existing `device_id`; runs in `$transaction`
+- [x] Add `upsertDeviceSession(studentId, deviceId, refreshTokenHash, deviceName?)` to `AuthService` — inside a single `$transaction`: count active sessions → evict earliest `created_at` if count >= 3 → upsert on `device_id`
+- [x] Add unit tests in `test/auth.service.spec.ts` for `upsertDeviceSession`: creates when count < 3; evicts oldest when count = 3; reuses existing `device_id`; runs in `$transaction`
 
 ### ✦ CHECKPOINT 3 — device session unit tests pass; `npm run build` exits 0
 

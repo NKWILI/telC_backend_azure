@@ -2,7 +2,6 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenService } from './token.service';
@@ -27,48 +26,76 @@ export class AuthService {
     refreshTokenHash: string,
     deviceName?: string,
   ): Promise<DeviceSession> {
+    return this.upsertDeviceSession(
+      studentId,
+      deviceId,
+      refreshTokenHash,
+      deviceName,
+    );
+  }
+
+  /**
+   * Upsert device session
+   * Ensures a maximum of 3 active sessions by evicting the oldest session
+   * for new devices, then upserts by device_id in one transaction.
+   */
+  async upsertDeviceSession(
+    studentId: string,
+    deviceId: string,
+    refreshTokenHash: string,
+    deviceName?: string,
+  ): Promise<DeviceSession> {
     if (!studentId?.trim() || !deviceId?.trim() || !refreshTokenHash?.trim()) {
       throw new BadRequestException('MISSING_REQUIRED_FIELDS');
     }
 
     try {
-      // 1. Revoke existing session for same device (re-login)
-      const existingSessions = await this.prisma.deviceSession.findMany({
-        where: { student_id: studentId, device_id: deviceId, revoked_at: null },
-        select: { id: true },
-      });
-
-      if (existingSessions.length > 0) {
-        await this.prisma.deviceSession.updateMany({
-          where: { id: { in: existingSessions.map((s) => s.id) } },
-          data: { revoked_at: new Date() },
+      const session = await this.prisma.$transaction(async (tx) => {
+        const existingSession = await tx.deviceSession.findFirst({
+          where: { student_id: studentId, device_id: deviceId, revoked_at: null },
+          select: { id: true },
         });
-      }
 
-      // 2. Check device limit (max 3 active sessions)
-      const activeCount = await this.prisma.deviceSession.count({
-        where: { student_id: studentId, revoked_at: null },
+        const activeCount = await tx.deviceSession.count({
+          where: { student_id: studentId, revoked_at: null },
+        });
+
+        if (!existingSession && activeCount >= 3) {
+          const oldestSession = await tx.deviceSession.findFirst({
+            where: { student_id: studentId, revoked_at: null },
+            orderBy: { created_at: 'asc' },
+            select: { id: true },
+          });
+
+          if (oldestSession) {
+            await tx.deviceSession.deleteMany({
+              where: { id: { in: [oldestSession.id] } },
+            });
+          }
+        }
+
+        const upsertedSession = await tx.deviceSession.upsert({
+          where: { device_id: deviceId },
+          update: {
+            student_id: studentId,
+            device_name: deviceName?.trim() || null,
+            refresh_token_hash: refreshTokenHash,
+            revoked_at: null,
+            last_used_at: new Date(),
+          },
+          create: {
+            student_id: studentId,
+            device_id: deviceId,
+            device_name: deviceName?.trim() || null,
+            refresh_token_hash: refreshTokenHash,
+          },
+        });
+
+        return upsertedSession as unknown as DeviceSession;
       });
 
-      if (activeCount >= 3) {
-        throw new ForbiddenException('DEVICE_LIMIT_REACHED');
-      }
-
-      // 3. Create new device session
-      const session = await this.prisma.deviceSession.create({
-        data: {
-          student_id: studentId,
-          device_id: deviceId,
-          device_name: deviceName?.trim() || null,
-          refresh_token_hash: refreshTokenHash,
-        },
-      });
-
-      return session as unknown as DeviceSession;
+      return session;
     } catch (error) {
-      if (error instanceof ForbiddenException) {
-        throw error;
-      }
       throw new BadRequestException('DEVICE_SESSION_CREATION_FAILED');
     }
   }

@@ -14,12 +14,12 @@ export class TokenService {
 
   constructor() {
     this.jwtSecret = process.env.JWT_SECRET || 'fallback-dev-secret';
-    this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '1h';
-    this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '30d';
+    this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
+    this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
   }
 
   /**
-   * Generate an access token (short-lived, 1 hour)
+   * Generate an access token (short-lived, 15 minutes)
    * Contains: studentId, deviceId
    */
   generateAccessToken(payload: {
@@ -37,7 +37,7 @@ export class TokenService {
   }
 
   /**
-   * Generate a refresh token (long-lived, 30 days)
+   * Generate a refresh token (long-lived, 7 days)
    * Contains: studentId, deviceId, sessionId
    */
   generateRefreshToken(payload: {
