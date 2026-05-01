@@ -12,6 +12,6 @@ export interface AuthStudentResponse {
   id: string;
   firstName: string | null;
   lastName: string | null;
-  email: string | null;
+  email: string;
   emailVerified: boolean;
 }

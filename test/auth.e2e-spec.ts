@@ -2,9 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
   ValidationPipe,
-  HttpException,
-  HttpStatus,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -12,7 +11,6 @@ import { AuthController } from '../src/modules/auth/auth.controller';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
-import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
 
@@ -21,9 +19,16 @@ const student = {
   first_name: 'John',
   last_name: 'Doe',
   email: 'john.doe@example.com',
-  is_registered: true,
   created_at: '2026-02-09T00:00:00.000Z',
   updated_at: '2026-02-09T00:00:00.000Z',
+};
+
+const verifiedAuthStudent = {
+  id: 'student-1',
+  firstName: 'John',
+  lastName: 'Doe',
+  email: 'john.doe@example.com',
+  emailVerified: true,
 };
 
 const session = {
@@ -37,12 +42,16 @@ const session = {
   revoked_at: null,
 };
 
-const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
 describe('AuthController (e2e)', () => {
   let app: INestApplication<App>;
+
   const authService = {
-    createStudent: jest.fn().mockResolvedValue(student),
+    register: jest.fn().mockResolvedValue({ message: 'verification email sent' }),
+    verifyEmail: jest.fn().mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    }),
     createDeviceSession: jest.fn().mockResolvedValue(session),
     validateRefreshToken: jest.fn().mockResolvedValue(session),
     updateDeviceSessionRefreshHash: jest.fn().mockResolvedValue(undefined),
@@ -51,8 +60,6 @@ describe('AuthController (e2e)', () => {
       first_name: 'Jane',
     }),
     revokeDeviceSession: jest.fn().mockResolvedValue(undefined),
-    getActivationCodeExpiry: jest.fn().mockResolvedValue(expiresAt),
-    checkMembershipExpiry: jest.fn().mockResolvedValue(undefined),
     getActiveDeviceSession: jest.fn().mockResolvedValue(session),
   };
 
@@ -70,10 +77,6 @@ describe('AuthController (e2e)', () => {
     compareRefreshToken: jest.fn().mockResolvedValue(true),
   };
 
-  const rateLimitService = {
-    checkActivationLimit: jest.fn(),
-  };
-
   const guard = {
     canActivate: (context: any) => {
       const request = context.switchToHttp().getRequest();
@@ -89,8 +92,13 @@ describe('AuthController (e2e)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    // Restore default mock implementations after clear
-    authService.createStudent.mockResolvedValue(student);
+
+    authService.register.mockResolvedValue({ message: 'verification email sent' });
+    authService.verifyEmail.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      student: verifiedAuthStudent,
+    });
     authService.createDeviceSession.mockResolvedValue(session);
     authService.validateRefreshToken.mockResolvedValue(session);
     authService.updateDeviceSessionRefreshHash.mockResolvedValue(undefined);
@@ -99,8 +107,6 @@ describe('AuthController (e2e)', () => {
       first_name: 'Jane',
     });
     authService.revokeDeviceSession.mockResolvedValue(undefined);
-    authService.getActivationCodeExpiry.mockResolvedValue(expiresAt);
-    authService.checkMembershipExpiry.mockResolvedValue(undefined);
     authService.getActiveDeviceSession.mockResolvedValue(session);
     tokenService.generateTokenPair.mockReturnValue({
       accessToken: 'access-token',
@@ -119,7 +125,6 @@ describe('AuthController (e2e)', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: TokenService, useValue: tokenService },
-        { provide: RateLimitService, useValue: rateLimitService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -138,97 +143,113 @@ describe('AuthController (e2e)', () => {
     await app.init();
   });
 
-  // ─── Activation Tests ─────────────────────────────────
-
-  it('POST /api/auth/activate returns tokens and bootstrap', async () => {
+  it('POST /api/auth/register returns generic success for a new email', async () => {
     await request(app.getHttpServer())
-      .post('/api/auth/activate')
+      .post('/api/auth/register')
       .send({
-        activationCode: 'CODE123',
-        deviceId: 'device-1',
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'John.Doe@Example.com',
+        password: 'password123',
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.message).toBe('verification email sent');
+        expect(authService.register).toHaveBeenCalledWith(
+          expect.objectContaining({ email: 'john.doe@example.com' }),
+        );
+      });
+  });
+
+  it('POST /api/auth/register returns generic success for an existing verified email', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
         firstName: 'John',
         lastName: 'Doe',
         email: 'john.doe@example.com',
+        password: 'password123',
       })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.message).toBe('verification email sent');
+      });
+  });
+
+  it('POST /api/auth/register returns generic success for an existing unverified email', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com',
+        password: 'password123',
+      })
+      .expect(201)
+      .expect((res) => {
+        expect(res.body.message).toBe('verification email sent');
+      });
+  });
+
+  it('POST /api/auth/verify-email returns tokens and verified student', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/verify-email')
+      .send({ token: 'verification-token', deviceId: 'device-1' })
       .expect(201)
       .expect((res) => {
         expect(res.body.accessToken).toBe('access-token');
         expect(res.body.refreshToken).toBe('refresh-token');
-        expect(res.body.student.id).toBe('student-1');
-        // Bootstrap assertions
-        expect(res.body.bootstrap).toBeDefined();
-        expect(res.body.bootstrap.availableModules).toEqual([
-          'SPRECHEN',
-          'LESEN',
-          'HOEREN',
-          'SCHREIBEN',
-        ]);
-        expect(res.body.bootstrap.enabledModules).toEqual([
-          'SPRECHEN',
-          'LESEN',
-        ]);
-        expect(res.body.bootstrap.progressSummary).toEqual({});
-        expect(res.body.bootstrap.lastActivityAt).toBeNull();
-        expect(res.body.bootstrap.expiresAt).toBe(expiresAt);
+        expect(res.body.student).toEqual({
+          id: 'student-1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john.doe@example.com',
+          emailVerified: true,
+        });
       });
   });
 
-  it('POST /api/auth/activate requires deviceId', async () => {
+  it('POST /api/auth/verify-email is idempotent on a second click', async () => {
     await request(app.getHttpServer())
-      .post('/api/auth/activate')
-      .send({
-        activationCode: 'CODE123',
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@example.com',
-      })
-      .expect(400);
-  });
-
-  it('POST /api/auth/activate respects rate limit', async () => {
-    rateLimitService.checkActivationLimit.mockImplementationOnce(() => {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    });
-
-    await request(app.getHttpServer())
-      .post('/api/auth/activate')
-      .send({
-        activationCode: 'CODE123',
-        deviceId: 'device-1',
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@example.com',
-      })
-      .expect(429)
+      .post('/api/auth/verify-email')
+      .send({ token: 'verification-token', deviceId: 'device-1' })
+      .expect(201)
       .expect((res) => {
-        expect(res.body.error).toBe('RATE_LIMIT_EXCEEDED');
+        expect(res.body.student.emailVerified).toBe(true);
       });
   });
 
-  it('POST /api/auth/activate rejects when device limit reached', async () => {
-    authService.createDeviceSession.mockRejectedValueOnce(
-      new ForbiddenException('DEVICE_LIMIT_REACHED'),
+  it('POST /api/auth/verify-email returns 400 for expired token', async () => {
+    authService.verifyEmail.mockRejectedValueOnce(
+      new BadRequestException('VERIFICATION_TOKEN_EXPIRED'),
     );
 
     await request(app.getHttpServer())
-      .post('/api/auth/activate')
-      .send({
-        activationCode: 'CODE123',
-        deviceId: 'device-1',
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@example.com',
-      })
-      .expect(403)
+      .post('/api/auth/verify-email')
+      .send({ token: 'expired-token', deviceId: 'device-1' })
+      .expect(400)
       .expect((res) => {
-        expect(res.body.error).toBe('DEVICE_LIMIT_REACHED');
+        expect(res.body.error).toBe('VERIFICATION_TOKEN_EXPIRED');
+        expect(res.body.message).toBe(
+          'Verification link has expired. Please request a new one.',
+        );
       });
   });
 
-  // ─── Refresh Tests ────────────────────────────────────
+  it('POST /api/auth/verify-email returns 400 for invalid token', async () => {
+    authService.verifyEmail.mockRejectedValueOnce(
+      new BadRequestException('VERIFICATION_TOKEN_INVALID'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/verify-email')
+      .send({ token: 'invalid-token', deviceId: 'device-1' })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.error).toBe('VERIFICATION_TOKEN_INVALID');
+        expect(res.body.message).toBe('Invalid verification token.');
+      });
+  });
 
   it('POST /api/auth/refresh returns new tokens', async () => {
     await request(app.getHttpServer())
@@ -242,7 +263,7 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/refresh rejects expired membership', async () => {
-    authService.checkMembershipExpiry.mockRejectedValueOnce(
+    authService.validateRefreshToken.mockRejectedValueOnce(
       new ForbiddenException('MEMBERSHIP_EXPIRED'),
     );
 
@@ -254,8 +275,6 @@ describe('AuthController (e2e)', () => {
         expect(res.body.error).toBe('MEMBERSHIP_EXPIRED');
       });
   });
-
-  // ─── Profile Tests ────────────────────────────────────
 
   it('PATCH /api/auth/profile updates student and returns tokens', async () => {
     await request(app.getHttpServer())
@@ -269,8 +288,6 @@ describe('AuthController (e2e)', () => {
         expect(res.body.refreshToken).toBe('refresh-token');
       });
   });
-
-  // ─── Logout Tests ─────────────────────────────────────
 
   it('POST /api/auth/logout revokes session', async () => {
     await request(app.getHttpServer())

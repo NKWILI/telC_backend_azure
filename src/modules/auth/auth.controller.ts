@@ -10,6 +10,9 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
+import { RegisterRequestDto } from './dto/register-request.dto';
+import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { ProfileUpdateDto } from './dto/profile-update.dto';
@@ -33,6 +36,26 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
   ) {}
+
+  /**
+   * POST /api/auth/register
+   * Register a new student account and send a verification email.
+   */
+  @Post('register')
+  async register(@Body() dto: RegisterRequestDto): Promise<{ message: string }> {
+    return this.authService.register(dto);
+  }
+
+  /**
+   * POST /api/auth/verify-email
+   * Verify a student's email and issue tokens.
+   */
+  @Post('verify-email')
+  async verifyEmail(
+    @Body() dto: VerifyEmailRequestDto,
+  ): Promise<AuthTokenResponse> {
+    return this.authService.verifyEmail(dto);
+  }
 
   /**
    * POST /api/auth/refresh

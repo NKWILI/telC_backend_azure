@@ -41,14 +41,14 @@
 
 ## Task 4 — Register + VerifyEmail (Slice A)
 
-- [ ] Create `src/modules/auth/dto/register-request.dto.ts` — `firstName`, `lastName`, `email` (`@Transform` lowercase+trim, `@IsEmail`), `password` (`@MinLength(8)`)
-- [ ] Create `src/modules/auth/dto/verify-email-request.dto.ts` — `token`, `deviceId`, `deviceName?`
-- [ ] Create `src/modules/auth/dto/auth-response.dto.ts` — `AuthTokenResponse` interface with `accessToken`, `refreshToken`, `student: AuthStudentResponse`
-- [ ] Implement `AuthService.register()`: generic success always; new student → bcrypt + HMAC token + `$transaction`(create + email); existing unverified → resend if > 2 min; existing verified → no-op
-- [ ] Implement `AuthService.verifyEmail()`: HMAC lookup → idempotent if already verified → single-use clear → set `email_verified = true` → `upsertDeviceSession` → return token pair
-- [ ] Wire `POST /api/auth/register` and `POST /api/auth/verify-email` in `auth.controller.ts`
-- [ ] Unit tests in `auth.service.spec.ts` — `register`: 5 cases; `verifyEmail`: 4 cases (see plan)
-- [ ] E2E tests in `auth.e2e-spec.ts` — `register`: 3 cases; `verify-email`: 4 cases (see plan)
+- [x] Create `src/modules/auth/dto/register-request.dto.ts` — `firstName`, `lastName`, `email` (`@Transform` lowercase+trim, `@IsEmail`), `password` (`@MinLength(8)`)
+- [x] Create `src/modules/auth/dto/verify-email-request.dto.ts` — `token`, `deviceId`, `deviceName?`
+- [x] Create `src/modules/auth/dto/auth-response.dto.ts` — `AuthTokenResponse` interface with `accessToken`, `refreshToken`, `student: AuthStudentResponse`
+- [x] Implement `AuthService.register()`: generic success always; new student → bcrypt + HMAC token + `$transaction`(create + email); existing unverified → resend if > 2 min; existing verified → no-op
+- [x] Implement `AuthService.verifyEmail()`: HMAC lookup → idempotent if already verified → single-use clear → set `email_verified = true` → `upsertDeviceSession` → return token pair
+- [x] Wire `POST /api/auth/register` and `POST /api/auth/verify-email` in `auth.controller.ts`
+- [x] Unit tests in `auth.service.spec.ts` — `register`: 5 cases; `verifyEmail`: 4 cases (see plan)
+- [x] E2E tests in `auth.e2e-spec.ts` — `register`: 3 cases; `verify-email`: 4 cases (see plan)
 
 ### ✦ CHECKPOINT 4 — Slice A e2e tests pass; existing refresh/logout tests still pass
 

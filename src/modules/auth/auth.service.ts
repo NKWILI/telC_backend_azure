@@ -2,17 +2,45 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
+  BadGatewayException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenService } from './token.service';
+import { TokenCryptoService } from './token-crypto.service';
+import { EmailService } from './email.service';
 import { Student } from '../../shared/interfaces/student.interface';
 import { DeviceSession } from '../../shared/interfaces/device-session.interface';
+import { AuthTokenResponse } from './dto/auth-response.dto';
+import { RegisterRequestDto } from './dto/register-request.dto';
+import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+
+const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
+
+type VerificationStudentRecord = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  email_verified: boolean;
+  email_verification_expires: Date | null;
+};
+
+type AuthStudentRecord = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+};
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
+    private readonly tokenCrypto: TokenCryptoService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -32,6 +60,104 @@ export class AuthService {
       refreshTokenHash,
       deviceName,
     );
+  }
+
+  async register(dto: RegisterRequestDto): Promise<{ message: string }> {
+    const existingStudent = (await this.prisma.student.findUnique({
+      where: { email: dto.email },
+    })) as VerificationStudentRecord | null;
+
+    if (existingStudent?.email_verified) {
+      return { message: 'verification email sent' };
+    }
+
+    const rawToken = this.tokenCrypto.generateToken();
+    const tokenHash = this.tokenCrypto.hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS);
+
+    if (existingStudent) {
+      if (
+        existingStudent.email_verification_expires &&
+        this.wasVerificationSentRecently(existingStudent.email_verification_expires)
+      ) {
+        return { message: 'verification email sent' };
+      }
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.student.update({
+          where: { id: existingStudent.id },
+          data: {
+            email_verification_token: tokenHash,
+            email_verification_expires: expiresAt,
+          },
+        });
+
+        try {
+          await this.emailService.sendVerificationEmail(dto.email, rawToken);
+        } catch {
+          throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
+        }
+      });
+
+      return { message: 'verification email sent' };
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.student.create({
+        data: {
+          first_name: dto.firstName,
+          last_name: dto.lastName,
+          email: dto.email,
+          password_hash: passwordHash,
+          email_verified: false,
+          email_verification_token: tokenHash,
+          email_verification_expires: expiresAt,
+        },
+      });
+
+      try {
+        await this.emailService.sendVerificationEmail(dto.email, rawToken);
+      } catch {
+        throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
+      }
+    });
+
+    return { message: 'verification email sent' };
+  }
+
+  async verifyEmail(dto: VerifyEmailRequestDto): Promise<AuthTokenResponse> {
+    const tokenHash = this.tokenCrypto.hashToken(dto.token);
+    const student = (await this.prisma.student.findFirst({
+      where: { email_verification_token: tokenHash },
+    })) as VerificationStudentRecord | null;
+
+    if (!student) {
+      throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
+    }
+
+    if (!student.email_verified) {
+      if (
+        student.email_verification_expires &&
+        this.tokenCrypto.isExpired(student.email_verification_expires)
+      ) {
+        throw new BadRequestException('VERIFICATION_TOKEN_EXPIRED');
+      }
+
+      const updatedStudent = await this.prisma.student.update({
+        where: { id: student.id },
+        data: {
+          email_verified: true,
+          email_verification_token: null,
+          email_verification_expires: null,
+        },
+      });
+
+      return this.issueAuthResponse(updatedStudent, dto.deviceId, dto.deviceName);
+    }
+
+    return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
   }
 
   /**
@@ -98,6 +224,63 @@ export class AuthService {
     } catch (error) {
       throw new BadRequestException('DEVICE_SESSION_CREATION_FAILED');
     }
+  }
+
+  private wasVerificationSentRecently(expiresAt: Date): boolean {
+    const sentAt = expiresAt.getTime() - VERIFICATION_TOKEN_TTL_MS;
+    return Date.now() - sentAt < VERIFICATION_RESEND_COOLDOWN_MS;
+  }
+
+  private async issueAuthResponse(
+    student: AuthStudentRecord,
+    deviceId: string,
+    deviceName?: string,
+  ): Promise<AuthTokenResponse> {
+    const tokens = await this.issueTokenPairForDevice(
+      student.id,
+      deviceId,
+      deviceName,
+    );
+
+    return {
+      ...tokens,
+      student: {
+        id: student.id,
+        firstName: student.first_name,
+        lastName: student.last_name,
+        email: student.email ?? '',
+        emailVerified: true,
+      },
+    };
+  }
+
+  private async issueTokenPairForDevice(
+    studentId: string,
+    deviceId: string,
+    deviceName?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const provisionalToken = this.tokenCrypto.generateToken();
+    const provisionalHash = this.tokenCrypto.hashToken(provisionalToken);
+
+    const session = await this.upsertDeviceSession(
+      studentId,
+      deviceId,
+      provisionalHash,
+      deviceName,
+    );
+
+    const tokens = this.tokenService.generateTokenPair({
+      studentId,
+      deviceId,
+      sessionId: session.id,
+    });
+
+    const refreshHash = await this.tokenService.hashRefreshToken(
+      tokens.refreshToken,
+    );
+    await this.updateDeviceSessionRefreshHash(session.id, refreshHash);
+
+    return tokens;
   }
 
   /**
