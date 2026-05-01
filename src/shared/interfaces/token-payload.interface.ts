@@ -1,6 +1,5 @@
 export interface AccessTokenPayload {
   studentId: string;
-  isRegistered: boolean;
   deviceId: string;
   iat?: number;
   exp?: number;

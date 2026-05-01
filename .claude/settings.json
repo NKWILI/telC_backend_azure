@@ -48,10 +48,12 @@
       "Bash(curl -sS -o /dev/null -w '%{http_code}' https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/writing/sessions)",
       "Bash(curl -sS https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
       "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health)",
-      "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)"
+      "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
+      "Bash(echo \"EXIT:$?\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure"
+      "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure",
+      "C:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure\\src\\modules\\auth\\dto"
     ]
   }
 }

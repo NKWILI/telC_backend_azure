@@ -20,17 +20,15 @@ export class TokenService {
 
   /**
    * Generate an access token (short-lived, 1 hour)
-   * Contains: studentId, isRegistered, deviceId
+   * Contains: studentId, deviceId
    */
   generateAccessToken(payload: {
     studentId: string;
-    isRegistered: boolean;
     deviceId: string;
   }): string {
     return jwt.sign(
       {
         studentId: payload.studentId,
-        isRegistered: payload.isRegistered,
         deviceId: payload.deviceId,
       },
       this.jwtSecret,
@@ -63,14 +61,12 @@ export class TokenService {
    */
   generateTokenPair(payload: {
     studentId: string;
-    isRegistered: boolean;
     deviceId: string;
     sessionId: string;
   }): { accessToken: string; refreshToken: string } {
     return {
       accessToken: this.generateAccessToken({
         studentId: payload.studentId,
-        isRegistered: payload.isRegistered,
         deviceId: payload.deviceId,
       }),
       refreshToken: this.generateRefreshToken({

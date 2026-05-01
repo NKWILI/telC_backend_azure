@@ -22,7 +22,6 @@ describe('TokenService', () => {
     it('should generate a valid JWT string', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
@@ -34,13 +33,11 @@ describe('TokenService', () => {
     it('should include correct payload claims', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: true,
         deviceId: 'device-456',
       });
 
       const decoded = tokenService.verifyAccessToken(token);
       expect(decoded.studentId).toBe('student-123');
-      expect(decoded.isRegistered).toBe(true);
       expect(decoded.deviceId).toBe('device-456');
     });
   });
@@ -49,13 +46,11 @@ describe('TokenService', () => {
     it('should verify and decode a valid token', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
       const decoded = tokenService.verifyAccessToken(token);
       expect(decoded.studentId).toBe('student-123');
-      expect(decoded.isRegistered).toBe(false);
       expect(decoded.deviceId).toBe('device-456');
       expect(decoded.iat).toBeDefined();
       expect(decoded.exp).toBeDefined();
@@ -64,7 +59,6 @@ describe('TokenService', () => {
     it('should reject a token with tampered signature', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
@@ -81,7 +75,6 @@ describe('TokenService', () => {
       const wrongToken = jwt.sign(
         {
           studentId: 'student-123',
-          isRegistered: false,
           deviceId: 'device-456',
         },
         'wrong-secret-key',
@@ -98,7 +91,6 @@ describe('TokenService', () => {
       const expiredToken = jwt.sign(
         {
           studentId: 'student-123',
-          isRegistered: false,
           deviceId: 'device-456',
         },
         process.env.JWT_SECRET,
@@ -200,7 +192,6 @@ describe('TokenService', () => {
     it('should generate both access and refresh tokens', () => {
       const tokens = tokenService.generateTokenPair({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
         sessionId: 'session-789',
       });
@@ -213,7 +204,6 @@ describe('TokenService', () => {
     it('should generate tokens with consistent claims', () => {
       const tokens = tokenService.generateTokenPair({
         studentId: 'student-123',
-        isRegistered: true,
         deviceId: 'device-456',
         sessionId: 'session-789',
       });

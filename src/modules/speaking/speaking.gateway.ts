@@ -227,54 +227,6 @@ export class SpeakingGateway
         return;
       }
 
-      // Step 3: Validate student's activation code
-      const student = await this.prisma.student.findUnique({
-        where: { id: studentId },
-        select: { id: true, activation_code: true },
-      });
-
-      if (!student) {
-        this.logger.warn(
-          `Client ${client.id}: Student not found: ${studentId}`,
-        );
-        client.emit('connection_error', {
-          code: 4003,
-          message: 'Student validation failed',
-        });
-        client.disconnect(true);
-        return;
-      }
-
-      // Verify activation code is valid and not expired
-      const activationCode = await this.prisma.activationCode.findUnique({
-        where: { code: student.activation_code },
-        select: { code: true, status: true, expires_at: true },
-      });
-
-      if (!activationCode || activationCode.status !== 'active') {
-        this.logger.warn(
-          `Client ${client.id}: Student ${studentId} has no active activation code`,
-        );
-        client.emit('connection_error', {
-          code: 4004,
-          message: 'No active activation code',
-        });
-        client.disconnect(true);
-        return;
-      }
-
-      if (activationCode.expires_at && activationCode.expires_at < new Date()) {
-        this.logger.warn(
-          `Client ${client.id}: Student ${studentId} activation code expired`,
-        );
-        client.emit('connection_error', {
-          code: 4005,
-          message: 'Activation code expired',
-        });
-        client.disconnect(true);
-        return;
-      }
-
       this.logger.log(
         `Validation passed for client ${client.id}, session ${sessionId}`,
       );

@@ -2,7 +2,6 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
@@ -18,164 +17,7 @@ export class AuthService {
   ) {}
 
   /**
-   * Validate activation code and return associated student (if any).
-   * - status 'available': first-time activation, returns null student
-   * - status 'active': returning user, returns existing student
-   * - any other status: throws
-   */
-  async validateActivationCode(
-    code: string,
-  ): Promise<{ student: Student | null; activationCodeId: string }> {
-    if (!code || code.trim().length === 0) {
-      throw new BadRequestException('INVALID_ACTIVATION_CODE');
-    }
-
-    try {
-      const acData = await this.prisma.activationCode.findUnique({
-        where: { code: code.trim() },
-        select: {
-          code: true,
-          student_id: true,
-          status: true,
-          expires_at: true,
-        },
-      });
-
-      if (!acData) {
-        throw new BadRequestException('INVALID_ACTIVATION_CODE');
-      }
-
-      if (acData.status === 'available') {
-        return { student: null, activationCodeId: acData.code };
-      }
-
-      if (acData.status === 'active') {
-        if (acData.expires_at && acData.expires_at < new Date()) {
-          throw new ForbiddenException('MEMBERSHIP_EXPIRED');
-        }
-
-        const student = await this.prisma.student.findUnique({
-          where: { id: acData.student_id! },
-        });
-
-        if (!student) {
-          throw new BadRequestException('STUDENT_NOT_FOUND');
-        }
-
-        return {
-          student: student as unknown as Student,
-          activationCodeId: acData.code,
-        };
-      }
-
-      throw new BadRequestException('ACTIVATION_CODE_ALREADY_USED');
-    } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-      throw new BadRequestException('INVALID_ACTIVATION_CODE');
-    }
-  }
-
-  /**
-   * Activate a student account.
-   * - First-time: creates student record, claims activation code (30-day expiry)
-   * - Returning: throws if already registered
-   * Always sets profile fields and is_registered = true.
-   */
-  async createStudent(
-    activationCode: string,
-    firstName: string,
-    lastName: string,
-    email: string,
-  ): Promise<Student> {
-    if (!firstName?.trim() || !lastName?.trim() || !email?.trim()) {
-      throw new BadRequestException('MISSING_REQUIRED_FIELDS');
-    }
-
-    try {
-      const { student, activationCodeId } =
-        await this.validateActivationCode(activationCode);
-
-      if (!student) {
-        // First-time activation: create student, claim code
-        const newStudent = await this.prisma.student.create({
-          data: {
-            activation_code: activationCode.trim(),
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            email: email.trim().toLowerCase(),
-            is_registered: true,
-          },
-        });
-
-        // Claim the activation code: set status, expiry, link student
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30);
-
-        await this.prisma.activationCode.update({
-          where: { code: activationCodeId },
-          data: {
-            status: 'active',
-            claimed_at: new Date(),
-            expires_at: expiresAt,
-            student_id: newStudent.id,
-          },
-        });
-
-        return newStudent as unknown as Student;
-      }
-
-      // Returning user — already registered
-      if (student.is_registered) {
-        throw new ConflictException('STUDENT_ALREADY_REGISTERED');
-      }
-
-      // Edge case: code was active but student not yet registered
-      const updatedStudent = await this.prisma.student.update({
-        where: { id: student.id },
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          email: email.trim().toLowerCase(),
-          is_registered: true,
-          updated_at: new Date(),
-        },
-      });
-
-      return updatedStudent as unknown as Student;
-    } catch (error) {
-      if (
-        error instanceof BadRequestException ||
-        error instanceof ConflictException ||
-        error instanceof ForbiddenException
-      ) {
-        throw error;
-      }
-      throw new BadRequestException('REGISTRATION_FAILED');
-    }
-  }
-
-  /**
-   * Login with an already-claimed activation code (for dev / returning users).
-   * Code must be status 'active' with a student. Returns the student and expiry.
-   */
-  async loginWithActivationCode(
-    activationCode: string,
-  ): Promise<{ student: Student; expiresAt: string }> {
-    const { student } = await this.validateActivationCode(activationCode);
-    if (!student) {
-      throw new BadRequestException('INVALID_ACTIVATION_CODE');
-    }
-    const expiresAt = await this.getActivationCodeExpiry(activationCode);
-    return { student, expiresAt };
-  }
-
-  /**
-   * Step 11: Create device session
+   * Create device session
    * Creates a new device session for a student
    * Stores the hashed refresh token for validation
    */
@@ -232,7 +74,7 @@ export class AuthService {
   }
 
   /**
-   * Step 12: Validate refresh token
+   * Validate refresh token
    * Validates that a device session exists and is not revoked
    * Updates the last_used_at timestamp
    */
@@ -367,40 +209,5 @@ export class AuthService {
     }
 
     return session as unknown as DeviceSession;
-  }
-
-  /**
-   * Get activation code expiry date for a given code
-   */
-  async getActivationCodeExpiry(activationCode: string): Promise<string> {
-    const data = await this.prisma.activationCode.findUnique({
-      where: { code: activationCode.trim() },
-      select: { expires_at: true },
-    });
-
-    if (!data?.expires_at) {
-      throw new BadRequestException('INVALID_ACTIVATION_CODE');
-    }
-
-    return data.expires_at.toISOString();
-  }
-
-  /**
-   * Check if a student's membership has expired.
-   * Queries activation_codes by student_id and checks expires_at.
-   */
-  async checkMembershipExpiry(studentId: string): Promise<void> {
-    const data = await this.prisma.activationCode.findFirst({
-      where: { student_id: studentId, status: 'active' },
-      select: { expires_at: true },
-    });
-
-    if (!data) {
-      throw new UnauthorizedException('INVALID_SESSION');
-    }
-
-    if (data.expires_at && data.expires_at < new Date()) {
-      throw new ForbiddenException('MEMBERSHIP_EXPIRED');
-    }
   }
 }
