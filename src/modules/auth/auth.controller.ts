@@ -32,8 +32,7 @@ interface StudentResponseDto {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
-  createdAt: string;
-  updatedAt: string;
+  emailVerified: boolean;
 }
 
 @Controller('api/auth')
@@ -200,8 +199,7 @@ export class AuthController {
         firstName: updated.first_name,
         lastName: updated.last_name,
         email: updated.email,
-        createdAt: updated.created_at,
-        updatedAt: updated.updated_at,
+        emailVerified: updated.email_verified,
       },
     };
   }

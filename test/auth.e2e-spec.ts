@@ -20,6 +20,7 @@ const student = {
   first_name: 'John',
   last_name: 'Doe',
   email: 'john.doe@example.com',
+  email_verified: true,
   created_at: '2026-02-09T00:00:00.000Z',
   updated_at: '2026-02-09T00:00:00.000Z',
 };
@@ -293,6 +294,9 @@ describe('AuthController (e2e)', () => {
       .expect((res) => {
         expect(res.body.student.firstName).toBe('Jane');
         expect(res.body.student.id).toBe('student-1');
+        expect(res.body.student.emailVerified).toBe(true);
+        expect(res.body.student.createdAt).toBeUndefined();
+        expect(res.body.student.updatedAt).toBeUndefined();
         expect(res.body.accessToken).toBe('access-token');
         expect(res.body.refreshToken).toBe('refresh-token');
       });
