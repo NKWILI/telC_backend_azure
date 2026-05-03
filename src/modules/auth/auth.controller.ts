@@ -133,6 +133,8 @@ export class AuthController {
         newRefreshHash,
       );
 
+      await this.authService.updateStudentLastSeen(refreshPayload.studentId);
+
       return {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -236,6 +238,7 @@ export class AuthController {
       }
 
       await this.authService.revokeDeviceSession(refreshPayload.sessionId);
+      await this.authService.updateStudentLastSeen(refreshPayload.studentId);
       return { success: true };
     } catch (error) {
       if (error instanceof UnauthorizedException) {

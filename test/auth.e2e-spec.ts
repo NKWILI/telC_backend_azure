@@ -70,6 +70,7 @@ describe('AuthController (e2e)', () => {
     googleLogin: jest.fn(),
     googleLink: jest.fn(),
     getDeviceSessions: jest.fn().mockResolvedValue(deviceSessions),
+    updateStudentLastSeen: jest.fn().mockResolvedValue(undefined),
   };
 
   const tokenService = {
@@ -118,6 +119,7 @@ describe('AuthController (e2e)', () => {
     authService.revokeDeviceSession.mockResolvedValue(undefined);
     authService.getActiveDeviceSession.mockResolvedValue(session);
     authService.getDeviceSessions.mockResolvedValue(deviceSessions);
+    authService.updateStudentLastSeen.mockResolvedValue(undefined);
     tokenService.generateTokenPair.mockReturnValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',

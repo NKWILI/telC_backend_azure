@@ -39,7 +39,7 @@ describe('AuthService', () => {
       student: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
-        update: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
         create: jest.fn(),
       },
       deviceSession: {
@@ -346,7 +346,10 @@ describe('AuthService', () => {
         },
       });
 
-      expect(prismaMock.student.update).not.toHaveBeenCalled();
+      // email_verified update must NOT be called (student already verified); last_seen_at update IS called
+      expect(prismaMock.student.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { email_verified: true } }),
+      );
     });
 
     it('second click with valid token on already-verified student returns fresh tokens', async () => {
@@ -372,7 +375,10 @@ describe('AuthService', () => {
         },
       });
 
-      expect(prismaMock.student.update).not.toHaveBeenCalled();
+      // email_verified update must NOT be called; last_seen_at update IS called
+      expect(prismaMock.student.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { email_verified: true } }),
+      );
     });
 
     it('throws VERIFICATION_TOKEN_EXPIRED for expired token on already-verified student', async () => {
@@ -629,6 +635,52 @@ describe('AuthService', () => {
       await expect(service.login(dto as any)).rejects.toMatchObject({
         response: expect.objectContaining({ verified: false }),
       });
+    });
+  });
+
+  describe('updateStudentLastSeen', () => {
+    it('updates last_seen_at for the given student', async () => {
+      prismaMock.student.update.mockResolvedValueOnce({});
+
+      await service.updateStudentLastSeen('student-1');
+
+      expect(prismaMock.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { last_seen_at: expect.any(Date) },
+      });
+    });
+
+    it('last_seen_at is updated after issueAuthResponse completes', async () => {
+      const student = { id: 'student-1', first_name: 'John', last_name: 'Doe', email: 'john.doe@example.com' };
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
+      prismaMock.deviceSession.update.mockResolvedValueOnce(undefined);
+      prismaMock.student.update.mockResolvedValueOnce({});
+
+      await (service as any).issueAuthResponse(student, 'device-1', 'Pixel');
+
+      expect(prismaMock.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { last_seen_at: expect.any(Date) },
+      });
+    });
+
+    it('failed login (wrong password) does NOT update last_seen_at', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: 'bcrypt.hashSync("not-the-password", 10)',
+        email_verified: true,
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+      });
+
+      await expect(
+        service.login({ email: 'john.doe@example.com', password: 'wrong', deviceId: 'device-1' } as any),
+      ).rejects.toMatchObject({ response: { message: 'INVALID_CREDENTIALS' } });
+
+      expect(prismaMock.student.update).not.toHaveBeenCalled();
     });
   });
 

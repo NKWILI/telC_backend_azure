@@ -388,6 +388,8 @@ export class AuthService {
       deviceName,
     );
 
+    await this.updateStudentLastSeen(student.id);
+
     return {
       ...tokens,
       student: {
@@ -545,6 +547,13 @@ export class AuthService {
     } catch {
       throw new BadRequestException('SESSION_REVOKE_FAILED');
     }
+  }
+
+  async updateStudentLastSeen(studentId: string): Promise<void> {
+    await this.prisma.student.update({
+      where: { id: studentId },
+      data: { last_seen_at: new Date() },
+    });
   }
 
   async getDeviceSessions(studentId: string): Promise<{
