@@ -46,6 +46,10 @@ const session = {
 describe('AuthController (e2e)', () => {
   let app: INestApplication<App>;
 
+  const deviceSessions = [
+    { id: 'session-1', device_id: 'dev-1', device_name: 'Pixel', last_used_at: '2026-05-03T00:00:00.000Z', created_at: '2026-05-01T00:00:00.000Z' },
+  ];
+
   const authService = {
     register: jest.fn().mockResolvedValue({ message: 'verification email sent' }),
     verifyEmail: jest.fn().mockResolvedValue({
@@ -64,6 +68,7 @@ describe('AuthController (e2e)', () => {
     getActiveDeviceSession: jest.fn().mockResolvedValue(session),
     googleLogin: jest.fn(),
     googleLink: jest.fn(),
+    getDeviceSessions: jest.fn().mockResolvedValue(deviceSessions),
   };
 
   const tokenService = {
@@ -111,6 +116,7 @@ describe('AuthController (e2e)', () => {
     });
     authService.revokeDeviceSession.mockResolvedValue(undefined);
     authService.getActiveDeviceSession.mockResolvedValue(session);
+    authService.getDeviceSessions.mockResolvedValue(deviceSessions);
     tokenService.generateTokenPair.mockReturnValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -450,5 +456,41 @@ describe('AuthController (e2e)', () => {
       .expect((res) => {
         expect(res.body.error).toBe('LINKING_TOKEN_INVALID');
       });
+  });
+
+  it('GET /api/auth/device-sessions returns 200 array with valid JWT', async () => {
+    await request(app.getHttpServer())
+      .get('/api/auth/device-sessions')
+      .expect(200)
+      .expect((res) => {
+        expect(Array.isArray(res.body)).toBe(true);
+        expect(res.body[0].id).toBe('session-1');
+        expect(authService.getDeviceSessions).toHaveBeenCalledWith('student-1');
+      });
+  });
+
+  it('GET /api/auth/device-sessions returns 401 without token', async () => {
+    const noAuthGuard = { canActivate: () => false };
+
+    const moduleFixture = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [
+        { provide: AuthService, useValue: authService },
+        { provide: TokenService, useValue: tokenService },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue(noAuthGuard)
+      .compile();
+
+    const unauthApp = moduleFixture.createNestApplication();
+    unauthApp.useGlobalFilters(new AuthExceptionFilter());
+    await unauthApp.init();
+
+    await request(unauthApp.getHttpServer())
+      .get('/api/auth/device-sessions')
+      .expect(403);
+
+    await unauthApp.close();
   });
 });

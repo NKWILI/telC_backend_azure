@@ -632,6 +632,36 @@ describe('AuthService', () => {
     });
   });
 
+  describe('getDeviceSessions', () => {
+    it('returns non-revoked sessions for the given student ordered by last_used_at desc', async () => {
+      const sessions = [
+        { id: 'session-2', device_id: 'dev-2', device_name: 'Chrome', last_used_at: new Date('2026-05-03'), created_at: new Date('2026-05-01') },
+        { id: 'session-1', device_id: 'dev-1', device_name: 'Pixel', last_used_at: new Date('2026-05-02'), created_at: new Date('2026-04-30') },
+      ];
+
+      prismaMock.deviceSession.findMany = jest.fn().mockResolvedValueOnce(sessions);
+
+      const result = await service.getDeviceSessions('student-1');
+
+      expect(prismaMock.deviceSession.findMany).toHaveBeenCalledWith({
+        where: { student_id: 'student-1', revoked_at: null },
+        orderBy: { last_used_at: 'desc' },
+        select: { id: true, device_id: true, device_name: true, last_used_at: true, created_at: true },
+      });
+      expect(result).toEqual(sessions);
+    });
+
+    it('excludes revoked sessions', async () => {
+      prismaMock.deviceSession.findMany = jest.fn().mockResolvedValueOnce([]);
+
+      const result = await service.getDeviceSessions('student-1');
+
+      const call = (prismaMock.deviceSession.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.revoked_at).toBe(null);
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('googleLogin', () => {
     it('returns tokens for returning user (existing OAuthAccount)', async () => {
       const googleService = (service as any).googleService;

@@ -547,6 +547,20 @@ export class AuthService {
     }
   }
 
+  async getDeviceSessions(studentId: string): Promise<{
+    id: string;
+    device_id: string;
+    device_name: string | null;
+    last_used_at: Date;
+    created_at: Date;
+  }[]> {
+    return this.prisma.deviceSession.findMany({
+      where: { student_id: studentId, revoked_at: null },
+      orderBy: { last_used_at: 'desc' },
+      select: { id: true, device_id: true, device_name: true, last_used_at: true, created_at: true },
+    }) as any;
+  }
+
   /**
    * Get active device session for a student and device
    * Used when rotating tokens without creating new session

@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   BadRequestException,
   Patch,
@@ -244,6 +245,18 @@ export class AuthController {
       }
       throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
     }
+  }
+
+  /**
+   * GET /api/auth/device-sessions
+   * List active device sessions for the authenticated student
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('device-sessions')
+  async getDeviceSessions(
+    @CurrentStudent() student: AccessTokenPayload,
+  ) {
+    return this.authService.getDeviceSessions(student.studentId);
   }
 
   /**
