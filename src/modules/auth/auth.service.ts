@@ -208,21 +208,17 @@ export class AuthService {
       throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
     }
 
-    if (!student.email_verified) {
-      if (
-        student.email_verification_expires &&
-        this.tokenCrypto.isExpired(student.email_verification_expires)
-      ) {
-        throw new BadRequestException('VERIFICATION_TOKEN_EXPIRED');
-      }
+    if (
+      student.email_verification_expires &&
+      this.tokenCrypto.isExpired(student.email_verification_expires)
+    ) {
+      throw new BadRequestException('VERIFICATION_TOKEN_EXPIRED');
+    }
 
+    if (!student.email_verified) {
       const updatedStudent = await this.prisma.student.update({
         where: { id: student.id },
-        data: {
-          email_verified: true,
-          email_verification_token: null,
-          email_verification_expires: null,
-        },
+        data: { email_verified: true },
       });
 
       return this.issueAuthResponse(updatedStudent, dto.deviceId, dto.deviceName);

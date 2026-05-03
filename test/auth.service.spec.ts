@@ -298,7 +298,7 @@ describe('AuthService', () => {
       email_verification_expires: null,
     };
 
-    it('marks student verified, clears token, creates session, returns token pair', async () => {
+    it('marks student verified (token kept in DB) and returns token pair', async () => {
       prismaMock.student.findFirst.mockResolvedValueOnce(unverifiedStudent);
       prismaMock.student.update.mockResolvedValueOnce({
         ...unverifiedStudent,
@@ -323,11 +323,7 @@ describe('AuthService', () => {
 
       expect(prismaMock.student.update).toHaveBeenCalledWith({
         where: { id: 'student-1' },
-        data: {
-          email_verified: true,
-          email_verification_token: null,
-          email_verification_expires: null,
-        },
+        data: { email_verified: true },
       });
     });
 
@@ -350,6 +346,45 @@ describe('AuthService', () => {
         },
       });
 
+      expect(prismaMock.student.update).not.toHaveBeenCalled();
+    });
+
+    it('second click with valid token on already-verified student returns fresh tokens', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce({
+        ...verifiedStudent,
+        email_verification_expires: new Date(Date.now() + 60_000),
+      });
+      tokenCryptoMock.isExpired.mockReturnValueOnce(false);
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-2' });
+      prismaMock.deviceSession.update.mockResolvedValueOnce(undefined);
+
+      await expect(service.verifyEmail(dto)).resolves.toEqual({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        student: {
+          id: 'student-1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john.doe@example.com',
+          emailVerified: true,
+        },
+      });
+
+      expect(prismaMock.student.update).not.toHaveBeenCalled();
+    });
+
+    it('throws VERIFICATION_TOKEN_EXPIRED for expired token on already-verified student', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce({
+        ...verifiedStudent,
+        email_verification_expires: new Date(Date.now() - 1_000),
+      });
+      tokenCryptoMock.isExpired.mockReturnValueOnce(true);
+
+      await expect(service.verifyEmail(dto)).rejects.toMatchObject({
+        response: { message: 'VERIFICATION_TOKEN_EXPIRED' },
+      });
       expect(prismaMock.student.update).not.toHaveBeenCalled();
     });
 
