@@ -380,19 +380,47 @@ describe('AuthService', () => {
       prismaMock.student.findUnique.mockResolvedValueOnce(null);
       await expect(
         service.forgotPassword({ email: 'noone@example.com' } as any),
-      ).resolves.toEqual({ message: 'password reset sent' });
+      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
     });
 
     it('updates reset token and sends email when email exists', async () => {
       prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
-      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
 
       await expect(
         service.forgotPassword({ email: 'john.doe@example.com' } as any),
-      ).resolves.toEqual({ message: 'password reset sent' });
+      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
 
-      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.student.update).toHaveBeenCalledTimes(1);
       expect(emailServiceMock.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns generic success and does not throw when email send fails', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      emailServiceMock.sendPasswordResetEmail.mockRejectedValueOnce(
+        new Error('smtp down'),
+      );
+
+      await expect(
+        service.forgotPassword({ email: 'john.doe@example.com' } as any),
+      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
+    });
+
+    it('creates a reset token that expires in approximately 1 hour', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await service.forgotPassword({ email: 'john.doe@example.com' } as any);
+
+      const updateCall = prismaMock.student.update.mock.calls[0][0];
+      const expiresAt: Date = updateCall.data.password_reset_expires;
+      const oneHourMs = 60 * 60 * 1000;
+      const now = Date.now();
+
+      expect(expiresAt.getTime()).toBeGreaterThan(now + oneHourMs - 5000);
+      expect(expiresAt.getTime()).toBeLessThan(now + oneHourMs + 5000);
     });
   });
 

@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   BadGatewayException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
@@ -19,6 +20,7 @@ import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 
 type VerificationStudentRecord = {
@@ -41,6 +43,8 @@ type AuthStudentRecord = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
@@ -228,36 +232,36 @@ export class AuthService {
   }
 
   async forgotPassword(dto: import('./dto/forgot-password-request.dto').ForgotPasswordRequestDto): Promise<{ message: string }> {
+    const GENERIC_RESPONSE = { message: 'If that email exists, a reset link was sent.' };
+
     const student = await this.prisma.student.findUnique({
       where: { email: dto.email },
-      select: { id: true } as any,
+      select: { id: true },
     });
 
-    // Always return generic success to avoid account enumeration
-    if (!student) return { message: 'password reset sent' };
+    if (!student) return GENERIC_RESPONSE;
 
     const rawToken = this.tokenCrypto.generateToken();
     const tokenHash = this.tokenCrypto.hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
 
-    await this.prisma.$transaction(async (tx) => {
-      const studentId = (student as any).id as string;
-      await tx.student.update({
-        where: { id: studentId },
-        data: {
-          password_reset_token: tokenHash,
-          password_reset_expires: expiresAt,
-        },
-      });
-
-      try {
-        await this.emailService.sendPasswordResetEmail(dto.email, rawToken);
-      } catch {
-        throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
-      }
+    await this.prisma.student.update({
+      where: { id: student.id },
+      data: {
+        password_reset_token: tokenHash,
+        password_reset_expires: expiresAt,
+      },
     });
 
-    return { message: 'password reset sent' };
+    try {
+      await this.emailService.sendPasswordResetEmail(dto.email, rawToken);
+    } catch (err) {
+      this.logger.warn(
+        `forgotPassword: email delivery failed for ${dto.email}: ${(err as Error).message}`,
+      );
+    }
+
+    return GENERIC_RESPONSE;
   }
 
   async resetPassword(dto: import('./dto/reset-password-request.dto').ResetPasswordRequestDto): Promise<AuthTokenResponse> {
