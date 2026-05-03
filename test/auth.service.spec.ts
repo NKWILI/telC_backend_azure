@@ -577,7 +577,7 @@ describe('AuthService', () => {
       });
 
       await expect(service.login(dto as any)).rejects.toMatchObject({
-        response: { message: 'EMAIL_NOT_VERIFIED' },
+        response: expect.objectContaining({ error: 'EMAIL_NOT_VERIFIED' }),
       });
     });
 
@@ -589,14 +589,46 @@ describe('AuthService', () => {
         email_verification_expires: oldExpiry,
         email: 'john.doe@example.com',
       });
-      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
 
       await expect(service.login(dto as any)).rejects.toMatchObject({
-        response: { message: 'EMAIL_NOT_VERIFIED' },
+        response: expect.objectContaining({ error: 'EMAIL_NOT_VERIFIED' }),
       });
 
-      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
       expect(emailServiceMock.sendVerificationEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 403 (not 502) when resend email throws on unverified login', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('password123', 10),
+        email_verified: false,
+        email_verification_expires: oldExpiry,
+        email: 'john.doe@example.com',
+      });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      emailServiceMock.sendVerificationEmail.mockRejectedValueOnce(new Error('smtp down'));
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        status: 403,
+        response: expect.objectContaining({ error: 'EMAIL_NOT_VERIFIED' }),
+      });
+    });
+
+    it('403 response body contains verified: false', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        password_hash: bcrypt.hashSync('password123', 10),
+        email_verified: false,
+        email_verification_expires: oldExpiry,
+        email: 'john.doe@example.com',
+      });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await expect(service.login(dto as any)).rejects.toMatchObject({
+        response: expect.objectContaining({ verified: false }),
+      });
     });
   });
 

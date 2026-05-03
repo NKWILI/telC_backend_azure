@@ -169,30 +169,38 @@ export class AuthService {
         student.email_verification_expires &&
         this.wasVerificationSentRecently(student.email_verification_expires)
       ) {
-        throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+        throw new ForbiddenException({
+          error: 'EMAIL_NOT_VERIFIED',
+          verified: false,
+          message: 'Please verify your email to continue.',
+        });
       }
 
       const rawToken = this.tokenCrypto.generateToken();
       const tokenHash = this.tokenCrypto.hashToken(rawToken);
       const expiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS);
 
-      await this.prisma.$transaction(async (tx) => {
-        await tx.student.update({
-          where: { id: student.id },
-          data: {
-            email_verification_token: tokenHash,
-            email_verification_expires: expiresAt,
-          },
-        });
-
-        try {
-          await this.emailService.sendVerificationEmail(student.email ?? '', rawToken);
-        } catch {
-          throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
-        }
+      await this.prisma.student.update({
+        where: { id: student.id },
+        data: {
+          email_verification_token: tokenHash,
+          email_verification_expires: expiresAt,
+        },
       });
 
-      throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+      this.emailService
+        .sendVerificationEmail(student.email ?? '', rawToken)
+        .catch((err: Error) =>
+          this.logger.warn(
+            `login: verification email delivery failed for ${student.email}: ${err.message}`,
+          ),
+        );
+
+      throw new ForbiddenException({
+        error: 'EMAIL_NOT_VERIFIED',
+        verified: false,
+        message: 'Please verify your email to continue.',
+      });
     }
 
     return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
