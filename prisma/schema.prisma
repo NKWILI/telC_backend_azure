@@ -8,35 +8,42 @@ datasource db {
 }
 
 model Student {
-  id              String    @id @default(uuid())
-  activation_code String
-  first_name      String?
-  last_name       String?
-  email           String?
-  is_registered   Boolean   @default(false)
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @default(now())
-  last_seen_at    DateTime  @default(now())
+  id           String   @id @default(uuid())
+  first_name   String?
+  last_name    String?
+  email        String?  @unique
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+  last_seen_at DateTime @default(now())
 
-  activation_codes   ActivationCode[]
-  device_sessions    DeviceSession[]
-  exam_sessions      ExamSession[]
-  lesen_sessions     LesenSession[]
+  password_hash                String?
+  email_verified               Boolean   @default(false)
+  email_verification_token     String?
+  email_verification_expires   DateTime?
+  password_reset_token         String?
+  password_reset_expires       DateTime?
 
+  device_sessions DeviceSession[]
+  exam_sessions   ExamSession[]
+  lesen_sessions  LesenSession[]
+  oauth_accounts  OAuthAccount[]
+
+  @@index([email])
   @@map("students")
 }
 
-model ActivationCode {
-  code       String    @id
-  student_id String?
-  status     String
-  created_at DateTime? @default(now())
-  claimed_at DateTime?
-  expires_at DateTime?
+model OAuthAccount {
+  id          String   @id @default(uuid())
+  student_id  String
+  provider    String
+  provider_id String
+  created_at  DateTime @default(now())
 
-  student Student? @relation(fields: [student_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
 
-  @@map("activation_codes")
+  @@unique([provider, provider_id])
+  @@index([student_id])
+  @@map("oauth_accounts")
 }
 
 model DeviceSession {
@@ -51,6 +58,8 @@ model DeviceSession {
 
   student Student @relation(fields: [student_id], references: [id])
 
+  @@unique([device_id])
+  @@index([student_id])
   @@map("device_sessions")
 }
 

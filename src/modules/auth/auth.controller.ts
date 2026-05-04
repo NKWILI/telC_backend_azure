@@ -1,24 +1,24 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   BadRequestException,
   Patch,
   UseGuards,
   UnauthorizedException,
-  Req,
   HttpException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
-import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
-import { ActivateRequestDto } from './dto/activate-request.dto';
-import {
-  ActivateResponseDto,
-  StudentResponseDto,
-} from './dto/activate-response.dto';
-import { LoginWithCodeRequestDto } from './dto/login-with-code-request.dto';
+import { RegisterRequestDto } from './dto/register-request.dto';
+import { LoginRequestDto } from './dto/login-request.dto';
+import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
+import { ResetPasswordRequestDto } from './dto/reset-password-request.dto';
+import { GoogleLoginRequestDto } from './dto/google-login-request.dto';
+import { GoogleLinkRequestDto } from './dto/google-link-request.dto';
+import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { ProfileUpdateDto } from './dto/profile-update.dto';
@@ -26,143 +26,65 @@ import { LogoutRequestDto } from './dto/logout-request.dto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
-import { RateLimitService } from '../../shared/services/rate-limit.service';
+
+interface StudentResponseDto {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  emailVerified: boolean;
+}
 
 @Controller('api/auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
-    private readonly rateLimitService: RateLimitService,
   ) {}
 
   /**
-   * POST /api/auth/activate
-   * Activates a student account with personal information
-   * Returns: {accessToken, refreshToken, student}
+   * POST /api/auth/register
+   * Register a new student account and send a verification email.
    */
-  @Post('activate')
-  async activate(
-    @Req() request: Request,
-    @Body() activateDto: ActivateRequestDto,
-  ): Promise<ActivateResponseDto> {
-    try {
-      const forwarded = request.headers['x-forwarded-for'];
-      const ip = Array.isArray(forwarded)
-        ? forwarded[0]
-        : forwarded?.split(',')[0]?.trim() || request.ip || 'unknown';
-      this.rateLimitService.checkActivationLimit(ip);
-
-      const student = await this.authService.createStudent(
-        activateDto.activationCode,
-        activateDto.firstName,
-        activateDto.lastName,
-        activateDto.email,
-      );
-
-      const deviceId = activateDto.deviceId;
-      const sessionId = randomUUID();
-
-      const tokenPair = this.tokenService.generateTokenPair({
-        studentId: student.id,
-        isRegistered: student.is_registered,
-        deviceId,
-        sessionId,
-      });
-
-      const refreshTokenHash = await this.tokenService.hashRefreshToken(
-        tokenPair.refreshToken,
-      );
-
-      await this.authService.createDeviceSession(
-        student.id,
-        deviceId,
-        refreshTokenHash,
-        'Unknown Device',
-      );
-
-      const expiresAt = await this.authService.getActivationCodeExpiry(
-        activateDto.activationCode,
-      );
-
-      return {
-        accessToken: tokenPair.accessToken,
-        refreshToken: tokenPair.refreshToken,
-        student: {
-          id: student.id,
-          firstName: student.first_name,
-          lastName: student.last_name,
-          email: student.email,
-          isRegistered: student.is_registered,
-          createdAt: student.created_at,
-          updatedAt: student.updated_at,
-        } as StudentResponseDto,
-        bootstrap: {
-          availableModules: ['SPRECHEN', 'LESEN', 'HOEREN', 'SCHREIBEN'],
-          enabledModules: ['SPRECHEN', 'LESEN'],
-          progressSummary: {},
-          lastActivityAt: null,
-          expiresAt,
-        },
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      const msg = error instanceof Error ? error.message : 'ACTIVATION_FAILED';
-      throw new BadRequestException(msg);
-    }
+  @Post('register')
+  async register(@Body() dto: RegisterRequestDto): Promise<{ message: string }> {
+    return this.authService.register(dto);
   }
 
   /**
-   * POST /api/auth/login-with-code
-   * For dev / returning users: get tokens with an already-claimed activation code.
+   * POST /api/auth/verify-email
+   * Verify a student's email and issue tokens.
    */
-  @Post('login-with-code')
-  async loginWithCode(
-    @Body() dto: LoginWithCodeRequestDto,
-  ): Promise<ActivateResponseDto> {
-    const { student, expiresAt } =
-      await this.authService.loginWithActivationCode(dto.activationCode);
+  @Post('verify-email')
+  async verifyEmail(
+    @Body() dto: VerifyEmailRequestDto,
+  ): Promise<AuthTokenResponse> {
+    return this.authService.verifyEmail(dto);
+  }
 
-    const deviceId = dto.deviceId;
-    const sessionId = randomUUID();
-    const tokenPair = this.tokenService.generateTokenPair({
-      studentId: student.id,
-      isRegistered: student.is_registered,
-      deviceId,
-      sessionId,
-    });
-    const refreshTokenHash = await this.tokenService.hashRefreshToken(
-      tokenPair.refreshToken,
-    );
-    await this.authService.createDeviceSession(
-      student.id,
-      deviceId,
-      refreshTokenHash,
-      'Unknown Device',
-    );
+  /**
+   * POST /api/auth/forgot-password
+   */
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordRequestDto): Promise<{ message: string }> {
+    return this.authService.forgotPassword(dto);
+  }
 
-    return {
-      accessToken: tokenPair.accessToken,
-      refreshToken: tokenPair.refreshToken,
-      student: {
-        id: student.id,
-        firstName: student.first_name,
-        lastName: student.last_name,
-        email: student.email,
-        isRegistered: student.is_registered,
-        createdAt: student.created_at,
-        updatedAt: student.updated_at,
-      } as StudentResponseDto,
-      bootstrap: {
-        availableModules: ['SPRECHEN', 'LESEN', 'HOEREN', 'SCHREIBEN'],
-        enabledModules: ['SPRECHEN', 'LESEN'],
-        progressSummary: {},
-        lastActivityAt: null,
-        expiresAt,
-      },
-    };
+  /**
+   * POST /api/auth/reset-password
+   */
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.resetPassword(dto);
+  }
+
+  /**
+   * POST /api/auth/login
+   * Login with email and password and issue tokens
+   */
+  @Post('login')
+  async login(@Body() dto: LoginRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.login(dto);
   }
 
   /**
@@ -177,9 +99,6 @@ export class AuthController {
       const refreshPayload = this.tokenService.verifyRefreshToken(
         refreshDto.refreshToken,
       );
-
-      // Check membership expiry before issuing new tokens
-      await this.authService.checkMembershipExpiry(refreshPayload.studentId);
 
       const session = await this.authService.validateRefreshToken(
         refreshPayload.sessionId,
@@ -201,7 +120,6 @@ export class AuthController {
 
       const tokens = this.tokenService.generateTokenPair({
         studentId: refreshPayload.studentId,
-        isRegistered: true,
         deviceId: refreshPayload.deviceId,
         sessionId: refreshPayload.sessionId,
       });
@@ -214,6 +132,8 @@ export class AuthController {
         refreshPayload.sessionId,
         newRefreshHash,
       );
+
+      await this.authService.updateStudentLastSeen(refreshPayload.studentId);
 
       return {
         accessToken: tokens.accessToken,
@@ -254,21 +174,17 @@ export class AuthController {
       },
     );
 
-    // Get existing active device session to reuse its sessionId
     const activeSession = await this.authService.getActiveDeviceSession(
       student.studentId,
       student.deviceId,
     );
 
-    // Generate new tokens with updated is_registered claim and existing sessionId
     const tokens = this.tokenService.generateTokenPair({
       studentId: updated.id,
-      isRegistered: updated.is_registered,
       deviceId: student.deviceId,
       sessionId: activeSession.id,
     });
 
-    // Update the session's refresh token hash (token rotation)
     const newRefreshHash = await this.tokenService.hashRefreshToken(
       tokens.refreshToken,
     );
@@ -285,10 +201,8 @@ export class AuthController {
         firstName: updated.first_name,
         lastName: updated.last_name,
         email: updated.email,
-        isRegistered: updated.is_registered,
-        createdAt: updated.created_at,
-        updatedAt: updated.updated_at,
-      } as StudentResponseDto,
+        emailVerified: updated.email_verified,
+      },
     };
   }
 
@@ -324,6 +238,7 @@ export class AuthController {
       }
 
       await this.authService.revokeDeviceSession(refreshPayload.sessionId);
+      await this.authService.updateStudentLastSeen(refreshPayload.studentId);
       return { success: true };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
@@ -331,5 +246,35 @@ export class AuthController {
       }
       throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
     }
+  }
+
+  /**
+   * GET /api/auth/device-sessions
+   * List active device sessions for the authenticated student
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('device-sessions')
+  async getDeviceSessions(
+    @CurrentStudent() student: AccessTokenPayload,
+  ) {
+    return this.authService.getDeviceSessions(student.studentId);
+  }
+
+  /**
+   * POST /api/auth/google
+   * Login or request linking with Google OAuth
+   */
+  @Post('google')
+  async googleLogin(@Body() dto: GoogleLoginRequestDto): Promise<AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }> {
+    return this.authService.googleLogin(dto);
+  }
+
+  /**
+   * POST /api/auth/google/link
+   * Link Google account to existing student
+   */
+  @Post('google/link')
+  async googleLink(@Body() dto: GoogleLinkRequestDto): Promise<AuthTokenResponse> {
+    return this.authService.googleLink(dto);
   }
 }

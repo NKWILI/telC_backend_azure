@@ -4,6 +4,7 @@ import * as bcrypt from 'bcryptjs';
 import {
   AccessTokenPayload,
   RefreshTokenPayload,
+  LinkingTokenPayload,
 } from '../../shared/interfaces/token-payload.interface';
 
 @Injectable()
@@ -14,23 +15,21 @@ export class TokenService {
 
   constructor() {
     this.jwtSecret = process.env.JWT_SECRET || 'fallback-dev-secret';
-    this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '1h';
-    this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '30d';
+    this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
+    this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
   }
 
   /**
-   * Generate an access token (short-lived, 1 hour)
-   * Contains: studentId, isRegistered, deviceId
+   * Generate an access token (short-lived, 15 minutes)
+   * Contains: studentId, deviceId
    */
   generateAccessToken(payload: {
     studentId: string;
-    isRegistered: boolean;
     deviceId: string;
   }): string {
     return jwt.sign(
       {
         studentId: payload.studentId,
-        isRegistered: payload.isRegistered,
         deviceId: payload.deviceId,
       },
       this.jwtSecret,
@@ -39,7 +38,7 @@ export class TokenService {
   }
 
   /**
-   * Generate a refresh token (long-lived, 30 days)
+   * Generate a refresh token (long-lived, 7 days)
    * Contains: studentId, deviceId, sessionId
    */
   generateRefreshToken(payload: {
@@ -63,14 +62,12 @@ export class TokenService {
    */
   generateTokenPair(payload: {
     studentId: string;
-    isRegistered: boolean;
     deviceId: string;
     sessionId: string;
   }): { accessToken: string; refreshToken: string } {
     return {
       accessToken: this.generateAccessToken({
         studentId: payload.studentId,
-        isRegistered: payload.isRegistered,
         deviceId: payload.deviceId,
       }),
       refreshToken: this.generateRefreshToken({
@@ -132,5 +129,43 @@ export class TokenService {
    */
   async compareRefreshToken(token: string, hash: string): Promise<boolean> {
     return bcrypt.compare(token, hash);
+  }
+
+  /**
+   * Generate a linking token for OAuth account linking (30 minutes)
+   * Contains: email, provider, providerId
+   */
+  generateLinkingToken(payload: {
+    email: string;
+    provider: string;
+    providerId: string;
+  }): string {
+    return jwt.sign(
+      {
+        email: payload.email,
+        provider: payload.provider,
+        providerId: payload.providerId,
+      },
+      this.jwtSecret,
+      { expiresIn: '30m' },
+    );
+  }
+
+  /**
+   * Verify and decode a linking token
+   */
+  verifyLinkingToken(token: string): LinkingTokenPayload {
+    try {
+      const decoded = jwt.verify(token, this.jwtSecret) as LinkingTokenPayload;
+      return decoded;
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new UnauthorizedException('LINKING_TOKEN_EXPIRED');
+      }
+      if (error instanceof jwt.JsonWebTokenError) {
+        throw new UnauthorizedException('LINKING_TOKEN_INVALID');
+      }
+      throw new UnauthorizedException('LINKING_TOKEN_INVALID');
+    }
   }
 }

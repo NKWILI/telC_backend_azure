@@ -22,7 +22,6 @@ describe('TokenService', () => {
     it('should generate a valid JWT string', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
@@ -34,13 +33,11 @@ describe('TokenService', () => {
     it('should include correct payload claims', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: true,
         deviceId: 'device-456',
       });
 
       const decoded = tokenService.verifyAccessToken(token);
       expect(decoded.studentId).toBe('student-123');
-      expect(decoded.isRegistered).toBe(true);
       expect(decoded.deviceId).toBe('device-456');
     });
   });
@@ -49,13 +46,11 @@ describe('TokenService', () => {
     it('should verify and decode a valid token', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
       const decoded = tokenService.verifyAccessToken(token);
       expect(decoded.studentId).toBe('student-123');
-      expect(decoded.isRegistered).toBe(false);
       expect(decoded.deviceId).toBe('device-456');
       expect(decoded.iat).toBeDefined();
       expect(decoded.exp).toBeDefined();
@@ -64,7 +59,6 @@ describe('TokenService', () => {
     it('should reject a token with tampered signature', () => {
       const token = tokenService.generateAccessToken({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
       });
 
@@ -81,7 +75,6 @@ describe('TokenService', () => {
       const wrongToken = jwt.sign(
         {
           studentId: 'student-123',
-          isRegistered: false,
           deviceId: 'device-456',
         },
         'wrong-secret-key',
@@ -98,7 +91,6 @@ describe('TokenService', () => {
       const expiredToken = jwt.sign(
         {
           studentId: 'student-123',
-          isRegistered: false,
           deviceId: 'device-456',
         },
         process.env.JWT_SECRET,
@@ -200,7 +192,6 @@ describe('TokenService', () => {
     it('should generate both access and refresh tokens', () => {
       const tokens = tokenService.generateTokenPair({
         studentId: 'student-123',
-        isRegistered: false,
         deviceId: 'device-456',
         sessionId: 'session-789',
       });
@@ -213,7 +204,6 @@ describe('TokenService', () => {
     it('should generate tokens with consistent claims', () => {
       const tokens = tokenService.generateTokenPair({
         studentId: 'student-123',
-        isRegistered: true,
         deviceId: 'device-456',
         sessionId: 'session-789',
       });
@@ -225,6 +215,49 @@ describe('TokenService', () => {
 
       expect(accessDecoded.studentId).toBe(refreshDecoded.studentId);
       expect(accessDecoded.deviceId).toBe(refreshDecoded.deviceId);
+    });
+  });
+
+  // ─── Default Expiry Tests ────────────────────────────
+
+  describe('default expiry values (no env override)', () => {
+    let savedAccess: string | undefined;
+    let savedRefresh: string | undefined;
+
+    beforeEach(() => {
+      savedAccess = process.env.JWT_ACCESS_TOKEN_EXPIRY;
+      savedRefresh = process.env.JWT_REFRESH_TOKEN_EXPIRY;
+      delete process.env.JWT_ACCESS_TOKEN_EXPIRY;
+      delete process.env.JWT_REFRESH_TOKEN_EXPIRY;
+      tokenService = new TokenService();
+    });
+
+    afterEach(() => {
+      if (savedAccess !== undefined)
+        process.env.JWT_ACCESS_TOKEN_EXPIRY = savedAccess;
+      if (savedRefresh !== undefined)
+        process.env.JWT_REFRESH_TOKEN_EXPIRY = savedRefresh;
+    });
+
+    it('access token default expiry is 15 minutes', () => {
+      const jwtLib = require('jsonwebtoken');
+      const token = tokenService.generateAccessToken({
+        studentId: 'x',
+        deviceId: 'y',
+      });
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(15 * 60);
+    });
+
+    it('refresh token default expiry is 7 days', () => {
+      const jwtLib = require('jsonwebtoken');
+      const token = tokenService.generateRefreshToken({
+        studentId: 'x',
+        deviceId: 'y',
+        sessionId: 'z',
+      });
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(7 * 24 * 60 * 60);
     });
   });
 

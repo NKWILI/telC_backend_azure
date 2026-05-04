@@ -42,12 +42,19 @@ export class AuthExceptionFilter implements ExceptionFilter {
         return;
       }
 
-      if (
-        typeof payload === 'object' &&
-        payload !== null &&
-        'message' in payload
-      ) {
-        const messageValue = (payload as { message: unknown }).message;
+      if (typeof payload === 'object' && payload !== null && 'message' in payload) {
+        const p = payload as Record<string, unknown>;
+        const messageValue = p.message;
+
+        // Custom object payload without statusCode: { error: 'CODE', message: '...', ...extras }
+        if (!('statusCode' in p) && 'error' in p && typeof p.error === 'string') {
+          const errorCode = p.error;
+          const message = AUTH_ERROR_MESSAGES[errorCode] || (typeof messageValue === 'string' ? messageValue : errorCode);
+          const { error: _e, message: _m, ...extra } = p;
+          response.status(status).json({ error: errorCode, message, ...extra });
+          return;
+        }
+
         if (Array.isArray(messageValue)) {
           response.status(status).json({
             error: 'VALIDATION_ERROR',
