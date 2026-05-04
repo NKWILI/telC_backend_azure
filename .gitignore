@@ -43,3 +43,9 @@ docs/api-contract.md
 
 #ignore agent-skills
 agent-skills/
+tasks/todo.md
+tasks/review-fixes-todo.md
+tasks/review-fixes-plan.md
+tasks/plan.md
+tasks/auth-fixes-todo.md
+tasks/auth-fixes-plan.md

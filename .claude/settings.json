@@ -49,11 +49,14 @@
       "Bash(curl -sS https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
       "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/health)",
       "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "PowerShell(cd \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\"; $env:CI = 'false'; npx prisma migrate dev --name add_auth_columns --create-only 2>&1)",
+      "PowerShell(cd \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure'; npm run prisma:studio\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure",
-      "C:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure\\src\\modules\\auth\\dto"
+      "C:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure\\src\\modules\\auth\\dto",
+      "c:\\Users\\ngeuk\\Desktop\\SPRACHPR�FUNG\\SPRACHPR�FUNG_AZURE\\telC_backend_azure\\prisma\\migrations"
     ]
   }
 }
