@@ -240,6 +240,9 @@ model LesenTeil2Exercise {
 
   questions LesenTeil2Question[]
 
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+
   @@map("lesen_teil2_exercises")
 }
 
@@ -279,6 +282,9 @@ model SprachbausteineExercise {
   created_at       DateTime @default(now())
 
   gaps SprachbausteineGap[]
+
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
 
   @@map("sprachbausteine_exercises")
 }
@@ -321,6 +327,9 @@ model SprachbausteineTeil2Exercise {
   words SprachbausteineTeil2Word[]
   gaps  SprachbausteineTeil2Gap[]
 
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+
   @@map("sprachbausteine_teil2_exercises")
 }
 
@@ -361,6 +370,9 @@ model LesenTeil1Exercise {
 
   texts  LesenTeil1Text[]
   titles LesenTeil1Title[]
+
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
 
   @@map("lesen_teil1_exercises")
 }
@@ -403,6 +415,9 @@ model LesenTeil3Exercise {
   situations    LesenTeil3Situation[]
   announcements LesenTeil3Announcement[]
 
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+
   @@map("lesen_teil3_exercises")
 }
 
@@ -432,4 +447,19 @@ model LesenTeil3Situation {
   correctAnnouncement LesenTeil3Announcement?  @relation(fields: [correctAnnouncementId], references: [id], onDelete: Restrict)
 
   @@map("lesen_teil3_situations")
+}
+
+model Modelltest {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number     Int      @unique
+  title      String
+  created_at DateTime @default(now())
+
+  sprachbausteineExercises      SprachbausteineExercise[]
+  sprachbausteineTeil2Exercises SprachbausteineTeil2Exercise[]
+  lesenTeil1Exercises           LesenTeil1Exercise[]
+  lesenTeil2Exercises           LesenTeil2Exercise[]
+  lesenTeil3Exercises           LesenTeil3Exercise[]
+
+  @@map("modelltests")
 }
