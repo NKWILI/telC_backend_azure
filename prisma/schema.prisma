@@ -278,6 +278,7 @@ model SprachbausteineExercise {
   label            String?
   instruction      String
   duration_minutes Int
+  image_url        String
   body             String
   created_at       DateTime @default(now())
 
@@ -321,6 +322,7 @@ model SprachbausteineTeil2Exercise {
   label           String
   instruction     String
   durationMinutes Int
+  imageUrl         String   @map("image_url")
   body            String
   createdAt       DateTime @default(now())
 

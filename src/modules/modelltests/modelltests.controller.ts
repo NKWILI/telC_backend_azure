@@ -1,10 +1,12 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { ModelltestsService } from './modelltests.service';
 import type {
   ModelltestDetailDto,
   ModelltestListItemDto,
 } from './dto/modelltest.dto';
 
+@UseGuards(JwtAuthGuard)
 @Controller('api/modelltests')
 export class ModelltestsController {
   constructor(private readonly service: ModelltestsService) {}

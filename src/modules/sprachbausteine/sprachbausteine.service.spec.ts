@@ -8,6 +8,8 @@ const mockTeil1Exercise = {
   label: 'Sprachbausteine, Teil 1',
   instruction: 'Lesen Sie den Text…',
   duration_minutes: 18,
+  image_url:
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
   body: 'Text with -21- and -22-',
   created_at: new Date(),
   gaps: Array.from({ length: 10 }, (_, i) => ({
@@ -48,6 +50,8 @@ const mockTeil2Exercise = {
   label: '',
   instruction: 'Lesen Sie den Text...',
   durationMinutes: 18,
+  imageUrl:
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
   body: 'Text with -31- through -40-',
   createdAt: new Date(),
   words: Array.from({ length: 15 }, (_, i) => ({
@@ -307,18 +311,12 @@ describe('SprachbausteineService', () => {
       '31': 'wa', '32': 'wm', '33': 'wd', '34': 'wc', '35': 'wo',
       '36': 'wn', '37': 'wg', '38': 'we', '39': 'wh', '40': 'wl',
     };
-    const baseDto = {
-      id: 'x',
-      score_percent: 0,
-      tested_at: '2026-05-10T10:00:00Z',
-    };
 
     it('Teil 1 — all correct answers → score 100', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
       mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
 
       const result = await service.submit({
-        ...baseDto,
         modelltestNumber: 1,
         teil_id: '1',
         answers: allCorrectTeil1,
@@ -335,7 +333,6 @@ describe('SprachbausteineService', () => {
       );
 
       const result = await service.submit({
-        ...baseDto,
         modelltestNumber: 1,
         teil_id: '1',
         answers: allWrong,
@@ -349,7 +346,6 @@ describe('SprachbausteineService', () => {
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(mockTeil2Exercise);
 
       const result = await service.submit({
-        ...baseDto,
         modelltestNumber: 1,
         teil_id: '2',
         answers: allCorrectTeil2,
@@ -362,7 +358,7 @@ describe('SprachbausteineService', () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submit({ ...baseDto, modelltestNumber: 99, teil_id: '1', answers: {} }),
+        service.submit({ modelltestNumber: 99, teil_id: '1', answers: {} }),
       ).rejects.toThrow('Modelltest 99 not found');
     });
   });

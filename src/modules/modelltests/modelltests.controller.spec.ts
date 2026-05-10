@@ -1,4 +1,5 @@
 import { ModelltestsController } from './modelltests.controller';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 
 const mockService = {
   getAll: jest.fn(),
@@ -11,6 +12,12 @@ describe('ModelltestsController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     controller = new ModelltestsController(mockService as any);
+  });
+
+  it('is protected by JwtAuthGuard at the controller level', () => {
+    const guards = Reflect.getMetadata('__guards__', ModelltestsController) as unknown[];
+    expect(guards).toBeDefined();
+    expect(guards).toContain(JwtAuthGuard);
   });
 
   it('GET / — delegates to service.getAll() and returns result', async () => {

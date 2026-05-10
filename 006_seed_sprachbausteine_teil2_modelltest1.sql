@@ -17,12 +17,13 @@ BEGIN;
 -- ── 1. Exercise ──────────────────────────────────────────────
 
 INSERT INTO sprachbausteine_teil2_exercises
-  ("contentRevision", label, instruction, "durationMinutes", body)
+  ("contentRevision", label, instruction, "durationMinutes", image_url, body)
 VALUES (
   'modelltest-1-sprachbausteine-teil2-v1',
   '',
   'Lesen Sie den Text und schließen Sie die Lücken 31–40. Benutzen Sie die Wörter a–o. Jedes Wort passt nur einmal. Markieren Sie Ihre Lösungen für die Aufgaben 31–40 auf dem Antwortbogen.',
   18,
+  'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
   E'Olga Fedorow\nSichelstr. 11 b\n40625 Düsseldorf\n\nStädtisches Klinikum Solingen gemeinnützige GmbH\nPersonalmanagement\nGotenstraße 1\n42653 Solingen\n\nDüsseldorf, 26. 07. 2015\n\nBewerbung\n\nSehr geehrte Damen und Herren,\n\nin der WELT habe ich Ihre -31- gefunden, die mich sofort interessierte.\nUm die ausgeschriebene -32- der stellvertretenden Pflegedienstleitung -33- ich mich.\n\nIn Russland habe ich meine schulische und berufliche -34- erhalten und drei Jahre praktische\nErfahrungen im Krankenhaus sammeln können. Nach unserer Übersiedlung nach Österreich\nhabe ich meine Sprachkenntnisse -35- und fand im Allgemeinen Krankenhaus der Stadt Wien\neine Anstellung als Stationsschwester. Nach einem Jahr -36- ich die Pflegedienstleitung in der\nGynäkologischen Abteilung.\n\nJetzt hat mein Mann in Düsseldorf eine attraktive Stelle als IT-Systemkoordinator angeboten\nbekommen, und so sind wir kurzentschlossen hierher umgezogen.\nIch möchte diese Veränderung als -37- nutzen, um neue Erfahrungen in leitender Position eines\ngroßen Klinikums zu sammeln.\n\nEinzelheiten meiner Ausbildung und meines -38- Werdegangs können Sie meinem\nLebenslauf und den beigefügten Zeugnissen/Bescheinigungen -39- . Über die Möglichkeit eines\n-40- Gespräches würde ich mich freuen.\n\nMit freundlichen Grüßen\nOlga Fedorow\nAnlagen'
 );
 
