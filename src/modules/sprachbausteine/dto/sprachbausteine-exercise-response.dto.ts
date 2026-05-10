@@ -3,6 +3,9 @@ import { SprachbausteineGapDto } from './sprachbausteine-gap.dto';
 import { SprachbausteineTeil2Dto } from './sprachbausteine-teil2.dto';
 
 export class SprachbausteineTeilDto {
+  @ApiProperty({ example: 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png' })
+  imageUrl!: string;
+
   @ApiProperty()
   label!: string;
 

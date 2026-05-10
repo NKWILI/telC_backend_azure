@@ -9,6 +9,7 @@ import { WritingModule } from './modules/writing/writing.module';
 import { ListeningModule } from './modules/listening/listening.module';
 import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine.module';
 import { LesenModule } from './modules/lesen/lesen.module';
+import { ModelltestsModule } from './modules/modelltests/modelltests.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { LesenModule } from './modules/lesen/lesen.module';
     SpeakingModule,
     WritingModule,
     ListeningModule,
+    ModelltestsModule,
     SprachbausteineModule,
     LesenModule,
   ],

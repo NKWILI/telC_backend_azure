@@ -8,6 +8,8 @@ const mockTeil1Exercise = {
   label: 'Sprachbausteine, Teil 1',
   instruction: 'Lesen Sie den Text…',
   duration_minutes: 18,
+  image_url:
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
   body: 'Text with -21- and -22-',
   created_at: new Date(),
   gaps: Array.from({ length: 10 }, (_, i) => ({
@@ -48,6 +50,8 @@ const mockTeil2Exercise = {
   label: '',
   instruction: 'Lesen Sie den Text...',
   durationMinutes: 18,
+  imageUrl:
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
   body: 'Text with -31- through -40-',
   createdAt: new Date(),
   words: Array.from({ length: 15 }, (_, i) => ({
@@ -167,7 +171,17 @@ const mockTeil2Exercise = {
   ],
 };
 
+const mockModelltest = {
+  id: 'ffffffff-0001-0001-0001-000000000001',
+  number: 1,
+  title: 'Modelltest 1',
+  created_at: new Date(),
+};
+
 const mockPrisma = {
+  modelltest: {
+    findUnique: jest.fn(),
+  },
   sprachbausteineExercise: {
     findFirst: jest.fn(),
   },
@@ -186,6 +200,7 @@ describe('SprachbausteineService', () => {
 
   describe('getExercise', () => {
     it('returns correct DTO shape with 10 teil1 gaps and real teil2 data', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
       mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(
         mockTeil1Exercise,
       );
@@ -193,7 +208,7 @@ describe('SprachbausteineService', () => {
         mockTeil2Exercise,
       );
 
-      const result = await service.getExercise();
+      const result = await service.getExercise(1);
 
       expect(result.contentRevision).toBe('modelltest-1-v1');
       expect(typeof result.issuedAt).toBe('string');
@@ -211,15 +226,29 @@ describe('SprachbausteineService', () => {
       });
       expect(result.teil2.wordBank).toHaveLength(15);
       expect(result.teil2.gaps).toHaveLength(10);
+      expect(result.teil1.imageUrl).toBe(
+        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
+      );
+      expect(result.teil2.imageUrl).toBe(
+        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
+      );
     });
 
     it('throws NotFoundException when no Teil 1 exercise exists', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
       mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(null);
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
         mockTeil2Exercise,
       );
 
-      await expect(service.getExercise()).rejects.toThrow(NotFoundException);
+      await expect(service.getExercise(1)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when modelltest number does not exist', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
+      await expect(service.getExercise(99)).rejects.toThrow(
+        'Modelltest 99 not found',
+      );
     });
   });
 
@@ -228,7 +257,7 @@ describe('SprachbausteineService', () => {
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
         mockTeil2Exercise,
       );
-      const result = await (service as any).getTeil2Exercise();
+      const result = await (service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001');
 
       expect(result.wordBank).toHaveLength(15);
       expect(result.gaps).toHaveLength(10);
@@ -247,7 +276,7 @@ describe('SprachbausteineService', () => {
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
         mockTeil2Exercise,
       );
-      const result = await (service as any).getTeil2Exercise();
+      const result = await (service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001');
 
       const answers: Record<string, string> = {};
       result.gaps.forEach((g: any) => {
@@ -268,24 +297,69 @@ describe('SprachbausteineService', () => {
 
     it('throws NotFoundException when no Teil 2 exercise exists', async () => {
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(null);
-      await expect((service as any).getTeil2Exercise()).rejects.toThrow(
+      await expect((service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001')).rejects.toThrow(
         NotFoundException,
       );
     });
   });
 
   describe('submit', () => {
-    it('returns { score: 0 } for any valid payload', async () => {
+    const allCorrectTeil1 = Object.fromEntries(
+      Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}b`]),
+    );
+    const allCorrectTeil2 = {
+      '31': 'wa', '32': 'wm', '33': 'wd', '34': 'wc', '35': 'wo',
+      '36': 'wn', '37': 'wg', '38': 'we', '39': 'wh', '40': 'wl',
+    };
+
+    it('Teil 1 — all correct answers → score 100', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+
       const result = await service.submit({
-        id: 'x',
-        exercise_type_id: '1',
+        modelltestNumber: 1,
         teil_id: '1',
-        score_percent: 75,
-        tested_at: '2026-04-22T10:00:00Z',
-        answers: { '21': 'c' },
+        answers: allCorrectTeil1,
+      });
+
+      expect(result).toEqual({ score: 100 });
+    });
+
+    it('Teil 1 — all wrong answers → score 0', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+      const allWrong = Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}a`]),
+      );
+
+      const result = await service.submit({
+        modelltestNumber: 1,
+        teil_id: '1',
+        answers: allWrong,
       });
 
       expect(result).toEqual({ score: 0 });
+    });
+
+    it('Teil 2 — all correct answers → score 100', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(mockTeil2Exercise);
+
+      const result = await service.submit({
+        modelltestNumber: 1,
+        teil_id: '2',
+        answers: allCorrectTeil2,
+      });
+
+      expect(result).toEqual({ score: 100 });
+    });
+
+    it('throws NotFoundException when modelltest number does not exist', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.submit({ modelltestNumber: 99, teil_id: '1', answers: {} }),
+      ).rejects.toThrow('Modelltest 99 not found');
     });
   });
 });

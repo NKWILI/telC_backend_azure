@@ -12,7 +12,7 @@ BEGIN;
 -- ── 1. Insert the exercise ──────────────────────────────────
 
 INSERT INTO sprachbausteine_exercises
-    (id, teil_number, content_revision, label, instruction, duration_minutes, body)
+    (id, teil_number, content_revision, label, instruction, duration_minutes, image_url, body)
 VALUES (
     'aaaaaaaa-0001-0001-0001-000000000001',
     1,
@@ -20,6 +20,7 @@ VALUES (
     'Sprachbausteine, Teil 1',
     'Lesen Sie den Text und schließen Sie die Lücken 21–30. Welche Lösung (a, b oder c) ist jeweils richtig? Markieren Sie Ihre Lösungen für die Aufgaben 21–30 auf dem Antwortbogen.',
     18,
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
     -- The full text from Modelltest 1, Sprachbausteine Teil 1 (page 14)
     -- Gaps are encoded as -21- through -30- exactly where the blanks appear
     'Schroeder & Söhne, Aufzüge und Industrielifts

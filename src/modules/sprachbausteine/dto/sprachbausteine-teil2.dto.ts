@@ -3,6 +3,9 @@ import { SprachbausteineWordBankItemDto } from './sprachbausteine-word-bank-item
 import { SprachbausteineTeil2GapDto } from './sprachbausteine-teil2-gap.dto';
 
 export class SprachbausteineTeil2Dto {
+  @ApiProperty({ example: 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png' })
+  imageUrl!: string;
+
   @ApiProperty()
   label!: string;
 
