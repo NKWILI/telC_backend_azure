@@ -294,17 +294,70 @@ describe('SprachbausteineService', () => {
   });
 
   describe('submit', () => {
-    it('returns { score: 0 } for any valid payload', async () => {
+    const allCorrectTeil1 = Object.fromEntries(
+      Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}b`]),
+    );
+    const allCorrectTeil2 = {
+      '31': 'wa', '32': 'wm', '33': 'wd', '34': 'wc', '35': 'wo',
+      '36': 'wn', '37': 'wg', '38': 'we', '39': 'wh', '40': 'wl',
+    };
+    const baseDto = {
+      id: 'x',
+      score_percent: 0,
+      tested_at: '2026-05-10T10:00:00Z',
+    };
+
+    it('Teil 1 — all correct answers → score 100', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+
       const result = await service.submit({
-        id: 'x',
-        exercise_type_id: '1',
+        ...baseDto,
+        modelltestNumber: 1,
         teil_id: '1',
-        score_percent: 75,
-        tested_at: '2026-04-22T10:00:00Z',
-        answers: { '21': 'c' },
+        answers: allCorrectTeil1,
+      });
+
+      expect(result).toEqual({ score: 100 });
+    });
+
+    it('Teil 1 — all wrong answers → score 0', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+      const allWrong = Object.fromEntries(
+        Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}a`]),
+      );
+
+      const result = await service.submit({
+        ...baseDto,
+        modelltestNumber: 1,
+        teil_id: '1',
+        answers: allWrong,
       });
 
       expect(result).toEqual({ score: 0 });
+    });
+
+    it('Teil 2 — all correct answers → score 100', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(mockTeil2Exercise);
+
+      const result = await service.submit({
+        ...baseDto,
+        modelltestNumber: 1,
+        teil_id: '2',
+        answers: allCorrectTeil2,
+      });
+
+      expect(result).toEqual({ score: 100 });
+    });
+
+    it('throws NotFoundException when modelltest number does not exist', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.submit({ ...baseDto, modelltestNumber: 99, teil_id: '1', answers: {} }),
+      ).rejects.toThrow('Modelltest 99 not found');
     });
   });
 });

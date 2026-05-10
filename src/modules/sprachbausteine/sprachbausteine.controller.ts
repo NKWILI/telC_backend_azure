@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, ParseIntPipe, DefaultValuePipe, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { SprachbausteineService } from './sprachbausteine.service';
 import {
   SprachbausteineExerciseResponseDto,
@@ -7,6 +8,7 @@ import {
 } from './dto';
 import { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
 
+@UseGuards(JwtAuthGuard)
 @ApiTags('Sprachbausteine')
 @Controller('api/sprachbausteine')
 export class SprachbausteineController {

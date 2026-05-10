@@ -13,9 +13,10 @@ export class SubmitSprachbausteineDto {
   @IsString()
   id!: string;
 
-  @ApiProperty()
-  @IsString()
-  exercise_type_id!: string;
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  @Min(1)
+  modelltestNumber!: number;
 
   @ApiProperty()
   @IsString()
