@@ -14,9 +14,17 @@ export class SprachbausteineService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getExercise(): Promise<SprachbausteineExerciseResponseDto> {
+  async getExercise(modelltestNumber = 1): Promise<SprachbausteineExerciseResponseDto> {
+    const modelltest = await this.prisma.modelltest.findUnique({
+      where: { number: modelltestNumber },
+    });
+    if (!modelltest) {
+      throw new NotFoundException(`Modelltest ${modelltestNumber} not found`);
+    }
+
     const [exercise, teil2] = await Promise.all([
       this.prisma.sprachbausteineExercise.findFirst({
+        where: { modelltest_id: modelltest.id },
         include: {
           gaps: {
             orderBy: { sort_order: 'asc' },
@@ -26,11 +34,13 @@ export class SprachbausteineService {
           },
         },
       }),
-      this.getTeil2Exercise(),
+      this.getTeil2Exercise(modelltest.id),
     ]);
 
     if (!exercise) {
-      throw new NotFoundException('No Sprachbausteine exercise found');
+      throw new NotFoundException(
+        `No Sprachbausteine exercise found for Modelltest ${modelltestNumber}`,
+      );
     }
 
     const letters = ['a', 'b', 'c'];
@@ -60,8 +70,9 @@ export class SprachbausteineService {
     };
   }
 
-  async getTeil2Exercise(): Promise<SprachbausteineTeil2Dto> {
+  private async getTeil2Exercise(modelltestId: string): Promise<SprachbausteineTeil2Dto> {
     const exercise = await this.prisma.sprachbausteineTeil2Exercise.findFirst({
+      where: { modelltest_id: modelltestId },
       include: {
         words: { orderBy: { sortOrder: 'asc' } },
         gaps: { orderBy: { sortOrder: 'asc' } },
@@ -69,7 +80,9 @@ export class SprachbausteineService {
     });
 
     if (!exercise) {
-      throw new NotFoundException('No Sprachbausteine Teil 2 exercise found');
+      throw new NotFoundException(
+        `No Sprachbausteine Teil 2 exercise found for Modelltest with id ${modelltestId}`,
+      );
     }
 
     const wordIdMap = new Map<string, string>();

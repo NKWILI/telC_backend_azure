@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
-import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Query, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SprachbausteineService } from './sprachbausteine.service';
 import {
   SprachbausteineExerciseResponseDto,
@@ -15,9 +15,12 @@ export class SprachbausteineController {
   ) {}
 
   @Get('exercise')
+  @ApiQuery({ name: 'modelltest', required: false, schema: { type: 'integer', default: 1 }, example: 1 })
   @ApiOkResponse({ type: SprachbausteineExerciseResponseDto })
-  getExercise(): Promise<SprachbausteineExerciseResponseDto> {
-    return this.sprachbausteineService.getExercise();
+  getExercise(
+    @Query('modelltest', new DefaultValuePipe(1), ParseIntPipe) modelltest: number,
+  ): Promise<SprachbausteineExerciseResponseDto> {
+    return this.sprachbausteineService.getExercise(modelltest);
   }
 
   @Post('submit')
