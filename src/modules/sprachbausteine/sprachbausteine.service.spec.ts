@@ -222,6 +222,12 @@ describe('SprachbausteineService', () => {
       });
       expect(result.teil2.wordBank).toHaveLength(15);
       expect(result.teil2.gaps).toHaveLength(10);
+      expect(result.teil1.imageUrl).toBe(
+        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
+      );
+      expect(result.teil2.imageUrl).toBe(
+        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
+      );
     });
 
     it('throws NotFoundException when no Teil 1 exercise exists', async () => {

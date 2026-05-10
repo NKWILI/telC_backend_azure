@@ -12,6 +12,11 @@ import type { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto'
 export class SprachbausteineService {
   private readonly logger = new Logger(SprachbausteineService.name);
 
+  private static readonly TEIL1_IMAGE_URL =
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png';
+  private static readonly TEIL2_IMAGE_URL =
+    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png';
+
   constructor(private readonly prisma: PrismaService) {}
 
   async getExercise(modelltestNumber = 1): Promise<SprachbausteineExerciseResponseDto> {
@@ -60,6 +65,7 @@ export class SprachbausteineService {
       contentRevision: exercise.content_revision,
       issuedAt: new Date().toISOString(),
       teil1: {
+        imageUrl: SprachbausteineService.TEIL1_IMAGE_URL,
         label: exercise.label ?? '',
         instruction: exercise.instruction,
         durationMinutes: exercise.duration_minutes,
@@ -102,6 +108,7 @@ export class SprachbausteineService {
     }));
 
     return {
+      imageUrl: SprachbausteineService.TEIL2_IMAGE_URL,
       label: exercise.label,
       instruction: exercise.instruction,
       durationMinutes: exercise.durationMinutes,
