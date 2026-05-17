@@ -167,6 +167,24 @@ model ListeningAttempt {
   @@map("listening_attempts")
 }
 
+model SprachbausteineAttempt {
+  attempt_id       String    @id @default(uuid())
+  student_id       String
+  teil_id          String
+  modelltest_id    String?
+  status           String    @default("completed")
+  score            Int?
+  feedback         String?
+  answers          Json?
+  content_revision String?
+  duration_seconds Int?
+  created_at       DateTime  @default(now())
+  completed_at     DateTime?
+
+  @@index([student_id, teil_id])
+  @@map("sprachbausteine_attempts")
+}
+
 model LesenPassage {
   id         String    @id @default(uuid())
   title      String

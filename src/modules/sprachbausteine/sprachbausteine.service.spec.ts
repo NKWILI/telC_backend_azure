@@ -188,6 +188,10 @@ const mockPrisma = {
   sprachbausteineTeil2Exercise: {
     findFirst: jest.fn(),
   },
+  sprachbausteineAttempt: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+  },
 };
 
 describe('SprachbausteineService', () => {
@@ -316,7 +320,7 @@ describe('SprachbausteineService', () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
       mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
 
-      const result = await service.submit({
+      const result = await service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '1',
         answers: allCorrectTeil1,
@@ -332,7 +336,7 @@ describe('SprachbausteineService', () => {
         Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}a`]),
       );
 
-      const result = await service.submit({
+      const result = await service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '1',
         answers: allWrong,
@@ -345,7 +349,7 @@ describe('SprachbausteineService', () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
       mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(mockTeil2Exercise);
 
-      const result = await service.submit({
+      const result = await service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '2',
         answers: allCorrectTeil2,
@@ -358,8 +362,47 @@ describe('SprachbausteineService', () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submit({ modelltestNumber: 99, teil_id: '1', answers: {} }),
+        service.submit('student-1', { modelltestNumber: 99, teil_id: '1', answers: {} }),
       ).rejects.toThrow('Modelltest 99 not found');
+    });
+
+    it('persists an attempt row with student_id, teil_id, score, modelltest_id, answers', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
+
+      await service.submit('student-7', {
+        modelltestNumber: 1,
+        teil_id: '1',
+        answers: allCorrectTeil1,
+      });
+
+      expect(mockPrisma.sprachbausteineAttempt.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            student_id: 'student-7',
+            teil_id: '1',
+            modelltest_id: mockModelltest.id,
+            status: 'completed',
+            score: 100,
+            answers: allCorrectTeil1,
+          }),
+        }),
+      );
+    });
+
+    it('does not throw when DB insert fails — logs and returns score anyway', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
+      mockPrisma.sprachbausteineAttempt.create.mockRejectedValue(new Error('DB down'));
+
+      await expect(
+        service.submit('student-1', {
+          modelltestNumber: 1,
+          teil_id: '1',
+          answers: allCorrectTeil1,
+        }),
+      ).resolves.toEqual({ score: 100 });
     });
   });
 });

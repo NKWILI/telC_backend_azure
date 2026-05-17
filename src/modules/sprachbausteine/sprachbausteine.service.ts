@@ -114,6 +114,7 @@ export class SprachbausteineService {
   }
 
   async submit(
+    studentId: string,
     dto: SubmitSprachbausteineDto,
   ): Promise<SubmitSprachbausteineResponseDto> {
     const modelltest = await this.prisma.modelltest.findUnique({
@@ -122,13 +123,33 @@ export class SprachbausteineService {
     if (!modelltest) {
       throw new NotFoundException(`Modelltest ${dto.modelltestNumber} not found`);
     }
+
+    let score: number;
     if (dto.teil_id === '1') {
-      return { score: await this.scoreTeil1(modelltest.id, dto.answers) };
+      score = await this.scoreTeil1(modelltest.id, dto.answers);
+    } else if (dto.teil_id === '2') {
+      score = await this.scoreTeil2(modelltest.id, dto.answers);
+    } else {
+      throw new NotFoundException(`Unknown teil_id: ${dto.teil_id}`);
     }
-    if (dto.teil_id === '2') {
-      return { score: await this.scoreTeil2(modelltest.id, dto.answers) };
+
+    try {
+      await this.prisma.sprachbausteineAttempt.create({
+        data: {
+          student_id: studentId,
+          teil_id: dto.teil_id,
+          modelltest_id: modelltest.id,
+          status: 'completed',
+          score,
+          answers: dto.answers,
+          completed_at: new Date(),
+        },
+      });
+    } catch (err) {
+      this.logger.error(`DB error on submit: ${(err as Error).message}`);
     }
-    throw new NotFoundException(`Unknown teil_id: ${dto.teil_id}`);
+
+    return { score };
   }
 
   private async scoreTeil1(
