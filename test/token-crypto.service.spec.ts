@@ -53,6 +53,48 @@ describe('TokenCryptoService', () => {
     });
   });
 
+  describe('generateNumericCode', () => {
+    it('returns a string of the requested length', () => {
+      const code = service.generateNumericCode(6);
+
+      expect(code).toHaveLength(6);
+    });
+
+    it('returns only digits 0-9', () => {
+      for (let i = 0; i < 50; i++) {
+        const code = service.generateNumericCode(6);
+        expect(code).toMatch(/^\d{6}$/);
+      }
+    });
+
+    it('preserves leading zeros (always 6 chars even for small ints)', () => {
+      // Run many iterations; with 1M possible values, at least one
+      // out of 200 attempts should land below 100_000 (10% prob each).
+      let sawLeadingZero = false;
+      for (let i = 0; i < 200; i++) {
+        if (service.generateNumericCode(6).startsWith('0')) {
+          sawLeadingZero = true;
+          break;
+        }
+      }
+      expect(sawLeadingZero).toBe(true);
+    });
+
+    it('returns different values across calls', () => {
+      const codes = new Set<string>();
+      for (let i = 0; i < 20; i++) {
+        codes.add(service.generateNumericCode(6));
+      }
+      // 20 codes from a 1M space — collisions effectively impossible
+      expect(codes.size).toBe(20);
+    });
+
+    it('supports custom length', () => {
+      expect(service.generateNumericCode(4)).toMatch(/^\d{4}$/);
+      expect(service.generateNumericCode(8)).toMatch(/^\d{8}$/);
+    });
+  });
+
   describe('isExpired', () => {
     it('returns true for a past date', () => {
       const past = new Date(Date.now() - 1_000);

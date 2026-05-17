@@ -25,16 +25,22 @@ export class EmailService {
     });
   }
 
-  async sendPasswordResetEmail(to: string, rawToken: string): Promise<void> {
-    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+  async sendPasswordResetEmail(to: string, rawCode: string): Promise<void> {
     const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
-    const resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
+
+    const html = `
+      <p>Guten Tag,</p>
+      <p>Sie haben das Zurücksetzen Ihres Passworts angefordert. Ihr Bestätigungscode lautet:</p>
+      <p style="font-size: 32px; letter-spacing: 0.25em; font-weight: 700; text-align: center; margin: 24px 0; font-family: 'Courier New', monospace;">${rawCode}</p>
+      <p>Geben Sie diesen Code in der App ein, um ein neues Passwort festzulegen. Der Code ist <strong>10 Minuten</strong> gültig.</p>
+      <p>Falls Sie keine Zurücksetzung angefordert haben, ignorieren Sie diese E-Mail. Ihr Passwort bleibt unverändert.</p>
+    `;
 
     await this.resend.emails.send({
       from: emailFrom,
       to,
-      subject: 'Reset your password',
-      html: `<p>Click the link below to reset your password:</p><p><a href="${resetLink}">${resetLink}</a></p>`,
+      subject: 'Ihr Passwort-Bestätigungscode',
+      html,
     });
   }
 }

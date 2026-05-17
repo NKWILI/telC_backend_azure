@@ -20,7 +20,7 @@ import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
-const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 
 type VerificationStudentRecord = {
@@ -276,8 +276,8 @@ export class AuthService {
 
     if (!student) return GENERIC_RESPONSE;
 
-    const rawToken = this.tokenCrypto.generateToken();
-    const tokenHash = this.tokenCrypto.hashToken(rawToken);
+    const rawCode = this.tokenCrypto.generateNumericCode(6);
+    const tokenHash = this.tokenCrypto.hashToken(rawCode);
     const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
 
     await this.prisma.student.update({
@@ -289,7 +289,7 @@ export class AuthService {
     });
 
     try {
-      await this.emailService.sendPasswordResetEmail(dto.email, rawToken);
+      await this.emailService.sendPasswordResetEmail(dto.email, rawCode);
     } catch (err) {
       this.logger.warn(
         `forgotPassword: email delivery failed for ${dto.email}: ${(err as Error).message}`,

@@ -58,23 +58,53 @@ describe('EmailService', () => {
   });
 
   describe('sendPasswordResetEmail', () => {
-    it('always uses FRONTEND_URL (vitrine setting irrelevant)', async () => {
-      const service = new EmailService(
-        makeConfig({
-          RESEND_API_KEY: 'key',
-          EMAIL_FROM: 'noreply@example.com',
-          FRONTEND_URL: 'https://app.example.com',
-          VITRINE_URL: 'https://sprach-tau.vercel.app',
-        }),
-      );
+    const baseConfig = {
+      RESEND_API_KEY: 'key',
+      EMAIL_FROM: 'noreply@example.com',
+      FRONTEND_URL: 'https://app.example.com',
+      VITRINE_URL: 'https://sprach-tau.vercel.app',
+    };
+
+    it('renders the 6-digit code prominently in the HTML body', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
       const send = (service as any).resend.emails.send as jest.Mock;
 
-      await service.sendPasswordResetEmail('user@example.com', 'rawtoken');
+      await service.sendPasswordResetEmail('user@example.com', '042713');
 
       const arg = send.mock.calls[0][0];
-      expect(arg.html).toContain(
-        'https://app.example.com/reset-password?token=rawtoken',
-      );
+      expect(arg.html).toContain('042713');
+    });
+
+    it('does NOT include a /reset-password URL link', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendPasswordResetEmail('user@example.com', '042713');
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.html).not.toMatch(/reset-password\?token=/);
+      expect(arg.html).not.toContain('https://');
+    });
+
+    it('uses German copy (Code, Minuten)', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendPasswordResetEmail('user@example.com', '042713');
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.html).toMatch(/Code/i);
+      expect(arg.html).toMatch(/Minuten/i);
+    });
+
+    it('subject line is German', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendPasswordResetEmail('user@example.com', '042713');
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.subject).toMatch(/Passwort/i);
     });
   });
 });

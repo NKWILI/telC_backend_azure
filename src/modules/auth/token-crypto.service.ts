@@ -10,6 +10,11 @@ export class TokenCryptoService {
     return crypto.randomBytes(32).toString('hex');
   }
 
+  generateNumericCode(length: number): string {
+    const max = 10 ** length;
+    return crypto.randomInt(0, max).toString().padStart(length, '0');
+  }
+
   hashToken(raw: string): string {
     return crypto
       .createHmac('sha256', this.config.getOrThrow<string>('TOKEN_HMAC_SECRET'))

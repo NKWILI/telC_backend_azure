@@ -66,6 +66,7 @@ describe('AuthService', () => {
 
     tokenCryptoMock = {
       generateToken: jest.fn().mockReturnValue('raw-verification-token'),
+      generateNumericCode: jest.fn().mockReturnValue('123456'),
       hashToken: jest.fn().mockReturnValue('verification-token-hash'),
       isExpired: jest.fn().mockReturnValue(false),
     };
@@ -532,7 +533,7 @@ describe('AuthService', () => {
       ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
     });
 
-    it('creates a reset token that expires in approximately 1 hour', async () => {
+    it('creates a reset token that expires in approximately 10 minutes', async () => {
       prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
       prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
 
@@ -540,11 +541,34 @@ describe('AuthService', () => {
 
       const updateCall = prismaMock.student.update.mock.calls[0][0];
       const expiresAt: Date = updateCall.data.password_reset_expires;
-      const oneHourMs = 60 * 60 * 1000;
+      const tenMinutesMs = 10 * 60 * 1000;
       const now = Date.now();
 
-      expect(expiresAt.getTime()).toBeGreaterThan(now + oneHourMs - 5000);
-      expect(expiresAt.getTime()).toBeLessThan(now + oneHourMs + 5000);
+      expect(expiresAt.getTime()).toBeGreaterThan(now + tenMinutesMs - 5000);
+      expect(expiresAt.getTime()).toBeLessThan(now + tenMinutesMs + 5000);
+    });
+
+    it('generates the reset code via generateNumericCode(6), not generateToken', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await service.forgotPassword({ email: 'john.doe@example.com' } as any);
+
+      expect(tokenCryptoMock.generateNumericCode).toHaveBeenCalledWith(6);
+      expect(tokenCryptoMock.generateNumericCode).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends the raw 6-digit code to the email service', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({ id: 'student-1' });
+      prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+      tokenCryptoMock.generateNumericCode.mockReturnValueOnce('042713');
+
+      await service.forgotPassword({ email: 'john.doe@example.com' } as any);
+
+      expect(emailServiceMock.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'john.doe@example.com',
+        '042713',
+      );
     });
   });
 
