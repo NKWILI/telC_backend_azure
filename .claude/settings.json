@@ -51,12 +51,36 @@
       "Bash(curl -sS -i https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/api/reading/exercise)",
       "Bash(echo \"EXIT:$?\")",
       "PowerShell(cd \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\"; $env:CI = 'false'; npx prisma migrate dev --name add_auth_columns --create-only 2>&1)",
-      "PowerShell(cd \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure'; npm run prisma:studio\")"
+      "PowerShell(cd \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure'; npm run prisma:studio\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\" -Recurse -File -Name)",
+      "Bash(Select-Object -First 100)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(dir \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\\\\prisma\\\\migrations\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\" -Recurse -Directory -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "Bash(awk '{print $NF}')",
+      "Bash(not exist *)",
+      "Bash(Sort-Object Name)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPRÜFUNG\\\\SPRACHPRÜFUNG_AZURE\\\\telC_backend_azure\\\\prisma\\\\migrations\" -Directory | ForEach-Object { $files = Get-ChildItem $_.FullName -File; if \\($files.Count -eq 0\\) { \"EMPTY: $\\($_.Name\\)\" } else { \"OK: $\\($_.Name\\)\" } })",
+      "PowerShell(New-Item -ItemType Directory -Path \"c:\\\\Users\\\\ngeuk\\\\Desktop\\\\SPRACHPR�FUNG\\\\SPRACHPR�FUNG_AZURE\\\\telC_backend_azure\\\\prisma\\\\migrations\\\\20260503000000_remove_activation_codes_and_fix_indexes\" -Force)",
+      "Skill(build)",
+      "Skill(build:*)",
+      "PowerShell(npx prisma generate)",
+      "PowerShell(npx jest src/modules/sprachbausteine/sprachbausteine.service.spec.ts --no-coverage 2>&1)",
+      "PowerShell(npx jest --no-coverage 2>&1)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(npx jest src/shared/services/rate-limit.service.spec.ts --no-coverage 2>&1)",
+      "PowerShell(npx jest test/auth.service.spec.ts --no-coverage 2>&1)",
+      "PowerShell(npx jest test/email.service.spec.ts --no-coverage 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure",
       "C:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure\\src\\modules\\auth\\dto",
-      "c:\\Users\\ngeuk\\Desktop\\SPRACHPR�FUNG\\SPRACHPR�FUNG_AZURE\\telC_backend_azure\\prisma\\migrations"
+      "c:\\Users\\ngeuk\\Desktop\\SPRACHPR�FUNG\\SPRACHPR�FUNG_AZURE\\telC_backend_azure\\prisma\\migrations",
+      "c:\\Users\\ngeuk\\Desktop\\SPRACHPR�FUNG\\SPRACHPR�FUNG_AZURE\\telC_backend_azure"
     ]
   }
 }
