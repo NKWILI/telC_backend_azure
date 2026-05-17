@@ -11,6 +11,8 @@ export class RateLimitService {
   private readonly forgotPasswordWindowSeconds: number;
   private readonly verifyEmailPublicMaxAttempts: number;
   private readonly verifyEmailPublicWindowSeconds: number;
+  private readonly resetPasswordMaxAttempts: number;
+  private readonly resetPasswordWindowSeconds: number;
 
   constructor() {
     this.cache = new NodeCache();
@@ -43,6 +45,16 @@ export class RateLimitService {
       10,
     );
     this.verifyEmailPublicWindowSeconds = verifyEmailPublicWindowMinutes * 60;
+
+    this.resetPasswordMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_RESET_PASSWORD_MAX_ATTEMPTS || '20',
+      10,
+    );
+    const resetPasswordWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_RESET_PASSWORD_WINDOW_MINUTES || '15',
+      10,
+    );
+    this.resetPasswordWindowSeconds = resetPasswordWindowMinutes * 60;
   }
 
   /**
@@ -97,5 +109,24 @@ export class RateLimitService {
     }
 
     this.cache.set(cacheKey, current + 1, this.verifyEmailPublicWindowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/auth/reset-password. Throws 429 when exceeded.
+   * Key is typically the requester's IP address. Defends against random-spray
+   * brute-force against the 6-digit reset-code space.
+   */
+  checkResetPasswordLimit(key: string): void {
+    const cacheKey = `ratelimit:auth:reset-password:${key}`;
+    const current = this.cache.get<number>(cacheKey) || 0;
+
+    if (current >= this.resetPasswordMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.cache.set(cacheKey, current + 1, this.resetPasswordWindowSeconds);
   }
 }

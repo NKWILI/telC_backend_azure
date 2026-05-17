@@ -96,7 +96,11 @@ export class AuthController {
    * POST /api/auth/reset-password
    */
   @Post('reset-password')
-  async resetPassword(@Body() dto: ResetPasswordRequestDto): Promise<AuthTokenResponse> {
+  async resetPassword(
+    @Body() dto: ResetPasswordRequestDto,
+    @Ip() ip: string,
+  ): Promise<AuthTokenResponse> {
+    this.rateLimitService.checkResetPasswordLimit(ip || 'unknown');
     return this.authService.resetPassword(dto);
   }
 
