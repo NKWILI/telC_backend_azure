@@ -20,6 +20,7 @@ import {
 } from './dto';
 import { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
 import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
+import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
 @UseGuards(JwtAuthGuard)
 @ApiTags('Sprachbausteine')
@@ -47,6 +48,14 @@ export class SprachbausteineController {
     if (!student?.studentId) return [];
     const teil = teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
     return this.sprachbausteineService.getSessions(student.studentId, teil);
+  }
+
+  @Get('teils')
+  async getTeils(
+    @CurrentStudent() student: AccessTokenPayload | null,
+  ): Promise<ExerciseTypeDto[]> {
+    if (!student?.studentId) return [];
+    return this.sprachbausteineService.getTeils(student.studentId);
   }
 
   @Post('submit')

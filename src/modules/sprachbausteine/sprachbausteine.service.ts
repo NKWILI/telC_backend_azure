@@ -8,8 +8,28 @@ import type {
 } from './dto';
 import type { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
 import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
+import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
 const TEIL_IDS = ['1', '2'];
+
+const TEIL_CATALOG: Record<string, Omit<ExerciseTypeDto, 'progress'>> = {
+  '1': {
+    id: '1',
+    title: 'Teil 1',
+    subtitle: 'Lückentext mit Mehrfachauswahl',
+    prompt: 'Wählen Sie für jede Lücke die passende Antwort.',
+    part: 1,
+    durationMinutes: 18,
+  },
+  '2': {
+    id: '2',
+    title: 'Teil 2',
+    subtitle: 'Wortbank-Lückentext',
+    prompt: 'Ordnen Sie jeder Lücke das passende Wort aus dem Wortbank zu.',
+    part: 2,
+    durationMinutes: 18,
+  },
+};
 
 @Injectable()
 export class SprachbausteineService {
@@ -205,6 +225,37 @@ export class SprachbausteineService {
       if (answers[id] === val) correct++;
     }
     return Math.round((correct / total) * 100);
+  }
+
+  async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
+    const progress = await this.getProgressByTeil(studentId);
+    return TEIL_IDS.map((id) => ({
+      ...TEIL_CATALOG[id],
+      progress: progress[id] ?? 0,
+    }));
+  }
+
+  private async getProgressByTeil(
+    studentId: string,
+  ): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+    for (const id of TEIL_IDS) result[id] = 0;
+
+    try {
+      const rows = await this.prisma.sprachbausteineAttempt.findMany({
+        where: { student_id: studentId, status: 'completed' },
+        select: { teil_id: true },
+      });
+
+      for (const row of rows) {
+        if (TEIL_IDS.includes(row.teil_id)) {
+          result[row.teil_id] = 100;
+        }
+      }
+    } catch {
+      // ignore — return zeroed progress
+    }
+    return result;
   }
 
   async getSessions(

@@ -471,4 +471,49 @@ describe('SprachbausteineService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getTeils', () => {
+    it('returns 2 items with progress 0 when DB has no completed attempts', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+
+      const result = await service.getTeils('student-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ id: '1', progress: 0 });
+      expect(result[1]).toMatchObject({ id: '2', progress: 0 });
+    });
+
+    it('returns progress 100 for a Teil with completed attempts, 0 for others', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([
+        { teil_id: '2' },
+      ]);
+
+      const result = await service.getTeils('student-1');
+
+      expect(result.find((t) => t.id === '1')?.progress).toBe(0);
+      expect(result.find((t) => t.id === '2')?.progress).toBe(100);
+    });
+
+    it('returns required fields on every item', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+
+      const result = await service.getTeils('student-1');
+
+      for (const teil of result) {
+        expect(teil.id).toBeDefined();
+        expect(teil.title).toBeDefined();
+        expect(teil.durationMinutes).toBeDefined();
+        expect(typeof teil.progress).toBe('number');
+      }
+    });
+
+    it('returns progress 0 gracefully when DB throws', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockRejectedValue(new Error('boom'));
+
+      const result = await service.getTeils('student-1');
+
+      expect(result).toHaveLength(2);
+      expect(result.every((t) => t.progress === 0)).toBe(true);
+    });
+  });
 });
