@@ -10,6 +10,7 @@ import { ListeningModule } from './modules/listening/listening.module';
 import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine.module';
 import { LesenModule } from './modules/lesen/lesen.module';
 import { ModelltestsModule } from './modules/modelltests/modelltests.module';
+import { NewsletterModule } from './modules/newsletter/newsletter.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ModelltestsModule } from './modules/modelltests/modelltests.module';
     ModelltestsModule,
     SprachbausteineModule,
     LesenModule,
+    NewsletterModule,
   ],
   controllers: [AppController],
   providers: [AppService],

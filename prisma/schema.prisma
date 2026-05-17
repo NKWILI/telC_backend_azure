@@ -167,6 +167,18 @@ model ListeningAttempt {
   @@map("listening_attempts")
 }
 
+model NewsletterSubscriber {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  full_name       String
+  consent_version String
+  consented_at    DateTime @default(now())
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@map("newsletter_subscribers")
+}
+
 model SprachbausteineAttempt {
   attempt_id       String    @id @default(uuid())
   student_id       String
