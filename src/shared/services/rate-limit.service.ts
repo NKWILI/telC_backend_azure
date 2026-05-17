@@ -9,6 +9,8 @@ export class RateLimitService {
   private readonly writingWindowSeconds: number;
   private readonly forgotPasswordMaxAttempts: number;
   private readonly forgotPasswordWindowSeconds: number;
+  private readonly verifyEmailPublicMaxAttempts: number;
+  private readonly verifyEmailPublicWindowSeconds: number;
 
   constructor() {
     this.cache = new NodeCache();
@@ -31,6 +33,16 @@ export class RateLimitService {
       10,
     );
     this.forgotPasswordWindowSeconds = forgotPasswordWindowMinutes * 60;
+
+    this.verifyEmailPublicMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_VERIFY_EMAIL_PUBLIC_MAX_ATTEMPTS || '10',
+      10,
+    );
+    const verifyEmailPublicWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_VERIFY_EMAIL_PUBLIC_WINDOW_MINUTES || '15',
+      10,
+    );
+    this.verifyEmailPublicWindowSeconds = verifyEmailPublicWindowMinutes * 60;
   }
 
   /**
@@ -67,5 +79,23 @@ export class RateLimitService {
     }
 
     this.cache.set(cacheKey, current + 1, this.forgotPasswordWindowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/auth/verify-email-public. Throws 429 when exceeded.
+   * Key is typically the requester's IP address.
+   */
+  checkVerifyEmailPublicLimit(key: string): void {
+    const cacheKey = `ratelimit:auth:verify-email-public:${key}`;
+    const current = this.cache.get<number>(cacheKey) || 0;
+
+    if (current >= this.verifyEmailPublicMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.cache.set(cacheKey, current + 1, this.verifyEmailPublicWindowSeconds);
   }
 }

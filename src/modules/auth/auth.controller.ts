@@ -16,6 +16,7 @@ import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { RegisterRequestDto } from './dto/register-request.dto';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+import { VerifyEmailPublicRequestDto } from './dto/verify-email-public-request.dto';
 import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { ResetPasswordRequestDto } from './dto/reset-password-request.dto';
 import { GoogleLoginRequestDto } from './dto/google-login-request.dto';
@@ -63,6 +64,20 @@ export class AuthController {
     @Body() dto: VerifyEmailRequestDto,
   ): Promise<AuthTokenResponse> {
     return this.authService.verifyEmail(dto);
+  }
+
+  /**
+   * POST /api/auth/verify-email-public
+   * Public endpoint for the marketing-site verify-email page.
+   * Flips email_verified=true. No JWT, no device session.
+   */
+  @Post('verify-email-public')
+  async verifyEmailPublic(
+    @Body() dto: VerifyEmailPublicRequestDto,
+    @Ip() ip: string,
+  ): Promise<{ verified: true }> {
+    this.rateLimitService.checkVerifyEmailPublicLimit(ip || 'unknown');
+    return this.authService.verifyEmailPublic(dto.token);
   }
 
   /**

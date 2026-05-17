@@ -416,6 +416,89 @@ describe('AuthService', () => {
     });
   });
 
+  describe('verifyEmailPublic', () => {
+    const unverifiedStudent = {
+      id: 'student-1',
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john.doe@example.com',
+      email_verified: false,
+      email_verification_expires: new Date(Date.now() + 60_000),
+    };
+
+    const verifiedStudent = {
+      id: 'student-1',
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john.doe@example.com',
+      email_verified: true,
+      email_verification_expires: new Date(Date.now() + 60_000),
+    };
+
+    it('marks unverified student as verified and returns { verified: true }', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce(unverifiedStudent);
+      prismaMock.student.update.mockResolvedValueOnce({
+        ...unverifiedStudent,
+        email_verified: true,
+      });
+
+      await expect(service.verifyEmailPublic('raw-token')).resolves.toEqual({
+        verified: true,
+      });
+
+      expect(prismaMock.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { email_verified: true },
+      });
+    });
+
+    it('is idempotent — already-verified student returns { verified: true } without DB update', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce(verifiedStudent);
+
+      await expect(service.verifyEmailPublic('raw-token')).resolves.toEqual({
+        verified: true,
+      });
+
+      expect(prismaMock.student.update).not.toHaveBeenCalled();
+    });
+
+    it('does not issue JWT or create a device session', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce(unverifiedStudent);
+      prismaMock.student.update.mockResolvedValueOnce({
+        ...unverifiedStudent,
+        email_verified: true,
+      });
+
+      const result = await service.verifyEmailPublic('raw-token');
+
+      expect(result).not.toHaveProperty('accessToken');
+      expect(result).not.toHaveProperty('refreshToken');
+      expect(tokenServiceMock.generateTokenPair).not.toHaveBeenCalled();
+      expect(txMock.deviceSession.upsert).not.toHaveBeenCalled();
+    });
+
+    it('throws VERIFICATION_TOKEN_INVALID for unknown token hash', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce(null);
+
+      await expect(service.verifyEmailPublic('raw-token')).rejects.toMatchObject({
+        response: { message: 'VERIFICATION_TOKEN_INVALID' },
+      });
+    });
+
+    it('throws VERIFICATION_TOKEN_EXPIRED for expired token (unverified student)', async () => {
+      prismaMock.student.findFirst.mockResolvedValueOnce({
+        ...unverifiedStudent,
+        email_verification_expires: new Date(Date.now() - 1_000),
+      });
+      tokenCryptoMock.isExpired.mockReturnValueOnce(true);
+
+      await expect(service.verifyEmailPublic('raw-token')).rejects.toMatchObject({
+        response: { message: 'VERIFICATION_TOKEN_EXPIRED' },
+      });
+      expect(prismaMock.student.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('forgotPassword', () => {
     it('returns generic success when email not found', async () => {
       prismaMock.student.findUnique.mockResolvedValueOnce(null);

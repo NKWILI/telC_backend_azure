@@ -235,6 +235,37 @@ export class AuthService {
     return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
   }
 
+  async verifyEmailPublic(token: string): Promise<{ verified: true }> {
+    if (!token || typeof token !== 'string') {
+      throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
+    }
+
+    const tokenHash = this.tokenCrypto.hashToken(token);
+    const student = (await this.prisma.student.findFirst({
+      where: { email_verification_token: tokenHash },
+    })) as VerificationStudentRecord | null;
+
+    if (!student) {
+      throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
+    }
+
+    if (
+      student.email_verification_expires &&
+      this.tokenCrypto.isExpired(student.email_verification_expires)
+    ) {
+      throw new BadRequestException('VERIFICATION_TOKEN_EXPIRED');
+    }
+
+    if (!student.email_verified) {
+      await this.prisma.student.update({
+        where: { id: student.id },
+        data: { email_verified: true },
+      });
+    }
+
+    return { verified: true };
+  }
+
   async forgotPassword(dto: import('./dto/forgot-password-request.dto').ForgotPasswordRequestDto): Promise<{ message: string }> {
     const GENERIC_RESPONSE = { message: 'If that email exists, a reset link was sent.' };
 
