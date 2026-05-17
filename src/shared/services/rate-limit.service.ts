@@ -13,6 +13,10 @@ export class RateLimitService {
   private readonly verifyEmailPublicWindowSeconds: number;
   private readonly resetPasswordMaxAttempts: number;
   private readonly resetPasswordWindowSeconds: number;
+  private readonly newsletterIpMaxAttempts: number;
+  private readonly newsletterIpWindowSeconds: number;
+  private readonly newsletterEmailMaxAttempts: number;
+  private readonly newsletterEmailWindowSeconds: number;
 
   constructor() {
     this.cache = new NodeCache();
@@ -55,6 +59,26 @@ export class RateLimitService {
       10,
     );
     this.resetPasswordWindowSeconds = resetPasswordWindowMinutes * 60;
+
+    this.newsletterIpMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_NEWSLETTER_IP_MAX_ATTEMPTS || '5',
+      10,
+    );
+    const newsletterIpWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_NEWSLETTER_IP_WINDOW_MINUTES || '15',
+      10,
+    );
+    this.newsletterIpWindowSeconds = newsletterIpWindowMinutes * 60;
+
+    this.newsletterEmailMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_NEWSLETTER_EMAIL_MAX_ATTEMPTS || '2',
+      10,
+    );
+    const newsletterEmailWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_NEWSLETTER_EMAIL_WINDOW_MINUTES || '15',
+      10,
+    );
+    this.newsletterEmailWindowSeconds = newsletterEmailWindowMinutes * 60;
   }
 
   /**
@@ -128,5 +152,33 @@ export class RateLimitService {
     }
 
     this.cache.set(cacheKey, current + 1, this.resetPasswordWindowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/newsletter/subscribe. Throws 429 when exceeded.
+   * Enforces both per-IP and per-email caps. Per-email defends against
+   * targeted spam from rotating IPs; per-IP defends against bursts.
+   */
+  checkNewsletterSubscribeLimit(ipKey: string, emailKey: string): void {
+    const emailCacheKey = `ratelimit:newsletter:subscribe:email:${emailKey}`;
+    const emailCurrent = this.cache.get<number>(emailCacheKey) || 0;
+    if (emailCurrent >= this.newsletterEmailMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    const ipCacheKey = `ratelimit:newsletter:subscribe:ip:${ipKey}`;
+    const ipCurrent = this.cache.get<number>(ipCacheKey) || 0;
+    if (ipCurrent >= this.newsletterIpMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.cache.set(emailCacheKey, emailCurrent + 1, this.newsletterEmailWindowSeconds);
+    this.cache.set(ipCacheKey, ipCurrent + 1, this.newsletterIpWindowSeconds);
   }
 }

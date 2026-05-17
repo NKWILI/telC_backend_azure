@@ -11,6 +11,10 @@ describe('RateLimitService', () => {
     delete process.env.RATE_LIMIT_VERIFY_EMAIL_PUBLIC_WINDOW_MINUTES;
     delete process.env.RATE_LIMIT_RESET_PASSWORD_MAX_ATTEMPTS;
     delete process.env.RATE_LIMIT_RESET_PASSWORD_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_NEWSLETTER_IP_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_NEWSLETTER_IP_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_NEWSLETTER_EMAIL_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_NEWSLETTER_EMAIL_WINDOW_MINUTES;
     service = new RateLimitService();
   });
 
@@ -119,6 +123,67 @@ describe('RateLimitService', () => {
       }
       // forgot-password exhausted; reset-password still has its own budget.
       expect(() => service.checkResetPasswordLimit('1.2.3.4')).not.toThrow();
+    });
+  });
+
+  describe('checkNewsletterSubscribeLimit', () => {
+    it('allows 2 calls with the same email (per-email cap)', () => {
+      for (let i = 0; i < 2; i++) {
+        expect(() =>
+          service.checkNewsletterSubscribeLimit('1.2.3.4', 'a@b.com'),
+        ).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 3rd call with the same email', () => {
+      service.checkNewsletterSubscribeLimit('1.2.3.4', 'a@b.com');
+      service.checkNewsletterSubscribeLimit('1.2.3.4', 'a@b.com');
+
+      try {
+        service.checkNewsletterSubscribeLimit('1.2.3.4', 'a@b.com');
+        fail('expected HttpException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+        expect((err as HttpException).message).toBe('RATE_LIMIT_EXCEEDED');
+      }
+    });
+
+    it('allows 5 calls with different emails from the same IP', () => {
+      for (let i = 0; i < 5; i++) {
+        expect(() =>
+          service.checkNewsletterSubscribeLimit('1.2.3.4', `user${i}@example.com`),
+        ).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 6th call from the same IP even with a new email', () => {
+      for (let i = 0; i < 5; i++) {
+        service.checkNewsletterSubscribeLimit('1.2.3.4', `user${i}@example.com`);
+      }
+
+      expect(() =>
+        service.checkNewsletterSubscribeLimit('1.2.3.4', 'fresh@example.com'),
+      ).toThrow(HttpException);
+    });
+
+    it('isolates limits per IP', () => {
+      for (let i = 0; i < 5; i++) {
+        service.checkNewsletterSubscribeLimit('1.1.1.1', `user${i}@example.com`);
+      }
+      expect(() =>
+        service.checkNewsletterSubscribeLimit('2.2.2.2', 'fresh@example.com'),
+      ).not.toThrow();
+    });
+
+    it('uses a separate cache namespace from forgot-password and reset-password', () => {
+      for (let i = 0; i < 5; i++) {
+        service.checkForgotPasswordLimit('1.2.3.4');
+      }
+      // forgot-password is exhausted; newsletter has its own counter.
+      expect(() =>
+        service.checkNewsletterSubscribeLimit('1.2.3.4', 'fresh@example.com'),
+      ).not.toThrow();
     });
   });
 });
