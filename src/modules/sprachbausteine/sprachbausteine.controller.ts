@@ -19,6 +19,7 @@ import {
   SubmitSprachbausteineResponseDto,
 } from './dto';
 import { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
+import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
 
 @UseGuards(JwtAuthGuard)
 @ApiTags('Sprachbausteine')
@@ -35,6 +36,17 @@ export class SprachbausteineController {
     @Query('modelltest', new DefaultValuePipe(1), ParseIntPipe) modelltest: number,
   ): Promise<SprachbausteineExerciseResponseDto> {
     return this.sprachbausteineService.getExercise(modelltest);
+  }
+
+  @Get('sessions')
+  @ApiQuery({ name: 'teilNumber', required: false, schema: { type: 'string', enum: ['1', '2'] } })
+  async getSessions(
+    @CurrentStudent() student: AccessTokenPayload | null,
+    @Query('teilNumber') teilNumber?: string,
+  ): Promise<ExerciseAttemptDto[]> {
+    if (!student?.studentId) return [];
+    const teil = teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
+    return this.sprachbausteineService.getSessions(student.studentId, teil);
   }
 
   @Post('submit')

@@ -405,4 +405,70 @@ describe('SprachbausteineService', () => {
       ).resolves.toEqual({ score: 100 });
     });
   });
+
+  describe('getSessions', () => {
+    it('returns empty array when there are no attempts', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+
+      const result = await service.getSessions('student-1');
+
+      expect(result).toEqual([]);
+    });
+
+    it('maps DB rows to ExerciseAttemptDto (camelCase)', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([
+        {
+          attempt_id: 'uuid-sb-1',
+          created_at: new Date('2026-04-20T14:32:01.234Z'),
+          completed_at: new Date('2026-04-20T14:40:00.000Z'),
+          score: 72,
+          feedback: 'Bon progrès',
+          duration_seconds: 540,
+        },
+      ]);
+
+      const result = await service.getSessions('student-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        id: 'uuid-sb-1',
+        score: 72,
+        feedback: 'Bon progrès',
+        durationSeconds: 540,
+      });
+      expect(result[0].dateLabel).toBeDefined();
+    });
+
+    it('filters by teil_id when teilNumber is provided', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+
+      await service.getSessions('student-1', 2);
+
+      expect(mockPrisma.sprachbausteineAttempt.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            student_id: 'student-1',
+            teil_id: '2',
+          }),
+        }),
+      );
+    });
+
+    it('does not apply teil_id filter when teilNumber is omitted', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+
+      await service.getSessions('student-1');
+
+      const callArg = mockPrisma.sprachbausteineAttempt.findMany.mock.calls[0][0];
+      expect(callArg.where).not.toHaveProperty('teil_id');
+    });
+
+    it('returns empty array gracefully when DB throws', async () => {
+      mockPrisma.sprachbausteineAttempt.findMany.mockRejectedValue(new Error('boom'));
+
+      const result = await service.getSessions('student-1');
+
+      expect(result).toEqual([]);
+    });
+  });
 });

@@ -7,6 +7,9 @@ import type {
   SubmitSprachbausteineResponseDto,
 } from './dto';
 import type { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
+import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
+
+const TEIL_IDS = ['1', '2'];
 
 @Injectable()
 export class SprachbausteineService {
@@ -202,5 +205,77 @@ export class SprachbausteineService {
       if (answers[id] === val) correct++;
     }
     return Math.round((correct / total) * 100);
+  }
+
+  async getSessions(
+    studentId: string,
+    teilNumber?: number,
+    limit = 50,
+  ): Promise<ExerciseAttemptDto[]> {
+    try {
+      const teilId =
+        teilNumber !== undefined && TEIL_IDS.includes(String(teilNumber))
+          ? String(teilNumber)
+          : undefined;
+
+      const rows = await this.prisma.sprachbausteineAttempt.findMany({
+        where: {
+          student_id: studentId,
+          ...(teilId ? { teil_id: teilId } : {}),
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        select: {
+          attempt_id: true,
+          created_at: true,
+          completed_at: true,
+          score: true,
+          feedback: true,
+          duration_seconds: true,
+        },
+      });
+
+      return rows.map((row) => this.mapRowToAttemptDto(row));
+    } catch (err) {
+      this.logger.error(`Error in getSessions: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  private mapRowToAttemptDto(row: {
+    attempt_id: string;
+    created_at?: Date | string | null;
+    completed_at?: Date | string | null;
+    score?: number | null;
+    feedback?: string | null;
+    duration_seconds?: number | null;
+  }): ExerciseAttemptDto {
+    const toIso = (d: Date | string | null | undefined) =>
+      d ? (d instanceof Date ? d.toISOString() : d) : '';
+    const date = toIso(row.completed_at) || toIso(row.created_at);
+    return {
+      id: row.attempt_id,
+      date: date || undefined,
+      dateLabel: date ? this.formatDateLabel(date) : undefined,
+      score: row.score ?? undefined,
+      feedback: row.feedback ?? undefined,
+      durationSeconds: row.duration_seconds ?? undefined,
+    };
+  }
+
+  private formatDateLabel(isoDate: string): string {
+    const d = new Date(isoDate);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (dateOnly.getTime() === today.getTime()) return 'Heute';
+    if (dateOnly.getTime() === yesterday.getTime()) return 'Gestern';
+    return d.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   }
 }
