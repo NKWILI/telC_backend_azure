@@ -8,9 +8,11 @@ import {
   UseGuards,
   UnauthorizedException,
   HttpException,
+  Ip,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
+import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { RegisterRequestDto } from './dto/register-request.dto';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
@@ -40,6 +42,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   /**
@@ -66,7 +69,11 @@ export class AuthController {
    * POST /api/auth/forgot-password
    */
   @Post('forgot-password')
-  async forgotPassword(@Body() dto: ForgotPasswordRequestDto): Promise<{ message: string }> {
+  async forgotPassword(
+    @Body() dto: ForgotPasswordRequestDto,
+    @Ip() ip: string,
+  ): Promise<{ message: string }> {
+    this.rateLimitService.checkForgotPasswordLimit(ip || 'unknown');
     return this.authService.forgotPassword(dto);
   }
 

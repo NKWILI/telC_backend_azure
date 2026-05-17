@@ -6,6 +6,7 @@ import { EmailService } from './email.service';
 import { GoogleService } from './google.service';
 import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { RateLimitService } from '../../shared/services/rate-limit.service';
 
 @Module({
   controllers: [AuthController],
@@ -16,6 +17,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
     GoogleService,
     AuthService,
     JwtAuthGuard,
+    RateLimitService,
   ],
   exports: [TokenService, AuthService],
 })
