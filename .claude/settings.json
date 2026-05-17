@@ -74,7 +74,14 @@
       "PowerShell(npm run build 2>&1)",
       "PowerShell(npx jest src/shared/services/rate-limit.service.spec.ts --no-coverage 2>&1)",
       "PowerShell(npx jest test/auth.service.spec.ts --no-coverage 2>&1)",
-      "PowerShell(npx jest test/email.service.spec.ts --no-coverage 2>&1)"
+      "PowerShell(npx jest test/email.service.spec.ts --no-coverage 2>&1)",
+      "PowerShell($direct = \\(Get-Content .env | Where-Object { $_ -match '^DIRECT_URL=' }\\) -replace '^DIRECT_URL=', '' -replace '^\"|\"$', ''; if \\(-not $direct\\) { Write-Output \"ERROR: DIRECT_URL not found in .env\"; exit 1 }; $env:DATABASE_URL = $direct; Write-Output \"Running: prisma migrate deploy \\(via DIRECT_URL\\)\"; npx --yes prisma migrate deploy)",
+      "PowerShell($raw = \\(Get-Content .env | Where-Object { $_ -match '^DIRECT_URL=' }\\); $val = $raw -replace '^DIRECT_URL=', ''; Write-Output \"raw line length: $\\($raw.Length\\)\"; Write-Output \"val length: $\\($val.Length\\)\"; if \\($val.Length -gt 0\\) { Write-Output \"first 12 chars: $\\($val.Substring\\(0, [Math]::Min\\(12, $val.Length\\)\\)\\)\"; Write-Output \"last char ascii: $\\([int][char]$val[$val.Length-1]\\)\"; Write-Output \"first char ascii: $\\([int][char]$val[0]\\)\" })",
+      "PowerShell(npx --yes prisma migrate deploy)",
+      "PowerShell(npx --yes prisma migrate status)",
+      "Skill(idea-refine)",
+      "Skill(idea-refine:*)",
+      "PowerShell(npx jest test/token-crypto.service.spec.ts test/auth.service.spec.ts test/email.service.spec.ts --no-coverage 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure",
