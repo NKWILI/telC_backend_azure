@@ -308,101 +308,96 @@ describe('SprachbausteineService', () => {
   });
 
   describe('submit', () => {
-    const allCorrectTeil1 = Object.fromEntries(
-      Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}b`]),
-    );
-    const allCorrectTeil2 = {
-      '31': 'wa', '32': 'wm', '33': 'wd', '34': 'wc', '35': 'wo',
-      '36': 'wn', '37': 'wg', '38': 'we', '39': 'wh', '40': 'wl',
-    };
-
-    it('Teil 1 — all correct answers → score 100', async () => {
+    it('returns score from dto for Teil 1', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
 
       const result = await service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '1',
-        answers: allCorrectTeil1,
-      });
+        score: 73,
+      } as any);
 
-      expect(result).toEqual({ score: 100 });
+      expect(result).toEqual({ score: 73 });
     });
 
-    it('Teil 1 — all wrong answers → score 0', async () => {
+    it('returns score from dto for Teil 2', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
-      const allWrong = Object.fromEntries(
-        Array.from({ length: 10 }, (_, i) => [String(21 + i), `${21 + i}a`]),
-      );
-
-      const result = await service.submit('student-1', {
-        modelltestNumber: 1,
-        teil_id: '1',
-        answers: allWrong,
-      });
-
-      expect(result).toEqual({ score: 0 });
-    });
-
-    it('Teil 2 — all correct answers → score 100', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(mockTeil2Exercise);
 
       const result = await service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '2',
-        answers: allCorrectTeil2,
-      });
+        score: 0,
+      } as any);
 
-      expect(result).toEqual({ score: 100 });
+      expect(result).toEqual({ score: 0 });
     });
 
     it('throws NotFoundException when modelltest number does not exist', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submit('student-1', { modelltestNumber: 99, teil_id: '1', answers: {} }),
+        service.submit('student-1', { modelltestNumber: 99, teil_id: '1', score: 50 } as any),
       ).rejects.toThrow('Modelltest 99 not found');
     });
 
-    it('persists an attempt row with student_id, teil_id, score, modelltest_id, answers', async () => {
+    it('persists an attempt row with student_id, teil_id, score, modelltest_id (no answers)', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
       mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
 
       await service.submit('student-7', {
         modelltestNumber: 1,
         teil_id: '1',
-        answers: allCorrectTeil1,
-      });
+        score: 73,
+      } as any);
 
-      expect(mockPrisma.sprachbausteineAttempt.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            student_id: 'student-7',
-            teil_id: '1',
-            modelltest_id: mockModelltest.id,
-            status: 'completed',
-            score: 100,
-            answers: allCorrectTeil1,
-          }),
-        }),
-      );
+      expect(mockPrisma.sprachbausteineAttempt.create).toHaveBeenCalled();
+      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
+      expect(callArg.data).toEqual(expect.objectContaining({
+        student_id: 'student-7',
+        teil_id: '1',
+        modelltest_id: mockModelltest.id,
+        status: 'completed',
+        score: 73,
+      }));
+      expect(callArg.data).not.toHaveProperty('answers');
     });
 
     it('does not throw when DB insert fails — logs and returns score anyway', async () => {
       mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(mockTeil1Exercise);
       mockPrisma.sprachbausteineAttempt.create.mockRejectedValue(new Error('DB down'));
 
       await expect(
-        service.submit('student-1', {
-          modelltestNumber: 1,
-          teil_id: '1',
-          answers: allCorrectTeil1,
-        }),
-      ).resolves.toEqual({ score: 100 });
+        service.submit('student-1', { modelltestNumber: 1, teil_id: '1', score: 50 } as any),
+      ).resolves.toEqual({ score: 50 });
+    });
+
+    it('persists duration_seconds when provided', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
+
+      await service.submit('student-9', {
+        modelltestNumber: 1,
+        teil_id: '1',
+        score: 80,
+        durationSeconds: 540,
+      } as any);
+
+      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
+      expect(callArg.data.duration_seconds).toBe(540);
+    });
+
+    it('persists duration_seconds as null when omitted', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
+      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
+
+      await service.submit('student-10', {
+        modelltestNumber: 1,
+        teil_id: '1',
+        score: 60,
+      } as any);
+
+      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
+      expect(callArg.data.duration_seconds).toBeNull();
     });
   });
 

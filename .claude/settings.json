@@ -83,7 +83,9 @@
       "Skill(idea-refine:*)",
       "PowerShell(npx jest test/token-crypto.service.spec.ts test/auth.service.spec.ts test/email.service.spec.ts --no-coverage 2>&1)",
       "PowerShell(npx prisma generate 2>&1)",
-      "PowerShell(npx jest src/modules/newsletter --no-coverage 2>&1)"
+      "PowerShell(npx jest src/modules/newsletter --no-coverage 2>&1)",
+      "Skill(plan)",
+      "Skill(plan:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ngeuk\\Desktop\\SPRACHPRÜFUNG\\SPRACHPRÜFUNG_AZURE\\telC_backend_azure",

@@ -147,14 +147,7 @@ export class SprachbausteineService {
       throw new NotFoundException(`Modelltest ${dto.modelltestNumber} not found`);
     }
 
-    let score: number;
-    if (dto.teil_id === '1') {
-      score = await this.scoreTeil1(modelltest.id, dto.answers);
-    } else if (dto.teil_id === '2') {
-      score = await this.scoreTeil2(modelltest.id, dto.answers);
-    } else {
-      throw new NotFoundException(`Unknown teil_id: ${dto.teil_id}`);
-    }
+    const score = dto.score;
 
     try {
       await this.prisma.sprachbausteineAttempt.create({
@@ -163,8 +156,8 @@ export class SprachbausteineService {
           teil_id: dto.teil_id,
           modelltest_id: modelltest.id,
           status: 'completed',
-          score,
-          answers: dto.answers,
+          score: score,
+          duration_seconds: dto.durationSeconds ?? null,
           completed_at: new Date(),
         },
       });
@@ -175,57 +168,7 @@ export class SprachbausteineService {
     return { score };
   }
 
-  private async scoreTeil1(
-    modelltestId: string,
-    answers: Record<string, string>,
-  ): Promise<number> {
-    const exercise = await this.prisma.sprachbausteineExercise.findFirst({
-      where: { modelltest_id: modelltestId },
-      include: { gaps: { include: { options: { orderBy: { sort_order: 'asc' } } } } },
-    });
-    if (!exercise) return 0;
-    const letters = ['a', 'b', 'c'];
-    const answerKey: Record<string, string> = {};
-    for (const gap of exercise.gaps) {
-      const correct = gap.options.find((o) => o.is_correct);
-      if (correct) answerKey[gap.gap_key] = `${gap.gap_key}${letters[correct.sort_order]}`;
-    }
-    return this.computeScore(answers, answerKey);
-  }
-
-  private async scoreTeil2(
-    modelltestId: string,
-    answers: Record<string, string>,
-  ): Promise<number> {
-    const exercise = await this.prisma.sprachbausteineTeil2Exercise.findFirst({
-      where: { modelltest_id: modelltestId },
-      include: { words: true, gaps: true },
-    });
-    if (!exercise) return 0;
-    const wordIdMap = new Map<string, string>();
-    for (const w of exercise.words) {
-      wordIdMap.set(w.id, 'w' + String.fromCharCode(97 + w.sortOrder));
-    }
-    const answerKey: Record<string, string> = {};
-    for (const g of exercise.gaps) {
-      const wordId = wordIdMap.get(g.correctWordId);
-      if (wordId) answerKey[g.gapKey] = wordId;
-    }
-    return this.computeScore(answers, answerKey);
-  }
-
-  private computeScore(
-    answers: Record<string, string>,
-    answerKey: Record<string, string>,
-  ): number {
-    const total = Object.keys(answerKey).length;
-    if (total === 0) return 0;
-    let correct = 0;
-    for (const [id, val] of Object.entries(answerKey)) {
-      if (answers[id] === val) correct++;
-    }
-    return Math.round((correct / total) * 100);
-  }
+  
 
   async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
     const progress = await this.getProgressByTeil(studentId);
