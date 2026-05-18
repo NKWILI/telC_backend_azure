@@ -142,7 +142,9 @@ model WritingAttempt {
   status            String    @default("pending")
   score             Int?
   feedback          String?
+  corrected_text    String?
   corrections       Json?
+  diff              Json?
   duration_seconds  Int?
   notification_sent Boolean   @default(false)
   created_at        DateTime  @default(now())

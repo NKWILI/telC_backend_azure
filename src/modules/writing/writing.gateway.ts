@@ -9,6 +9,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TokenService } from '../auth/token.service';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 
+export type DiffOp = {
+  op: 'equal' | 'delete' | 'insert';
+  text: string;
+};
+
 /** Payload for correction_ready event (spec §7.2). */
 export interface CorrectionReadyPayload {
   attemptId: string;
@@ -16,6 +21,9 @@ export interface CorrectionReadyPayload {
   status: string;
   score?: number;
   feedback?: string;
+  originalText?: string;
+  correctedText?: string;
+  diff?: DiffOp[];
   durationSeconds?: number;
   corrections?: Array<{
     original: string;

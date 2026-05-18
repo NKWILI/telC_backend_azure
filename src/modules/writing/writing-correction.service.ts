@@ -1,7 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { diffWords } from 'diff';
 import { PrismaService } from '../../shared/services/prisma.service';
-import { WritingGateway, CorrectionReadyPayload } from './writing.gateway';
-import { GeminiService } from '../speaking/services/gemini.service';
+import {
+  WritingGateway,
+  CorrectionReadyPayload,
+  DiffOp,
+} from './writing.gateway';
+import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
+import type { ModelService } from './services/model-service.interface';
 
 export interface CorrectionJobData {
   attemptId: string;
@@ -13,13 +19,16 @@ export interface CorrectionJobData {
 
 const STUB_SCORE = 75;
 const STUB_FEEDBACK = 'Stub feedback. Echte Korrektur folgt.';
-const GEMINI_TIMEOUT_MS = 28000;
+const STUB_CORRECTED_TEXT = '';
+const STUB_DIFF: DiffOp[] = [];
+const MODEL_TIMEOUT_MS = 28000;
 
 const ALLOWED_ERROR_TYPES = ['grammar', 'vocabulary', 'spelling', 'style'];
 
 export interface ParsedWritingCorrection {
   score: number;
   feedback: string;
+  correctedText: string;
   corrections: Array<{
     original: string;
     corrected: string;
@@ -35,11 +44,11 @@ export class WritingCorrectionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: WritingGateway,
-    private readonly geminiService: GeminiService,
+    @Inject(MODEL_SERVICE_TOKEN) private readonly modelService: ModelService,
   ) {}
 
   /**
-   * Run correction via Gemini; on timeout/API/parse error fall back to stub.
+   * Run correction via the configured model; on timeout/API/parse error fall back to stub.
    * Updates writing_attempts and emits correction_ready. Does not throw.
    */
   async runCorrection(data: CorrectionJobData): Promise<void> {
@@ -51,16 +60,23 @@ export class WritingCorrectionService {
     let parsed: ParsedWritingCorrection | null = null;
     try {
       const prompt = this.buildWritingPrompt(content);
-      const responseText = await this.callGeminiWithTimeout(prompt);
+      const responseText = await this.callModelWithTimeout(prompt);
       parsed = this.parseWritingResponse(responseText);
     } catch (err) {
       this.logger.warn(
-        `Gemini correction failed for attempt ${attemptId}, using stub: ${(err as Error).message}`,
+        `Model correction failed for attempt ${attemptId}, using stub: ${(err as Error).message}`,
       );
     }
 
     const score = parsed?.score ?? STUB_SCORE;
     const feedback = parsed?.feedback ?? STUB_FEEDBACK;
+    const correctedText = parsed?.correctedText ?? STUB_CORRECTED_TEXT;
+    const diff: DiffOp[] = correctedText
+      ? diffWords(content, correctedText).map((part) => ({
+          op: part.added ? 'insert' : part.removed ? 'delete' : 'equal',
+          text: part.value,
+        }))
+      : STUB_DIFF;
     const correctionsForDb = parsed?.corrections ?? [];
     const correctionsForPayload: CorrectionReadyPayload['corrections'] =
       correctionsForDb.map((c) => ({
@@ -77,6 +93,8 @@ export class WritingCorrectionService {
           status: 'completed',
           score,
           feedback,
+          corrected_text: correctedText,
+          diff,
           duration_seconds: durationSeconds,
           completed_at: new Date(completedAt),
           ...(correctionsForDb.length > 0
@@ -91,6 +109,9 @@ export class WritingCorrectionService {
         status: 'completed',
         score,
         feedback,
+        originalText: content,
+        correctedText,
+        diff,
         durationSeconds,
         corrections: correctionsForPayload,
       };
@@ -109,6 +130,7 @@ export class WritingCorrectionService {
 Evaluate the following student text. Provide a single JSON object (no markdown, no extra text) with:
 - "score" (number 0-100): overall writing quality at B1 level
 - "feedback" (string): short feedback in German, suitable for B1 learners
+- "corrected_text" (string): the student's full text rewritten with all corrections applied. Keep tone and structure; fix grammar, spelling, vocabulary, and style.
 - "corrections" (array, max 10 items): most important errors. Each item: "original", "corrected", "explanation" (in German), "error_type" (one of: grammar, vocabulary, spelling, style)
 
 **STUDENT TEXT:**
@@ -120,6 +142,7 @@ ${content}
 {
   "score": 78,
   "feedback": "Ihre E-Mail hat eine klare Struktur. Achten Sie auf die Konjugation der Verben.",
+  "corrected_text": "Sehr geehrte Frau Müller,\\nich schreibe Ihnen bezüglich Ihres Angebots vom 12. Mai...",
   "corrections": [
     {
       "original": "Ich habe geschrieben",
@@ -131,16 +154,16 @@ ${content}
 }`;
   }
 
-  private async callGeminiWithTimeout(prompt: string): Promise<string> {
+  private async callModelWithTimeout(prompt: string): Promise<string> {
     let timeoutId: NodeJS.Timeout;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
         reject(new Error('WRITING_CORRECTION_TIMEOUT'));
-      }, GEMINI_TIMEOUT_MS);
+      }, MODEL_TIMEOUT_MS);
     });
     try {
       const result = await Promise.race([
-        this.geminiService.generateTextResponse(prompt),
+        this.modelService.generateTextResponse(prompt),
         timeoutPromise,
       ]);
       clearTimeout(timeoutId!);
@@ -165,6 +188,12 @@ ${content}
     }
 
     const feedback = typeof parsed.feedback === 'string' ? parsed.feedback : '';
+
+    if (typeof parsed.corrected_text !== 'string' || !parsed.corrected_text) {
+      throw new Error('Invalid corrected_text');
+    }
+    const correctedText: string = parsed.corrected_text;
+
     if (!Array.isArray(parsed.corrections)) {
       throw new Error('Corrections must be an array');
     }
@@ -193,6 +222,6 @@ ${content}
         };
       });
 
-    return { score, feedback, corrections };
+    return { score, feedback, correctedText, corrections };
   }
 }
