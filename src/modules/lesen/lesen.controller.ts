@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { LesenService } from './lesen.service';
 import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
 import { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
 @ApiTags('Reading')
+@UseGuards(JwtAuthGuard)
 @Controller('api/reading')
 export class LesenController {
   constructor(private readonly lesenService: LesenService) {}
