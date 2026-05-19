@@ -3,6 +3,7 @@ import { WritingCorrectionService } from '../src/modules/writing/writing-correct
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { WritingGateway } from '../src/modules/writing/writing.gateway';
 import { MODEL_SERVICE_TOKEN } from '../src/modules/writing/services/model-service.interface';
+import { WRITING_EXERCISES } from '../src/modules/writing/writing-exercises.const';
 
 describe('WritingCorrectionService', () => {
   let service: WritingCorrectionService;
@@ -14,6 +15,8 @@ describe('WritingCorrectionService', () => {
   };
   const mockGateway = { notifyCorrectionReady: jest.fn() };
   const mockModelService = { generateTextResponse: jest.fn() };
+
+  const realExerciseTeil1 = WRITING_EXERCISES['1'];
 
   const jobData = {
     attemptId: 'attempt-uuid-1',
@@ -214,6 +217,61 @@ describe('WritingCorrectionService', () => {
           diff: [],
         }),
       );
+    });
+
+    it('sends a prompt containing each exercise bullet point to the model', async () => {
+      mockModelService.generateTextResponse.mockResolvedValue(validModelJson);
+
+      await service.runCorrection(jobData);
+
+      const promptSent =
+        mockModelService.generateTextResponse.mock.calls[0][0];
+      for (const bp of realExerciseTeil1.bulletPoints) {
+        expect(promptSent).toContain(bp);
+      }
+      expect(promptSent).toContain('Büroräume');
+      expect(promptSent).toContain('points_addressed');
+    });
+
+    it('persists and emits pointsAddressed when AI returns it', async () => {
+      mockModelService.generateTextResponse.mockResolvedValue(`{
+        "score": 70,
+        "feedback": "ok",
+        "corrected_text": "Sehr geehrte ...",
+        "points_addressed": 3,
+        "corrections": []
+      }`);
+
+      await service.runCorrection(jobData);
+
+      expect(mockPrismaService.writingAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ points_addressed: 3 }),
+        }),
+      );
+      expect(mockGateway.notifyCorrectionReady).toHaveBeenCalledWith(
+        jobData.studentId,
+        expect.objectContaining({ pointsAddressed: 3 }),
+      );
+    });
+
+    it('persists pointsAddressed as null when AI omits the field', async () => {
+      mockModelService.generateTextResponse.mockResolvedValue(`{
+        "score": 70,
+        "feedback": "ok",
+        "corrected_text": "Sehr geehrte ...",
+        "corrections": []
+      }`);
+
+      await service.runCorrection(jobData);
+
+      expect(mockPrismaService.writingAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ points_addressed: null }),
+        }),
+      );
+      const payload = mockGateway.notifyCorrectionReady.mock.calls[0][1];
+      expect(payload.pointsAddressed).toBeUndefined();
     });
 
     it('keeps score/feedback/corrections when AI omits corrected_text', async () => {

@@ -196,4 +196,39 @@ describe('WritingService', () => {
       expect(mockQueue.add).not.toHaveBeenCalled();
     });
   });
+
+  describe('getExercise', () => {
+    it('returns the full Teil 1 (Büroräume) exercise for id="1"', async () => {
+      const ex = await service.getExercise('1');
+
+      expect(ex.id).toBe('1');
+      expect(ex.part).toBe(1);
+      expect(ex.taskType).toBe('brief');
+      expect(ex.stimulus?.heading).toContain('Büroräume');
+      expect(ex.stimulus?.features).toHaveLength(9);
+      expect(ex.stimulus?.features?.[6]).toContain('Anschlüsse');
+      expect(ex.stimulus?.contact?.name).toBe('CenterBüros GmbH');
+      expect(ex.bulletPoints).toHaveLength(5);
+      expect(ex.bulletPoints[0]).toContain('Unternehmen');
+      expect(ex.taskInstructions).toContain('Übersetzerbüro');
+      expect(ex.closingReminder).toContain('Datum und Anrede');
+    });
+
+    it('returns the Teil 2 placeholder entry for id="2"', async () => {
+      const ex = await service.getExercise('2');
+      expect(ex.id).toBe('2');
+      expect(ex.part).toBe(2);
+      expect(ex.taskType).toBe('forumsbeitrag');
+    });
+
+    it('throws NotFoundException for unknown id', async () => {
+      await expect(service.getExercise('99')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException for empty id', async () => {
+      await expect(service.getExercise('')).rejects.toThrow(NotFoundException);
+    });
+  });
 });

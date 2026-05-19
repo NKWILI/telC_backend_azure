@@ -6,8 +6,10 @@ import {
   CorrectionReadyPayload,
   DiffOp,
 } from './writing.gateway';
+import { WRITING_EXERCISES } from './writing-exercises.const';
 import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
 import type { ModelService } from './services/model-service.interface';
+import type { WritingExerciseDto } from './dto';
 
 export interface CorrectionJobData {
   attemptId: string;
@@ -29,6 +31,7 @@ export interface ParsedWritingCorrection {
   score: number;
   feedback: string;
   correctedText: string;
+  pointsAddressed?: number;
   corrections: Array<{
     original: string;
     corrected: string;
@@ -57,9 +60,12 @@ export class WritingCorrectionService {
     const created = new Date(createdAt).getTime();
     const durationSeconds = Math.round((Date.now() - created) / 1000);
 
+    const exercise: WritingExerciseDto | null =
+      WRITING_EXERCISES[exerciseId] ?? null;
+
     let parsed: ParsedWritingCorrection | null = null;
     try {
-      const prompt = this.buildWritingPrompt(content);
+      const prompt = this.buildWritingPrompt(content, exercise);
       const responseText = await this.callModelWithTimeout(prompt);
       parsed = this.parseWritingResponse(responseText);
     } catch (err) {
@@ -71,6 +77,7 @@ export class WritingCorrectionService {
     const score = parsed?.score ?? STUB_SCORE;
     const feedback = parsed?.feedback ?? STUB_FEEDBACK;
     const correctedText = parsed?.correctedText ?? STUB_CORRECTED_TEXT;
+    const pointsAddressed = parsed?.pointsAddressed;
     const diff: DiffOp[] = correctedText
       ? diffWords(content, correctedText).map((part) => ({
           op: part.added ? 'insert' : part.removed ? 'delete' : 'equal',
@@ -95,6 +102,7 @@ export class WritingCorrectionService {
           feedback,
           corrected_text: correctedText,
           diff,
+          points_addressed: pointsAddressed ?? null,
           duration_seconds: durationSeconds,
           completed_at: new Date(completedAt),
           ...(correctionsForDb.length > 0
@@ -112,6 +120,7 @@ export class WritingCorrectionService {
         originalText: content,
         correctedText,
         diff,
+        pointsAddressed,
         durationSeconds,
         corrections: correctionsForPayload,
       };
@@ -125,23 +134,37 @@ export class WritingCorrectionService {
     }
   }
 
-  private buildWritingPrompt(content: string): string {
-    return `You are an expert German B1 writing corrector for telc Schreiben tasks.
-Evaluate the following student text. Provide a single JSON object (no markdown, no extra text) with:
-- "score" (number 0-100): overall writing quality at B1 level
-- "feedback" (string): short feedback in German, suitable for B1 learners
-- "corrected_text" (string): the student's full text rewritten with all corrections applied. Keep tone and structure; fix grammar, spelling, vocabulary, and style.
-- "corrections" (array, max 10 items): most important errors. Each item: "original", "corrected", "explanation" (in German), "error_type" (one of: grammar, vocabulary, spelling, style)
+  private buildWritingPrompt(
+    content: string,
+    exercise: WritingExerciseDto | null,
+  ): string {
+    const exerciseBlock = exercise
+      ? this.formatExerciseForPrompt(exercise)
+      : '';
+    const pointsCount = exercise?.bulletPoints?.length ?? 0;
+    const pointsAddressedSchema = pointsCount > 0
+      ? `\n- "points_addressed" (integer 0-${pointsCount}): how many of the ${pointsCount} required bullet points the student addressed in their text`
+      : '';
+    const pointsAddressedExample = pointsCount > 0
+      ? `\n  "points_addressed": 3,`
+      : '';
 
+    return `You are an expert German B1 writing corrector for telc Schreiben tasks.
+Evaluate the following student text against the exercise brief. Provide a single JSON object (no markdown, no extra text) with:
+- "score" (number 0-100): overall writing quality at B1 level
+- "feedback" (string): short feedback in German, suitable for B1 learners. If the student missed any required bullet points, mention which ones.
+- "corrected_text" (string): the student's full text rewritten with all corrections applied. Keep tone and structure; fix grammar, spelling, vocabulary, and style.
+- "corrections" (array, max 10 items): most important errors. Each item: "original", "corrected", "explanation" (in German), "error_type" (one of: grammar, vocabulary, spelling, style)${pointsAddressedSchema}
+${exerciseBlock}
 **STUDENT TEXT:**
 ${content}
 
-**SCORING (B1):** 90-100 excellent, 75-89 good, 60-74 satisfactory, 50-59 needs improvement, 0-49 insufficient.
+**SCORING (B1):** 90-100 excellent, 75-89 good, 60-74 satisfactory, 50-59 needs improvement, 0-49 insufficient. ${pointsCount > 0 ? `If the student missed required bullet points, lower the score proportionally.` : ''}
 
 **OUTPUT (JSON only):**
 {
   "score": 78,
-  "feedback": "Ihre E-Mail hat eine klare Struktur. Achten Sie auf die Konjugation der Verben.",
+  "feedback": "Ihre E-Mail hat eine klare Struktur. Achten Sie auf die Konjugation der Verben.",${pointsAddressedExample}
   "corrected_text": "Sehr geehrte Frau Müller,\\nich schreibe Ihnen bezüglich Ihres Angebots vom 12. Mai...",
   "corrections": [
     {
@@ -152,6 +175,34 @@ ${content}
     }
   ]
 }`;
+  }
+
+  private formatExerciseForPrompt(exercise: WritingExerciseDto): string {
+    const parts: string[] = ['**EXERCISE BRIEF:**'];
+    if (exercise.intro) parts.push(exercise.intro);
+    if (exercise.stimulus) {
+      const s = exercise.stimulus;
+      parts.push(`\n${s.heading}`);
+      if (s.body) parts.push(s.body);
+      if (s.features?.length) {
+        parts.push('Merkmale:');
+        for (const f of s.features) parts.push(`- ${f}`);
+      }
+      if (s.callToAction) parts.push(s.callToAction);
+      if (s.contact) {
+        parts.push(`${s.contact.name}`);
+        for (const line of s.contact.lines) parts.push(line);
+      }
+    }
+    parts.push(`\n${exercise.taskInstructions}`);
+    if (exercise.bulletPoints?.length) {
+      parts.push('Required points the student MUST address:');
+      exercise.bulletPoints.forEach((bp, i) =>
+        parts.push(`${i + 1}. ${bp}`),
+      );
+    }
+    if (exercise.closingReminder) parts.push(`\n${exercise.closingReminder}`);
+    return parts.join('\n') + '\n';
   }
 
   private async callModelWithTimeout(prompt: string): Promise<string> {
@@ -197,6 +248,15 @@ ${content}
       );
     }
 
+    let pointsAddressed: number | undefined;
+    if (
+      typeof parsed.points_addressed === 'number' &&
+      Number.isInteger(parsed.points_addressed) &&
+      parsed.points_addressed >= 0
+    ) {
+      pointsAddressed = parsed.points_addressed;
+    }
+
     if (!Array.isArray(parsed.corrections)) {
       throw new Error('Corrections must be an array');
     }
@@ -225,6 +285,6 @@ ${content}
         };
       });
 
-    return { score, feedback, correctedText, corrections };
+    return { score, feedback, correctedText, pointsAddressed, corrections };
   }
 }

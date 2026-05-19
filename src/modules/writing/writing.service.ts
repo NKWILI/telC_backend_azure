@@ -11,11 +11,13 @@ import type {
   ExerciseTypeDto,
   ExerciseAttemptDto,
   SubmitWritingResponseDto,
+  WritingExerciseDto,
 } from './dto';
 import type { SubmitWritingDto } from './dto';
-
-/** Known exercise type ids (Teile) for Schreiben. */
-const WRITING_TEIL_IDS = ['1', '2'];
+import {
+  WRITING_TEIL_IDS,
+  WRITING_EXERCISES,
+} from './writing-exercises.const';
 
 /** Static exercise type definitions (exam language). */
 const STATIC_TEILS: Omit<ExerciseTypeDto, 'progress'>[] = [
@@ -39,6 +41,7 @@ const STATIC_TEILS: Omit<ExerciseTypeDto, 'progress'>[] = [
   },
 ];
 
+
 export interface WritingCorrectionQueue {
   add(data: {
     attemptId: string;
@@ -59,6 +62,23 @@ export class WritingService {
     @Inject('WRITING_CORRECTION_QUEUE')
     private readonly correctionQueue?: WritingCorrectionQueue,
   ) {}
+
+  /**
+   * GET /api/writing/exercise/:id — return the full exercise content (stimulus,
+   * task instructions, bullet points). Looked up from the static WRITING_EXERCISES map.
+   */
+  async getExercise(id: string): Promise<WritingExerciseDto> {
+    const exercise = WRITING_EXERCISES[id];
+    if (!exercise) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Exercise not found',
+        messageKey: 'writingExerciseNotFound',
+      });
+    }
+    return exercise;
+  }
 
   /**
    * GET /api/writing/teils — list exercise types with progress for the student.
@@ -100,6 +120,11 @@ export class WritingService {
           score: true,
           feedback: true,
           duration_seconds: true,
+          content: true,
+          corrected_text: true,
+          diff: true,
+          corrections: true,
+          points_addressed: true,
         },
       });
 
@@ -217,6 +242,11 @@ export class WritingService {
     score?: number | null;
     feedback?: string | null;
     duration_seconds?: number | null;
+    content?: string | null;
+    corrected_text?: string | null;
+    diff?: unknown;
+    corrections?: unknown;
+    points_addressed?: number | null;
   }): ExerciseAttemptDto {
     const toIso = (d: Date | string | null | undefined) =>
       d ? (d instanceof Date ? d.toISOString() : d) : '';
@@ -228,7 +258,35 @@ export class WritingService {
       score: row.score ?? undefined,
       feedback: row.feedback ?? undefined,
       durationSeconds: row.duration_seconds ?? undefined,
+      originalText: row.content ?? undefined,
+      correctedText: row.corrected_text ?? undefined,
+      diff: Array.isArray(row.diff)
+        ? (row.diff as ExerciseAttemptDto['diff'])
+        : undefined,
+      pointsAddressed: row.points_addressed ?? undefined,
+      corrections: this.mapCorrectionsForDto(row.corrections),
     };
+  }
+
+  private mapCorrectionsForDto(
+    raw: unknown,
+  ): ExerciseAttemptDto['corrections'] {
+    if (!Array.isArray(raw)) return undefined;
+    return raw.map((c) => {
+      const item = c as Record<string, unknown>;
+      return {
+        original: String(item.original ?? ''),
+        corrected: String(item.corrected ?? ''),
+        explanation:
+          typeof item.explanation === 'string' ? item.explanation : undefined,
+        errorType:
+          typeof item.error_type === 'string'
+            ? item.error_type
+            : typeof item.errorType === 'string'
+              ? item.errorType
+              : undefined,
+      };
+    });
   }
 
   private formatDateLabel(isoDate: string): string {

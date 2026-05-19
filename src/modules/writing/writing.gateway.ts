@@ -24,6 +24,7 @@ export interface CorrectionReadyPayload {
   originalText?: string;
   correctedText?: string;
   diff?: DiffOp[];
+  pointsAddressed?: number;
   durationSeconds?: number;
   corrections?: Array<{
     original: string;

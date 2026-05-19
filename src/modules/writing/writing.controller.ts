@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Query,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -14,7 +15,11 @@ import { CurrentStudent } from '../../shared/decorators/current-student.decorato
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { WritingService } from './writing.service';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
-import type { ExerciseTypeDto, ExerciseAttemptDto } from './dto';
+import type {
+  ExerciseTypeDto,
+  ExerciseAttemptDto,
+  WritingExerciseDto,
+} from './dto';
 import { SubmitWritingDto } from './dto/submit-writing.dto';
 import { SubmitWritingResponseDto } from './dto/submit-writing-response.dto';
 
@@ -37,6 +42,13 @@ export class WritingController {
     const studentId = student?.studentId;
     if (!studentId) return [];
     return this.writingService.getTeils(studentId);
+  }
+
+  @Get('exercise/:id')
+  async getExercise(
+    @Param('id') id: string,
+  ): Promise<WritingExerciseDto> {
+    return this.writingService.getExercise(id);
   }
 
   @Get('sessions')
