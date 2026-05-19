@@ -48,10 +48,14 @@ export class GeminiService implements OnModuleInit, OnModuleDestroy {
   // Configuration
   private readonly GEMINI_LIVE_MODEL =
     'gemini-2.5-flash-native-audio-preview-12-2025';
-  private readonly GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
+  private readonly GEMINI_TEXT_MODEL: string;
   private readonly VOICE_NAME = 'Zephyr';
 
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService) {
+    this.GEMINI_TEXT_MODEL =
+      this.configService.get<string>('GEMINI_TEXT_MODEL') ??
+      'gemini-2.0-flash';
+  }
 
   /**
    * Load Teil prompts from disk on module initialization
