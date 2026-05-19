@@ -216,11 +216,18 @@ describe('WritingCorrectionService', () => {
       );
     });
 
-    it('falls back to stub when corrected_text is missing from the AI response', async () => {
+    it('keeps score/feedback/corrections when AI omits corrected_text', async () => {
       mockModelService.generateTextResponse.mockResolvedValue(`{
         "score": 70,
         "feedback": "ok",
-        "corrections": []
+        "corrections": [
+          {
+            "original": "habe geschrieben",
+            "corrected": "schreibe",
+            "explanation": "Präsens.",
+            "error_type": "grammar"
+          }
+        ]
       }`);
 
       await service.runCorrection(jobData);
@@ -228,10 +235,18 @@ describe('WritingCorrectionService', () => {
       expect(mockGateway.notifyCorrectionReady).toHaveBeenCalledWith(
         jobData.studentId,
         expect.objectContaining({
-          score: 75,
-          feedback: 'Stub feedback. Echte Korrektur folgt.',
+          score: 70,
+          feedback: 'ok',
           correctedText: '',
           diff: [],
+          corrections: [
+            {
+              original: 'habe geschrieben',
+              corrected: 'schreibe',
+              explanation: 'Präsens.',
+              errorType: 'grammar',
+            },
+          ],
         }),
       );
     });

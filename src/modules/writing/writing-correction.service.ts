@@ -189,10 +189,13 @@ ${content}
 
     const feedback = typeof parsed.feedback === 'string' ? parsed.feedback : '';
 
-    if (typeof parsed.corrected_text !== 'string' || !parsed.corrected_text) {
-      throw new Error('Invalid corrected_text');
+    const correctedText: string =
+      typeof parsed.corrected_text === 'string' ? parsed.corrected_text : '';
+    if (!correctedText) {
+      this.logger.warn(
+        'AI response missing corrected_text — keeping score/feedback/corrections, no rewrite available',
+      );
     }
-    const correctedText: string = parsed.corrected_text;
 
     if (!Array.isArray(parsed.corrections)) {
       throw new Error('Corrections must be an array');
