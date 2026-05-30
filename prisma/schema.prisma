@@ -138,6 +138,7 @@ model WritingAttempt {
   attempt_id        String    @id @default(uuid())
   student_id        String
   exercise_id       String
+  modelltest_id     String?   @db.Uuid
   content           String
   status            String    @default("pending")
   score             Int?
@@ -495,6 +496,26 @@ model Modelltest {
   lesenTeil1Exercises           LesenTeil1Exercise[]
   lesenTeil2Exercises           LesenTeil2Exercise[]
   lesenTeil3Exercises           LesenTeil3Exercise[]
+  writingExercises              WritingExercise[]
 
   @@map("modelltests")
+}
+
+model WritingExercise {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  content_revision  String
+  title             String
+  subtitle          String?
+  task_type         String
+  intro             String?
+  stimulus          Json?
+  task_instructions String
+  bullet_points     String[]
+  closing_reminder  String?
+  created_at        DateTime    @default(now())
+
+  modelltest_id String?     @db.Uuid
+  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+
+  @@map("writing_exercises")
 }

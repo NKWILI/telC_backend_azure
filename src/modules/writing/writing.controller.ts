@@ -16,7 +16,6 @@ import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interf
 import { WritingService } from './writing.service';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
 import type {
-  ExerciseTypeDto,
   ExerciseAttemptDto,
   WritingExerciseDto,
 } from './dto';
@@ -35,15 +34,6 @@ export class WritingController {
     private readonly rateLimitService: RateLimitService,
   ) {}
 
-  @Get('teils')
-  async getTeils(
-    @CurrentStudent() student: AccessTokenPayload | null,
-  ): Promise<ExerciseTypeDto[]> {
-    const studentId = student?.studentId;
-    if (!studentId) return [];
-    return this.writingService.getTeils(studentId);
-  }
-
   @Get('exercise/:id')
   async getExercise(
     @Param('id') id: string,
@@ -54,12 +44,11 @@ export class WritingController {
   @Get('sessions')
   async getSessions(
     @CurrentStudent() student: AccessTokenPayload | null,
-    @Query('teilNumber') teilNumber?: string,
+    @Query('exerciseId') exerciseId?: string,
   ): Promise<ExerciseAttemptDto[]> {
     const studentId = student?.studentId;
     if (!studentId) return [];
-    const teil = teilNumber ? parseInt(teilNumber, 10) : undefined;
-    return this.writingService.getSessions(studentId, teil);
+    return this.writingService.getSessions(studentId, exerciseId);
   }
 
   @Post('submit')

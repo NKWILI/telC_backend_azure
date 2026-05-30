@@ -10,6 +10,7 @@ export interface ModelltestExercisesDto {
   lesenT1: string[];
   lesenT2: string[];
   lesenT3: string[];
+  writing: string[];
 }
 
 export interface ModelltestDetailDto extends ModelltestListItemDto {

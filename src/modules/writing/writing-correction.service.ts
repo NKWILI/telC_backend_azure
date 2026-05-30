@@ -6,7 +6,7 @@ import {
   CorrectionReadyPayload,
   DiffOp,
 } from './writing.gateway';
-import { WRITING_EXERCISES } from './writing-exercises.const';
+import { WritingService } from './writing.service';
 import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
 import type { ModelService } from './services/model-service.interface';
 import type { WritingExerciseDto } from './dto';
@@ -47,6 +47,7 @@ export class WritingCorrectionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: WritingGateway,
+    private readonly writingService: WritingService,
     @Inject(MODEL_SERVICE_TOKEN) private readonly modelService: ModelService,
   ) {}
 
@@ -60,8 +61,9 @@ export class WritingCorrectionService {
     const created = new Date(createdAt).getTime();
     const durationSeconds = Math.round((Date.now() - created) / 1000);
 
-    const exercise: WritingExerciseDto | null =
-      WRITING_EXERCISES[exerciseId] ?? null;
+    const exercise: WritingExerciseDto | null = await this.writingService
+      .getExercise(exerciseId)
+      .catch(() => null);
 
     let parsed: ParsedWritingCorrection | null = null;
     try {

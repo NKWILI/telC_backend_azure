@@ -2,8 +2,46 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WritingCorrectionService } from '../src/modules/writing/writing-correction.service';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { WritingGateway } from '../src/modules/writing/writing.gateway';
+import { WritingService } from '../src/modules/writing/writing.service';
 import { MODEL_SERVICE_TOKEN } from '../src/modules/writing/services/model-service.interface';
-import { WRITING_EXERCISES } from '../src/modules/writing/writing-exercises.const';
+
+const FAKE_EXERCISE = {
+  id: 'uuid-exercise-1',
+  part: 1,
+  title: 'E-Mail / Brief',
+  subtitle: 'Formeller Brief',
+  taskType: 'brief' as const,
+  intro: 'Sie sehen folgende Anzeige:',
+  stimulus: {
+    heading: 'Büroräume in Neubaukomplex zu vermieten!',
+    body: 'In unserem neu gebauten Bürogebäude sind noch Räume frei',
+    features: [
+      'Gebäude mit 6 Stockwerken',
+      'zentrale Lage',
+      'helle, großzügige Büros, zwischen 15 und 25 m²',
+      'Kaffeeküche',
+      'Konferenzräume',
+      'vier Aufzüge',
+      'moderne Anschlüsse in allen Räumen (z. B. Internet/DSL-Anschlüsse)',
+      'Hausmeisterservice rund um die Uhr',
+      'moderne Sicherheitstechnik',
+    ],
+    callToAction:
+      'Vereinbaren Sie einen Besichtigungstermin oder fordern Sie weitere Informationen an:',
+    contact: { name: 'CenterBüros GmbH', lines: ['Neuer Wall 120', '50160 Köln'] },
+  },
+  taskInstructions:
+    'Sie arbeiten in einem Übersetzerbüro. Ihr Chef möchte größere Büroräume mieten.',
+  bulletPoints: [
+    'Beschreiben Sie Ihr Unternehmen.',
+    'Was für Räume brauchen Sie?',
+    'Wie viele Räume brauchen Sie?',
+    'Wann brauchen Sie die Räume?',
+    'Fragen Sie nach den Kosten.',
+  ],
+  closingReminder:
+    'Bevor Sie den Brief schreiben, überlegen Sie sich die passende Reihenfolge der Punkte.',
+};
 
 describe('WritingCorrectionService', () => {
   let service: WritingCorrectionService;
@@ -15,13 +53,12 @@ describe('WritingCorrectionService', () => {
   };
   const mockGateway = { notifyCorrectionReady: jest.fn() };
   const mockModelService = { generateTextResponse: jest.fn() };
-
-  const realExerciseTeil1 = WRITING_EXERCISES['1'];
+  const mockWritingService = { getExercise: jest.fn() };
 
   const jobData = {
     attemptId: 'attempt-uuid-1',
     studentId: 'student-1',
-    exerciseId: '1',
+    exerciseId: 'uuid-exercise-1',
     content: 'Ich habe geschrieben einen Brief.',
     createdAt: new Date(Date.now() - 120000).toISOString(),
   };
@@ -45,12 +82,14 @@ describe('WritingCorrectionService', () => {
     mockModelService.generateTextResponse.mockRejectedValue(
       new Error('Model unavailable'),
     );
+    mockWritingService.getExercise.mockResolvedValue(FAKE_EXERCISE);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WritingCorrectionService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: WritingGateway, useValue: mockGateway },
+        { provide: WritingService, useValue: mockWritingService },
         { provide: MODEL_SERVICE_TOKEN, useValue: mockModelService },
       ],
     }).compile();
@@ -226,7 +265,7 @@ describe('WritingCorrectionService', () => {
 
       const promptSent =
         mockModelService.generateTextResponse.mock.calls[0][0];
-      for (const bp of realExerciseTeil1.bulletPoints) {
+      for (const bp of FAKE_EXERCISE.bulletPoints) {
         expect(promptSent).toContain(bp);
       }
       expect(promptSent).toContain('Büroräume');

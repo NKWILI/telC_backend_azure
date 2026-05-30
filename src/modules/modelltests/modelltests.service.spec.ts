@@ -18,6 +18,7 @@ const MT1_ROW = {
   lesenTeil1Exercises: [{ id: 'l1-uuid' }],
   lesenTeil2Exercises: [{ id: 'l2-uuid' }],
   lesenTeil3Exercises: [{ id: 'l3-uuid' }],
+  writingExercises: [{ id: 'we1-uuid' }],
 };
 
 describe('ModelltestsService', () => {
@@ -69,6 +70,7 @@ describe('ModelltestsService', () => {
         lesenT1: ['l1-uuid'],
         lesenT2: ['l2-uuid'],
         lesenT3: ['l3-uuid'],
+        writing: ['we1-uuid'],
       });
       expect(mockPrisma.modelltest.findUnique).toHaveBeenCalledWith({
         where: { number: 1 },
@@ -78,6 +80,7 @@ describe('ModelltestsService', () => {
           lesenTeil1Exercises: { select: { id: true } },
           lesenTeil2Exercises: { select: { id: true } },
           lesenTeil3Exercises: { select: { id: true } },
+          writingExercises: { select: { id: true } },
         },
       });
     });

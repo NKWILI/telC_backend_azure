@@ -25,6 +25,7 @@ export class ModelltestsService {
         lesenTeil1Exercises: { select: { id: true } },
         lesenTeil2Exercises: { select: { id: true } },
         lesenTeil3Exercises: { select: { id: true } },
+        writingExercises: { select: { id: true } },
       },
     });
 
@@ -42,6 +43,7 @@ export class ModelltestsService {
         lesenT1: row.lesenTeil1Exercises.map((e) => e.id),
         lesenT2: row.lesenTeil2Exercises.map((e) => e.id),
         lesenT3: row.lesenTeil3Exercises.map((e) => e.id),
+        writing: row.writingExercises.map((e) => e.id),
       },
     };
   }

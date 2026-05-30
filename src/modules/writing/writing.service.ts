@@ -8,39 +8,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
 import type {
-  ExerciseTypeDto,
   ExerciseAttemptDto,
   SubmitWritingResponseDto,
   WritingExerciseDto,
+  WritingExerciseStimulus,
 } from './dto';
 import type { SubmitWritingDto } from './dto';
-import {
-  WRITING_TEIL_IDS,
-  WRITING_EXERCISES,
-} from './writing-exercises.const';
-
-/** Static exercise type definitions (exam language). */
-const STATIC_TEILS: Omit<ExerciseTypeDto, 'progress'>[] = [
-  {
-    id: '1',
-    title: 'E-Mail',
-    subtitle: 'Formelle E-Mail schreiben',
-    prompt: 'Schreiben Sie eine E-Mail an...',
-    imagePath: '',
-    part: 1,
-    durationMinutes: 15,
-  },
-  {
-    id: '2',
-    title: 'Beitrag',
-    subtitle: 'Forumsbeitrag',
-    prompt: 'Schreiben Sie einen Beitrag...',
-    imagePath: '',
-    part: 2,
-    durationMinutes: 20,
-  },
-];
-
 
 export interface WritingCorrectionQueue {
   add(data: {
@@ -64,12 +37,11 @@ export class WritingService {
   ) {}
 
   /**
-   * GET /api/writing/exercise/:id — return the full exercise content (stimulus,
-   * task instructions, bullet points). Looked up from the static WRITING_EXERCISES map.
+   * GET /api/writing/exercise/:id — fetch full exercise content from DB.
    */
   async getExercise(id: string): Promise<WritingExerciseDto> {
-    const exercise = WRITING_EXERCISES[id];
-    if (!exercise) {
+    const row = await this.prisma.writingExercise.findUnique({ where: { id } });
+    if (!row) {
       throw new NotFoundException({
         statusCode: 404,
         error: 'Not Found',
@@ -77,35 +49,18 @@ export class WritingService {
         messageKey: 'writingExerciseNotFound',
       });
     }
-    return exercise;
+    return this.mapExerciseRow(row);
   }
 
   /**
-   * GET /api/writing/teils — list exercise types with progress for the student.
-   */
-  async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
-    const progressByExercise = await this.getProgressByExercise(studentId);
-    return STATIC_TEILS.map((t) => ({
-      ...t,
-      progress: progressByExercise[t.id] ?? 0,
-    }));
-  }
-
-  /**
-   * GET /api/writing/sessions — list past attempts, optionally filtered by teilNumber (exercise id).
+   * GET /api/writing/sessions — list past attempts, optionally filtered by exerciseId (UUID).
    */
   async getSessions(
     studentId: string,
-    teilNumber?: number,
+    exerciseId?: string,
     limit = 50,
   ): Promise<ExerciseAttemptDto[]> {
     try {
-      const exerciseId =
-        teilNumber !== undefined &&
-        WRITING_TEIL_IDS.includes(String(teilNumber))
-          ? String(teilNumber)
-          : undefined;
-
       const rows = await this.prisma.writingAttempt.findMany({
         where: {
           student_id: studentId,
@@ -136,7 +91,7 @@ export class WritingService {
   }
 
   /**
-   * POST /api/writing/submit — create attempt (pending), enqueue correction, return 201.
+   * POST /api/writing/submit — validate exercise exists in DB, create attempt, enqueue correction.
    */
   async submit(
     studentId: string,
@@ -144,7 +99,12 @@ export class WritingService {
   ): Promise<SubmitWritingResponseDto> {
     const { exerciseId, content } = dto;
 
-    if (!WRITING_TEIL_IDS.includes(exerciseId)) {
+    const exercise = await this.prisma.writingExercise.findUnique({
+      where: { id: exerciseId },
+      select: { id: true, modelltest_id: true },
+    });
+
+    if (!exercise) {
       throw new NotFoundException({
         statusCode: 404,
         error: 'Not Found',
@@ -175,6 +135,7 @@ export class WritingService {
           attempt_id: attemptId,
           student_id: studentId,
           exercise_id: exerciseId,
+          modelltest_id: exercise.modelltest_id ?? undefined,
           content: content.trim(),
           status: 'pending',
         },
@@ -214,25 +175,29 @@ export class WritingService {
     };
   }
 
-  private async getProgressByExercise(
-    studentId: string,
-  ): Promise<Record<string, number>> {
-    const result: Record<string, number> = {};
-    for (const id of WRITING_TEIL_IDS) result[id] = 0;
-    try {
-      const rows = await this.prisma.writingAttempt.findMany({
-        where: { student_id: studentId, status: 'completed' },
-        select: { exercise_id: true },
-      });
-      for (const row of rows) {
-        if (WRITING_TEIL_IDS.includes(row.exercise_id)) {
-          result[row.exercise_id] = 100;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return result;
+  mapExerciseRow(row: {
+    id: string;
+    title: string;
+    subtitle: string | null;
+    task_type: string;
+    intro: string | null;
+    stimulus: unknown;
+    task_instructions: string;
+    bullet_points: string[];
+    closing_reminder: string | null;
+  }): WritingExerciseDto {
+    return {
+      id: row.id,
+      part: 1,
+      title: row.title,
+      subtitle: row.subtitle ?? undefined,
+      taskType: row.task_type as 'brief' | 'forumsbeitrag',
+      intro: row.intro ?? undefined,
+      stimulus: row.stimulus as WritingExerciseStimulus | undefined,
+      taskInstructions: row.task_instructions,
+      bulletPoints: row.bullet_points,
+      closingReminder: row.closing_reminder ?? undefined,
+    };
   }
 
   private mapRowToAttemptDto(row: {
