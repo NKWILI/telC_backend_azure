@@ -1,5 +1,7 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import pLimit from 'p-limit';
+import { parsePositiveInt } from '../../shared/utils/parse-positive-int';
 import { WritingController } from './writing.controller';
 import { WritingService } from './writing.service';
 import { WritingGateway } from './writing.gateway';
@@ -44,18 +46,30 @@ import { GeminiService } from '../speaking/services/gemini.service';
     },
     {
       provide: 'WRITING_CORRECTION_QUEUE',
-      useFactory: (correctionService: WritingCorrectionService) => ({
-        add: (data: {
-          attemptId: string;
-          studentId: string;
-          exerciseId: string;
-          content: string;
-          createdAt: string;
-        }) => {
-          setImmediate(() => correctionService.runCorrection(data));
-          return Promise.resolve();
-        },
-      }),
+      useFactory: (correctionService: WritingCorrectionService) => {
+        const concurrency = parsePositiveInt(
+          process.env.WRITING_CORRECTION_CONCURRENCY,
+          5,
+        );
+        const limit = pLimit(concurrency);
+        new Logger('WritingModule').log(
+          `Correction worker concurrency capped at ${concurrency}`,
+        );
+        return {
+          add: (data: {
+            attemptId: string;
+            studentId: string;
+            exerciseId: string;
+            content: string;
+            createdAt: string;
+          }) => {
+            setImmediate(() => {
+              limit(() => correctionService.runCorrection(data));
+            });
+            return Promise.resolve();
+          },
+        };
+      },
       inject: [WritingCorrectionService],
     },
   ],

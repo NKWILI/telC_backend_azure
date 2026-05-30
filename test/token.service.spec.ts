@@ -110,6 +110,38 @@ describe('TokenService', () => {
     });
   });
 
+  // ─── Guest Access Token Tests ───────────────────────
+
+  describe('generateGuestAccessToken', () => {
+    it('should generate a JWT with isGuest=true and deviceId="guest"', () => {
+      const token = tokenService.generateGuestAccessToken({
+        studentId: 'guest-uuid-123',
+      });
+
+      const decoded = tokenService.verifyAccessToken(token);
+      expect(decoded.studentId).toBe('guest-uuid-123');
+      expect(decoded.deviceId).toBe('guest');
+      expect(decoded.isGuest).toBe(true);
+    });
+
+    it('guest token expires in approximately 2 hours', () => {
+      const jwtLib = require('jsonwebtoken');
+      const token = tokenService.generateGuestAccessToken({
+        studentId: 'guest-uuid-456',
+      });
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(2 * 60 * 60); // 7200s
+    });
+
+    it('guest token verifies under the same secret as a regular access token', () => {
+      const token = tokenService.generateGuestAccessToken({
+        studentId: 'guest-uuid-789',
+      });
+
+      expect(() => tokenService.verifyAccessToken(token)).not.toThrow();
+    });
+  });
+
   // ─── Refresh Token Tests ─────────────────────────────
 
   describe('generateRefreshToken', () => {

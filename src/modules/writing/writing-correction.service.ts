@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { diffWords } from 'diff';
 import { PrismaService } from '../../shared/services/prisma.service';
 import {
@@ -47,6 +47,7 @@ export class WritingCorrectionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: WritingGateway,
+    @Inject(forwardRef(() => WritingService))
     private readonly writingService: WritingService,
     @Inject(MODEL_SERVICE_TOKEN) private readonly modelService: ModelService,
   ) {}

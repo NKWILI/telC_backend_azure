@@ -12,6 +12,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { GuestBlockGuard } from '../../shared/guards/guest-block.guard';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { SpeakingGateway } from './speaking.gateway';
 import { SpeakingService, EvaluationService } from './services';
@@ -30,7 +31,7 @@ import {
  * Handles REST endpoints for SPRECHEN module
  * All endpoints require JWT authentication
  */
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, GuestBlockGuard)
 @Controller('api/speaking/session')
 export class SpeakingController {
   private readonly logger = new Logger(SpeakingController.name);

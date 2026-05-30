@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  Ip,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -94,12 +95,17 @@ export class WritingController {
   async submit(
     @CurrentStudent() student: AccessTokenPayload | null,
     @Body() dto: SubmitWritingDto,
+    @Ip() ip: string,
   ): Promise<SubmitWritingResponseDto> {
     const studentId = student?.studentId;
     if (!studentId) {
       throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
     }
-    this.rateLimitService.checkWritingSubmitLimit(studentId);
+    if (student?.isGuest === true) {
+      this.rateLimitService.checkWritingGuestSubmitLimit(ip || 'unknown');
+    } else {
+      this.rateLimitService.checkWritingSubmitLimit(studentId);
+    }
     return this.writingService.submit(studentId, dto);
   }
 }

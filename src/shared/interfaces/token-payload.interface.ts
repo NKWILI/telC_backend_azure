@@ -1,6 +1,7 @@
 export interface AccessTokenPayload {
   studentId: string;
   deviceId: string;
+  isGuest?: boolean;
   iat?: number;
   exp?: number;
 }

@@ -106,6 +106,19 @@ export class SpeakingGateway
         return;
       }
 
+      if (studentPayload.isGuest === true) {
+        this.logger.warn(
+          `Client ${client.id}: guest JWT rejected for Speaking WS`,
+        );
+        client.emit('connection_error', {
+          code: 4010,
+          messageKey: 'guestNotAllowed',
+          message: 'Speaking exam is not available in demo mode',
+        });
+        client.disconnect(true);
+        return;
+      }
+
       const authenticatedStudentId = studentPayload.studentId;
       this.logger.log(
         `Client ${client.id} authenticated as student ${authenticatedStudentId}`,

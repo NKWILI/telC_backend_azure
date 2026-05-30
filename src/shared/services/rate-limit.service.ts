@@ -17,6 +17,10 @@ export class RateLimitService {
   private readonly newsletterIpWindowSeconds: number;
   private readonly newsletterEmailMaxAttempts: number;
   private readonly newsletterEmailWindowSeconds: number;
+  private readonly guestSessionMaxAttempts: number;
+  private readonly guestSessionWindowSeconds: number;
+  private readonly writingGuestSubmitMaxAttempts: number;
+  private readonly writingGuestSubmitWindowSeconds: number;
 
   constructor() {
     this.cache = new NodeCache();
@@ -79,6 +83,26 @@ export class RateLimitService {
       10,
     );
     this.newsletterEmailWindowSeconds = newsletterEmailWindowMinutes * 60;
+
+    this.guestSessionMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_GUEST_SESSION_MAX_ATTEMPTS || '10',
+      10,
+    );
+    const guestSessionWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_GUEST_SESSION_WINDOW_MINUTES || '60',
+      10,
+    );
+    this.guestSessionWindowSeconds = guestSessionWindowMinutes * 60;
+
+    this.writingGuestSubmitMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_MAX_ATTEMPTS || '3',
+      10,
+    );
+    const writingGuestSubmitWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_WINDOW_MINUTES || '60',
+      10,
+    );
+    this.writingGuestSubmitWindowSeconds = writingGuestSubmitWindowMinutes * 60;
   }
 
   /**
@@ -180,5 +204,46 @@ export class RateLimitService {
 
     this.cache.set(emailCacheKey, emailCurrent + 1, this.newsletterEmailWindowSeconds);
     this.cache.set(ipCacheKey, ipCurrent + 1, this.newsletterIpWindowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/auth/guest. Caps how many guest JWTs a single IP
+   * can mint per window. Throws 429 when exceeded.
+   */
+  checkGuestSessionLimit(ip: string): void {
+    const cacheKey = `ratelimit:guest:session:${ip}`;
+    const current = this.cache.get<number>(cacheKey) || 0;
+
+    if (current >= this.guestSessionMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.cache.set(cacheKey, current + 1, this.guestSessionWindowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/writing/submit when the caller is a guest.
+   * Capped per IP (default 3/hour) — much tighter than the per-student limit
+   * for logged-in users. Protects the free-tier Gemini quota from scripted abuse.
+   */
+  checkWritingGuestSubmitLimit(ip: string): void {
+    const cacheKey = `ratelimit:writing:submit:guest:${ip}`;
+    const current = this.cache.get<number>(cacheKey) || 0;
+
+    if (current >= this.writingGuestSubmitMaxAttempts) {
+      throw new HttpException(
+        'RATE_LIMIT_EXCEEDED',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.cache.set(
+      cacheKey,
+      current + 1,
+      this.writingGuestSubmitWindowSeconds,
+    );
   }
 }

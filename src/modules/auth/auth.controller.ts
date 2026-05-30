@@ -26,6 +26,8 @@ import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { ProfileUpdateDto } from './dto/profile-update.dto';
 import { LogoutRequestDto } from './dto/logout-request.dto';
+import { GuestSessionResponseDto } from './dto/guest-session-response.dto';
+import * as crypto from 'crypto';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
@@ -111,6 +113,25 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginRequestDto): Promise<AuthTokenResponse> {
     return this.authService.login(dto);
+  }
+
+  /**
+   * POST /api/auth/guest
+   * Issue a short-lived (2h) guest JWT for demo / waitlist visitors.
+   * No credentials required. No DB row created. Rate-limited per IP.
+   * The token carries isGuest=true so downstream guards can block guests from
+   * cost-sensitive endpoints (Speaking) and apply tighter rate limits.
+   */
+  @Post('guest')
+  async createGuestSession(
+    @Ip() ip: string,
+  ): Promise<GuestSessionResponseDto> {
+    this.rateLimitService.checkGuestSessionLimit(ip || 'unknown');
+    const studentId = crypto.randomUUID();
+    const accessToken = this.tokenService.generateGuestAccessToken({
+      studentId,
+    });
+    return { accessToken, isGuest: true, expiresIn: 7200 };
   }
 
   /**

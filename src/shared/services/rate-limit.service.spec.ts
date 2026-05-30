@@ -15,7 +15,82 @@ describe('RateLimitService', () => {
     delete process.env.RATE_LIMIT_NEWSLETTER_IP_WINDOW_MINUTES;
     delete process.env.RATE_LIMIT_NEWSLETTER_EMAIL_MAX_ATTEMPTS;
     delete process.env.RATE_LIMIT_NEWSLETTER_EMAIL_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_GUEST_SESSION_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_GUEST_SESSION_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_WINDOW_MINUTES;
     service = new RateLimitService();
+  });
+
+  describe('checkGuestSessionLimit', () => {
+    it('allows requests up to the default limit (10) from one IP', () => {
+      for (let i = 0; i < 10; i++) {
+        expect(() => service.checkGuestSessionLimit('1.2.3.4')).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 11th request from the same IP', () => {
+      for (let i = 0; i < 10; i++) {
+        service.checkGuestSessionLimit('1.2.3.4');
+      }
+      try {
+        service.checkGuestSessionLimit('1.2.3.4');
+        fail('expected HttpException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+        expect((err as HttpException).message).toBe('RATE_LIMIT_EXCEEDED');
+      }
+    });
+
+    it('isolates limits per IP', () => {
+      for (let i = 0; i < 10; i++) {
+        service.checkGuestSessionLimit('1.1.1.1');
+      }
+      expect(() => service.checkGuestSessionLimit('2.2.2.2')).not.toThrow();
+    });
+  });
+
+  describe('checkWritingGuestSubmitLimit', () => {
+    it('allows up to the default limit (3) from one IP', () => {
+      for (let i = 0; i < 3; i++) {
+        expect(() =>
+          service.checkWritingGuestSubmitLimit('1.2.3.4'),
+        ).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 4th request from the same IP', () => {
+      for (let i = 0; i < 3; i++) {
+        service.checkWritingGuestSubmitLimit('1.2.3.4');
+      }
+      try {
+        service.checkWritingGuestSubmitLimit('1.2.3.4');
+        fail('expected HttpException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    });
+
+    it('isolates limits per IP', () => {
+      for (let i = 0; i < 3; i++) {
+        service.checkWritingGuestSubmitLimit('1.1.1.1');
+      }
+      expect(() =>
+        service.checkWritingGuestSubmitLimit('2.2.2.2'),
+      ).not.toThrow();
+    });
+
+    it('uses a different cache namespace than checkWritingSubmitLimit', () => {
+      for (let i = 0; i < 3; i++) {
+        service.checkWritingGuestSubmitLimit('shared-key');
+      }
+      // The studentId-based limit (default 10) should NOT be touched by the IP-based one
+      expect(() => service.checkWritingSubmitLimit('shared-key')).not.toThrow();
+    });
   });
 
   describe('checkForgotPasswordLimit', () => {

@@ -38,6 +38,23 @@ export class TokenService {
   }
 
   /**
+   * Generate a guest access token (2 hours).
+   * Used by POST /api/auth/guest. No refresh token; guest re-calls /auth/guest if needed.
+   * Payload carries isGuest:true so guards downstream can route guest requests differently.
+   */
+  generateGuestAccessToken(payload: { studentId: string }): string {
+    return jwt.sign(
+      {
+        studentId: payload.studentId,
+        deviceId: 'guest',
+        isGuest: true,
+      },
+      this.jwtSecret,
+      { expiresIn: '2h' },
+    );
+  }
+
+  /**
    * Generate a refresh token (long-lived, 7 days)
    * Contains: studentId, deviceId, sessionId
    */
