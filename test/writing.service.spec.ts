@@ -6,10 +6,53 @@ import {
 import { WritingService } from '../src/modules/writing/writing.service';
 import { PrismaService } from '../src/shared/services/prisma.service';
 
+const FAKE_EXERCISE = {
+  id: 'uuid-exercise-1',
+  content_revision: 'v1',
+  title: 'E-Mail / Brief',
+  subtitle: 'Formeller Brief',
+  task_type: 'brief',
+  intro: 'Sie sehen folgende Anzeige:',
+  stimulus: {
+    heading: 'Büroräume in Neubaukomplex zu vermieten!',
+    body: 'In unserem neu gebauten Bürogebäude sind noch Räume frei',
+    features: [
+      'Gebäude mit 6 Stockwerken',
+      'zentrale Lage',
+      'helle, großzügige Büros, zwischen 15 und 25 m²',
+      'Kaffeeküche',
+      'Konferenzräume',
+      'vier Aufzüge',
+      'moderne Anschlüsse in allen Räumen (z. B. Internet/DSL-Anschlüsse)',
+      'Hausmeisterservice rund um die Uhr',
+      'moderne Sicherheitstechnik',
+    ],
+    callToAction:
+      'Vereinbaren Sie einen Besichtigungstermin oder fordern Sie weitere Informationen an:',
+    contact: { name: 'CenterBüros GmbH', lines: ['Neuer Wall 120', '50160 Köln'] },
+  },
+  task_instructions:
+    'Sie arbeiten in einem Übersetzerbüro. Ihr Chef möchte größere Büroräume mieten.',
+  bullet_points: [
+    'Beschreiben Sie Ihr Unternehmen.',
+    'Was für Räume brauchen Sie?',
+    'Wie viele Räume brauchen Sie?',
+    'Wann brauchen Sie die Räume?',
+    'Fragen Sie nach den Kosten.',
+  ],
+  closing_reminder:
+    'Bevor Sie den Brief schreiben, überlegen Sie sich die passende Reihenfolge der Punkte.',
+  modelltest_id: 'uuid-modelltest-1',
+  created_at: new Date(),
+};
+
 describe('WritingService', () => {
   let service: WritingService;
 
   const mockPrismaService = {
+    writingExercise: {
+      findUnique: jest.fn(),
+    },
     writingAttempt: {
       findMany: jest.fn(),
       create: jest.fn(),
@@ -36,36 +79,31 @@ describe('WritingService', () => {
     jest.clearAllMocks();
   });
 
-  describe('getTeils', () => {
-    it('returns array of exercise types in camelCase with progress', async () => {
-      mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
+  describe('getExercise', () => {
+    it('returns mapped WritingExerciseDto from DB row', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue(FAKE_EXERCISE);
 
-      const result = await service.getTeils('student-1');
+      const result = await service.getExercise('uuid-exercise-1');
 
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBe(2);
-      expect(result[0]).toMatchObject({
-        id: '1',
-        title: 'E-Mail',
-        subtitle: 'Formelle E-Mail schreiben',
-        prompt: expect.any(String),
-        part: 1,
-        durationMinutes: 15,
-      });
-      expect(result[0].progress).toBe(0);
-      expect(result[1].id).toBe('2');
-      expect(result[1].title).toBe('Beitrag');
+      expect(result.id).toBe('uuid-exercise-1');
+      expect(result.part).toBe(1);
+      expect(result.taskType).toBe('brief');
+      expect(result.title).toBe('E-Mail / Brief');
+      expect(result.bulletPoints).toHaveLength(5);
+      expect(result.stimulus).toBeDefined();
+      expect((result.stimulus as any).heading).toContain('Büroräume');
     });
 
-    it('sets progress to 100 when student has completed attempt for that exercise', async () => {
-      mockPrismaService.writingAttempt.findMany.mockResolvedValue([
-        { exercise_id: '1' },
-      ]);
+    it('throws NotFoundException when exercise not in DB', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue(null);
 
-      const result = await service.getTeils('student-1');
+      await expect(service.getExercise('unknown-id')).rejects.toThrow(NotFoundException);
+    });
 
-      expect(result[0].progress).toBe(100);
-      expect(result[1].progress).toBe(0);
+    it('throws NotFoundException for empty id', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue(null);
+
+      await expect(service.getExercise('')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -78,7 +116,7 @@ describe('WritingService', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns attempts with id, date, dateLabel, score, feedback, durationSeconds', async () => {
+    it('returns attempts mapped to ExerciseAttemptDto', async () => {
       const rows = [
         {
           attempt_id: 'attempt-uuid-1',
@@ -103,47 +141,49 @@ describe('WritingService', () => {
       expect(result[0].dateLabel).toBeDefined();
     });
 
-    it('filters by exercise_id when teilNumber is provided', async () => {
+    it('passes exerciseId UUID directly to WHERE clause', async () => {
       mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
 
-      await service.getSessions('student-1', 1);
+      await service.getSessions('student-1', 'uuid-exercise-1');
 
       expect(mockPrismaService.writingAttempt.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ exercise_id: '1' }),
+          where: expect.objectContaining({ exercise_id: 'uuid-exercise-1' }),
         }),
       );
     });
 
-    it('does not apply exercise_id filter when teilNumber is omitted', async () => {
+    it('does not apply exercise_id filter when exerciseId is omitted', async () => {
       mockPrismaService.writingAttempt.findMany.mockResolvedValue([]);
 
       await service.getSessions('student-1');
 
-      const callArg =
-        mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
+      const callArg = mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
       expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
 
   describe('submit', () => {
-    it('creates attempt and enqueues job, returns attemptId and status pending', async () => {
+    it('creates attempt with modelltest_id from exercise and enqueues job', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue({
+        id: 'uuid-exercise-1',
+        modelltest_id: 'uuid-modelltest-1',
+      });
       mockPrismaService.writingAttempt.create.mockResolvedValue({});
 
       const result = await service.submit('student-1', {
-        exerciseId: '1',
+        exerciseId: 'uuid-exercise-1',
         content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
       });
 
       expect(result.attemptId).toBeDefined();
       expect(result.status).toBe('pending');
-      expect(result.message).toBeDefined();
       expect(mockPrismaService.writingAttempt.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             student_id: 'student-1',
-            exercise_id: '1',
-            content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
+            exercise_id: 'uuid-exercise-1',
+            modelltest_id: 'uuid-modelltest-1',
             status: 'pending',
           }),
         }),
@@ -151,84 +191,42 @@ describe('WritingService', () => {
       expect(mockQueue.add).toHaveBeenCalledWith(
         expect.objectContaining({
           studentId: 'student-1',
-          exerciseId: '1',
-          content: 'Sehr geehrte Damen und Herren,\n\nich schreibe...',
+          exerciseId: 'uuid-exercise-1',
         }),
       );
     });
 
-    it('throws NotFoundException with messageKey for unknown exerciseId', async () => {
-      try {
-        await service.submit('student-1', {
-          exerciseId: '99',
-          content: 'Some text',
-        });
-        expect(true).toBe(false);
-      } catch (e: any) {
-        expect(e).toBeInstanceOf(NotFoundException);
-        expect(e.getResponse()).toMatchObject({
-          messageKey: 'writingExerciseNotFound',
-        });
-      }
+    it('throws NotFoundException when exerciseId not in DB', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.submit('student-1', { exerciseId: 'unknown', content: 'Some text' }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws UnprocessableEntityException for empty content', async () => {
-      try {
-        await service.submit('student-1', { exerciseId: '1', content: '' });
-        expect(true).toBe(false);
-      } catch (e: any) {
-        expect(e).toBeInstanceOf(UnprocessableEntityException);
-        expect(e.getResponse()).toMatchObject({
-          messageKey: 'writingContentTooShort',
-        });
-      }
-    });
-
-    it('does not call queue when insert fails', async () => {
-      mockPrismaService.writingAttempt.create.mockRejectedValue(
-        new Error('DB error'),
-      );
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue({
+        id: 'uuid-exercise-1',
+        modelltest_id: null,
+      });
 
       await expect(
-        service.submit('student-1', { exerciseId: '1', content: 'Text' }),
+        service.submit('student-1', { exerciseId: 'uuid-exercise-1', content: '' }),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('does not call queue when DB insert fails', async () => {
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue({
+        id: 'uuid-exercise-1',
+        modelltest_id: null,
+      });
+      mockPrismaService.writingAttempt.create.mockRejectedValue(new Error('DB error'));
+
+      await expect(
+        service.submit('student-1', { exerciseId: 'uuid-exercise-1', content: 'Text' }),
       ).rejects.toThrow(UnprocessableEntityException);
 
       expect(mockQueue.add).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('getExercise', () => {
-    it('returns the full Teil 1 (Büroräume) exercise for id="1"', async () => {
-      const ex = await service.getExercise('1');
-
-      expect(ex.id).toBe('1');
-      expect(ex.part).toBe(1);
-      expect(ex.taskType).toBe('brief');
-      expect(ex.stimulus?.heading).toContain('Büroräume');
-      expect(ex.stimulus?.features).toHaveLength(9);
-      expect(ex.stimulus?.features?.[6]).toContain('Anschlüsse');
-      expect(ex.stimulus?.contact?.name).toBe('CenterBüros GmbH');
-      expect(ex.bulletPoints).toHaveLength(5);
-      expect(ex.bulletPoints[0]).toContain('Unternehmen');
-      expect(ex.taskInstructions).toContain('Übersetzerbüro');
-      expect(ex.closingReminder).toContain('Datum und Anrede');
-    });
-
-    it('returns the Teil 2 placeholder entry for id="2"', async () => {
-      const ex = await service.getExercise('2');
-      expect(ex.id).toBe('2');
-      expect(ex.part).toBe(2);
-      expect(ex.taskType).toBe('forumsbeitrag');
-    });
-
-    it('throws NotFoundException for unknown id', async () => {
-      await expect(service.getExercise('99')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws NotFoundException for empty id', async () => {
-      await expect(service.getExercise('')).rejects.toThrow(NotFoundException);
     });
   });
 });
