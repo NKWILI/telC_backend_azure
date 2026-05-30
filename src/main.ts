@@ -31,8 +31,14 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('telC Backend API')
-    .setDescription('Sprachbausteine and Lesen (Reading) exercise endpoints')
+    .setDescription(
+      'REST API for the telC B1+ Beruf exam preparation platform.\n\n' +
+      'Modules: **Auth**, **Writing (Schreiben)**, **Reading (Lesen)**, ' +
+      '**Sprachbausteine**, **Listening (Hören)**, **Speaking (Sprechen)**, **Modelltests**.\n\n' +
+      'All protected endpoints require a Bearer JWT obtained from POST /api/auth/login.',
+    )
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api-docs', app, document);
