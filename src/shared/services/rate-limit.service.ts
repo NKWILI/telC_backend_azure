@@ -106,21 +106,43 @@ export class RateLimitService {
   }
 
   /**
-   * Rate limit for POST /api/writing/submit per student.
-   * Throws 429 when exceeded.
+   * Read the current counter for a key and throw 429 if it has reached `max`.
+   * Returns the current count so the caller can increment it via {@link record}.
+   * Split from `record` so multi-bucket limits (newsletter) can assert ALL
+   * buckets before incrementing ANY — preserving all-or-nothing semantics.
    */
-  checkWritingSubmitLimit(studentId: string): void {
-    const key = `ratelimit:writing:submit:${studentId}`;
-    const current = this.cache.get<number>(key) || 0;
-
-    if (current >= this.writingMaxAttempts) {
+  private assertUnderLimit(cacheKey: string, max: number): number {
+    const current = this.cache.get<number>(cacheKey) || 0;
+    if (current >= max) {
       throw new HttpException(
         'RATE_LIMIT_EXCEEDED',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    return current;
+  }
 
-    this.cache.set(key, current + 1, this.writingWindowSeconds);
+  /** Increment a key's counter, (re)setting its TTL window. */
+  private record(cacheKey: string, current: number, windowSeconds: number): void {
+    this.cache.set(cacheKey, current + 1, windowSeconds);
+  }
+
+  /** Single-bucket limit: assert under `max`, then increment. */
+  private enforce(cacheKey: string, max: number, windowSeconds: number): void {
+    const current = this.assertUnderLimit(cacheKey, max);
+    this.record(cacheKey, current, windowSeconds);
+  }
+
+  /**
+   * Rate limit for POST /api/writing/submit per student.
+   * Throws 429 when exceeded.
+   */
+  checkWritingSubmitLimit(studentId: string): void {
+    this.enforce(
+      `ratelimit:writing:submit:${studentId}`,
+      this.writingMaxAttempts,
+      this.writingWindowSeconds,
+    );
   }
 
   /**
@@ -128,17 +150,11 @@ export class RateLimitService {
    * Key is typically the requester's IP address.
    */
   checkForgotPasswordLimit(key: string): void {
-    const cacheKey = `ratelimit:auth:forgot-password:${key}`;
-    const current = this.cache.get<number>(cacheKey) || 0;
-
-    if (current >= this.forgotPasswordMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    this.cache.set(cacheKey, current + 1, this.forgotPasswordWindowSeconds);
+    this.enforce(
+      `ratelimit:auth:forgot-password:${key}`,
+      this.forgotPasswordMaxAttempts,
+      this.forgotPasswordWindowSeconds,
+    );
   }
 
   /**
@@ -146,17 +162,11 @@ export class RateLimitService {
    * Key is typically the requester's IP address.
    */
   checkVerifyEmailPublicLimit(key: string): void {
-    const cacheKey = `ratelimit:auth:verify-email-public:${key}`;
-    const current = this.cache.get<number>(cacheKey) || 0;
-
-    if (current >= this.verifyEmailPublicMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    this.cache.set(cacheKey, current + 1, this.verifyEmailPublicWindowSeconds);
+    this.enforce(
+      `ratelimit:auth:verify-email-public:${key}`,
+      this.verifyEmailPublicMaxAttempts,
+      this.verifyEmailPublicWindowSeconds,
+    );
   }
 
   /**
@@ -165,45 +175,34 @@ export class RateLimitService {
    * brute-force against the 6-digit reset-code space.
    */
   checkResetPasswordLimit(key: string): void {
-    const cacheKey = `ratelimit:auth:reset-password:${key}`;
-    const current = this.cache.get<number>(cacheKey) || 0;
-
-    if (current >= this.resetPasswordMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    this.cache.set(cacheKey, current + 1, this.resetPasswordWindowSeconds);
+    this.enforce(
+      `ratelimit:auth:reset-password:${key}`,
+      this.resetPasswordMaxAttempts,
+      this.resetPasswordWindowSeconds,
+    );
   }
 
   /**
    * Rate limit for POST /api/newsletter/subscribe. Throws 429 when exceeded.
    * Enforces both per-IP and per-email caps. Per-email defends against
    * targeted spam from rotating IPs; per-IP defends against bursts.
+   * Both buckets are asserted before either is incremented.
    */
   checkNewsletterSubscribeLimit(ipKey: string, emailKey: string): void {
     const emailCacheKey = `ratelimit:newsletter:subscribe:email:${emailKey}`;
-    const emailCurrent = this.cache.get<number>(emailCacheKey) || 0;
-    if (emailCurrent >= this.newsletterEmailMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
     const ipCacheKey = `ratelimit:newsletter:subscribe:ip:${ipKey}`;
-    const ipCurrent = this.cache.get<number>(ipCacheKey) || 0;
-    if (ipCurrent >= this.newsletterIpMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
 
-    this.cache.set(emailCacheKey, emailCurrent + 1, this.newsletterEmailWindowSeconds);
-    this.cache.set(ipCacheKey, ipCurrent + 1, this.newsletterIpWindowSeconds);
+    const emailCurrent = this.assertUnderLimit(
+      emailCacheKey,
+      this.newsletterEmailMaxAttempts,
+    );
+    const ipCurrent = this.assertUnderLimit(
+      ipCacheKey,
+      this.newsletterIpMaxAttempts,
+    );
+
+    this.record(emailCacheKey, emailCurrent, this.newsletterEmailWindowSeconds);
+    this.record(ipCacheKey, ipCurrent, this.newsletterIpWindowSeconds);
   }
 
   /**
@@ -211,17 +210,11 @@ export class RateLimitService {
    * can mint per window. Throws 429 when exceeded.
    */
   checkGuestSessionLimit(ip: string): void {
-    const cacheKey = `ratelimit:guest:session:${ip}`;
-    const current = this.cache.get<number>(cacheKey) || 0;
-
-    if (current >= this.guestSessionMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    this.cache.set(cacheKey, current + 1, this.guestSessionWindowSeconds);
+    this.enforce(
+      `ratelimit:guest:session:${ip}`,
+      this.guestSessionMaxAttempts,
+      this.guestSessionWindowSeconds,
+    );
   }
 
   /**
@@ -230,19 +223,9 @@ export class RateLimitService {
    * for logged-in users. Protects the free-tier Gemini quota from scripted abuse.
    */
   checkWritingGuestSubmitLimit(ip: string): void {
-    const cacheKey = `ratelimit:writing:submit:guest:${ip}`;
-    const current = this.cache.get<number>(cacheKey) || 0;
-
-    if (current >= this.writingGuestSubmitMaxAttempts) {
-      throw new HttpException(
-        'RATE_LIMIT_EXCEEDED',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    this.cache.set(
-      cacheKey,
-      current + 1,
+    this.enforce(
+      `ratelimit:writing:submit:guest:${ip}`,
+      this.writingGuestSubmitMaxAttempts,
       this.writingGuestSubmitWindowSeconds,
     );
   }

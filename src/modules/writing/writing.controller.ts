@@ -101,7 +101,7 @@ export class WritingController {
     if (!studentId) {
       throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
     }
-    if (student?.isGuest === true) {
+    if (student.isGuest === true) {
       this.rateLimitService.checkWritingGuestSubmitLimit(ip || 'unknown');
     } else {
       this.rateLimitService.checkWritingSubmitLimit(studentId);

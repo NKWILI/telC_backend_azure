@@ -63,9 +63,11 @@ import { GeminiService } from '../speaking/services/gemini.service';
             content: string;
             createdAt: string;
           }) => {
-            setImmediate(() => {
-              limit(() => correctionService.runCorrection(data));
-            });
+            // p-limit schedules asynchronously and returns immediately, so the
+            // heavy correction never blocks the HTTP response. Fire-and-forget:
+            // runCorrection swallows its own errors, so the floating promise is
+            // intentional.
+            void limit(() => correctionService.runCorrection(data));
             return Promise.resolve();
           },
         };
