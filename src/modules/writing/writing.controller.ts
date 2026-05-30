@@ -19,6 +19,7 @@ import {
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
+  ApiTooManyRequestsResponse,
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
@@ -92,6 +93,11 @@ export class WritingController {
     description: 'Attempt accepted and queued for correction',
   })
   @ApiNotFoundResponse({ description: 'Exercise UUID not found' })
+  @ApiTooManyRequestsResponse({
+    description:
+      'Rate limit exceeded. Guests are capped at 3 submissions per IP per hour; ' +
+      'registered students have a higher per-account limit.',
+  })
   async submit(
     @CurrentStudent() student: AccessTokenPayload | null,
     @Body() dto: SubmitWritingDto,

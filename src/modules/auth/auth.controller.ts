@@ -28,6 +28,12 @@ import { ProfileUpdateDto } from './dto/profile-update.dto';
 import { LogoutRequestDto } from './dto/logout-request.dto';
 import { GuestSessionResponseDto } from './dto/guest-session-response.dto';
 import * as crypto from 'crypto';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiCreatedResponse,
+  ApiTooManyRequestsResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
@@ -40,6 +46,7 @@ interface StudentResponseDto {
   emailVerified: boolean;
 }
 
+@ApiTags('Auth')
 @Controller('api/auth')
 export class AuthController {
   constructor(
@@ -123,6 +130,19 @@ export class AuthController {
    * cost-sensitive endpoints (Speaking) and apply tighter rate limits.
    */
   @Post('guest')
+  @ApiOperation({
+    summary: 'Create an anonymous guest session for the demo / waitlist flow',
+    description:
+      'Issues a short-lived (2h) guest JWT with no credentials and no DB row. ' +
+      'The token carries isGuest=true: it can access Writing, Reading, ' +
+      'Sprachbausteine and Listening, but Speaking returns 403 (messageKey ' +
+      'guestNotAllowed) and Writing submissions are capped at 3 per IP per hour. ' +
+      'Rate-limited to 10 guest sessions per IP per hour.',
+  })
+  @ApiCreatedResponse({ type: GuestSessionResponseDto })
+  @ApiTooManyRequestsResponse({
+    description: 'Too many guest sessions from this IP (RATE_LIMIT_EXCEEDED)',
+  })
   async createGuestSession(
     @Ip() ip: string,
   ): Promise<GuestSessionResponseDto> {

@@ -11,6 +11,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { GuestBlockGuard } from '../../shared/guards/guest-block.guard';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
@@ -29,8 +35,17 @@ import {
 /**
  * Speaking Exam Controller
  * Handles REST endpoints for SPRECHEN module
- * All endpoints require JWT authentication
+ * All endpoints require JWT authentication. Guest tokens are rejected
+ * (GuestBlockGuard) because Speaking uses the per-minute Gemini Live audio.
  */
+@ApiTags('Speaking')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
+@ApiForbiddenResponse({
+  description:
+    'Guest accounts cannot use Speaking (messageKey: guestNotAllowed). ' +
+    'The client should prompt the user to join the waitlist / register.',
+})
 @UseGuards(JwtAuthGuard, GuestBlockGuard)
 @Controller('api/speaking/session')
 export class SpeakingController {
