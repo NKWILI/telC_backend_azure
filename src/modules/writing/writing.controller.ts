@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  BadRequestException,
   Ip,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiQuery,
   ApiParam,
+  ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
@@ -42,6 +44,37 @@ export class WritingController {
     private readonly writingService: WritingService,
     private readonly rateLimitService: RateLimitService,
   ) {}
+
+  @Get('exercise')
+  @ApiOperation({
+    summary: 'Get the writing exercise for a given Modelltest number',
+    description:
+      'Returns the full exercise content for the given Modelltest. ' +
+      'Use this instead of GET /exercise/:id — no UUID needed by the frontend.',
+  })
+  @ApiQuery({
+    name: 'modelltest',
+    required: true,
+    description: 'Modelltest number (e.g. 1)',
+    example: 1,
+  })
+  @ApiOkResponse({ type: WritingExerciseDto })
+  @ApiNotFoundResponse({ description: 'No writing exercise found for this Modelltest' })
+  @ApiBadRequestResponse({ description: 'modelltest query param is missing or not a number' })
+  async getExerciseByModelltest(
+    @Query('modelltest') modelltest: string,
+  ): Promise<WritingExerciseDto> {
+    const number = parseInt(modelltest, 10);
+    if (!modelltest || isNaN(number)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'modelltest query param is required and must be a number',
+        messageKey: 'writingMissingModelltest',
+      });
+    }
+    return this.writingService.getExerciseByModelltest(number);
+  }
 
   @Get('exercise/:id')
   @ApiOperation({

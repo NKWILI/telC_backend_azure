@@ -40,12 +40,54 @@ export class WritingService {
    * GET /api/writing/exercise/:id — fetch full exercise content from DB.
    */
   async getExercise(id: string): Promise<WritingExerciseDto> {
-    const row = await this.prisma.writingExercise.findUnique({ where: { id } });
+    let row: Awaited<ReturnType<typeof this.prisma.writingExercise.findUnique>>;
+    try {
+      row = await this.prisma.writingExercise.findUnique({ where: { id } });
+    } catch {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Exercise not found',
+        messageKey: 'writingExerciseNotFound',
+      });
+    }
     if (!row) {
       throw new NotFoundException({
         statusCode: 404,
         error: 'Not Found',
         message: 'Exercise not found',
+        messageKey: 'writingExerciseNotFound',
+      });
+    }
+    return this.mapExerciseRow(row);
+  }
+
+  /**
+   * GET /api/writing/exercise?modelltest=1 — fetch exercise by modelltest number.
+   */
+  async getExerciseByModelltest(
+    modelltestNumber: number,
+  ): Promise<WritingExerciseDto> {
+    let row: Awaited<
+      ReturnType<typeof this.prisma.writingExercise.findFirst>
+    >;
+    try {
+      row = await this.prisma.writingExercise.findFirst({
+        where: { modelltest: { number: modelltestNumber } },
+      });
+    } catch {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Exercise not found for this Modelltest',
+        messageKey: 'writingExerciseNotFound',
+      });
+    }
+    if (!row) {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Exercise not found for this Modelltest',
         messageKey: 'writingExerciseNotFound',
       });
     }
@@ -99,10 +141,20 @@ export class WritingService {
   ): Promise<SubmitWritingResponseDto> {
     const { exerciseId, content } = dto;
 
-    const exercise = await this.prisma.writingExercise.findUnique({
-      where: { id: exerciseId },
-      select: { id: true, modelltest_id: true },
-    });
+    let exercise: { id: string; modelltest_id: string | null } | null;
+    try {
+      exercise = await this.prisma.writingExercise.findUnique({
+        where: { id: exerciseId },
+        select: { id: true, modelltest_id: true },
+      });
+    } catch {
+      throw new NotFoundException({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Exercise type not found',
+        messageKey: 'writingExerciseNotFound',
+      });
+    }
 
     if (!exercise) {
       throw new NotFoundException({
