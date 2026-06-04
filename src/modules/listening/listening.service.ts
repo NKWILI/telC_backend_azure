@@ -12,7 +12,7 @@ import type { SubmitListeningDto } from './dto/submit-listening.dto';
 import type { SubmitListeningResponseDto } from './dto/submit-listening-response.dto';
 
 // ---------------------------------------------------------------------------
-// Static catalog
+// Static catalog — Modelltest 1
 // ---------------------------------------------------------------------------
 
 interface CatalogEntry {
@@ -21,202 +21,178 @@ interface CatalogEntry {
   answerKey: Record<string, string>;
 }
 
+const TEIL_IMAGE_URLS: Record<string, string> = {
+  '1': 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil1.png',
+  '2': 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil2.png',
+  '3': 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil3.png',
+};
+
 const CATALOG: Record<string, CatalogEntry> = {
   '1': {
     teil: {
       id: '1',
       title: 'Teil 1',
-      subtitle: 'Globales Hören',
-      prompt: 'Sie hören einen kurzen Text. Wählen Sie die richtige Antwort.',
-      imagePath: '',
+      subtitle: 'Hörverstehen, Teil 1',
+      prompt:
+        'Sie hören die Aussagen von fünf Personen. Sie hören die Aussagen nur einmal. Entscheiden Sie beim Hören, ob die Aussagen 41–45 richtig (+) oder falsch (–) sind.',
+      imagePath: TEIL_IMAGE_URLS['1'],
       part: 1,
       durationMinutes: 10,
     },
     exercise: {
-      content_revision: 'mock-horen-teil-1-v1',
-      audio_url:
-        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      content_revision: 'modelltest-1-teil-1-v1',
+      audio_url: '',
       bundled_audio_asset: '',
+      imagePath: TEIL_IMAGE_URLS['1'],
       questions: [
         {
-          id: 'q11',
-          prompt: 'Wo findet das Gespräch statt?',
-          options: [
-            { id: 'a', label: 'Im Supermarkt' },
-            { id: 'b', label: 'Im Bahnhof' },
-            { id: 'c', label: 'In der Schule' },
-          ],
+          id: 'q41',
+          prompt:
+            'Für Manfred Rienke ist das Fortbildungsangebot wichtig.',
         },
         {
-          id: 'q12',
-          prompt: 'Was möchte die Frau kaufen?',
-          options: [
-            { id: 'a', label: 'Einen Fahrschein' },
-            { id: 'b', label: 'Ein Buch' },
-            { id: 'c', label: 'Lebensmittel' },
-          ],
+          id: 'q42',
+          prompt: 'Alena Groll bildet sich regelmäßig weiter.',
         },
         {
-          id: 'q13',
-          prompt: 'Wann fährt der nächste Zug?',
-          options: [
-            { id: 'a', label: 'Um 10:15 Uhr' },
-            { id: 'b', label: 'Um 11:00 Uhr' },
-            { id: 'c', label: 'Um 10:45 Uhr' },
-          ],
+          id: 'q43',
+          prompt:
+            'Weng Wang stellt vor dem Seminar viele Fragen an die Seminarleitung.',
         },
         {
-          id: 'q14',
-          prompt: 'Wie viel kostet die Fahrkarte?',
-          options: [
-            { id: 'a', label: '12,50 Euro' },
-            { id: 'b', label: '8,00 Euro' },
-            { id: 'c', label: '15,00 Euro' },
-          ],
+          id: 'q44',
+          prompt:
+            'Maria Vallomäinen erklärt, wie Fortbildungsveranstaltungen entstehen.',
         },
         {
-          id: 'q15',
-          prompt: 'Wohin fährt der Mann?',
-          options: [
-            { id: 'a', label: 'Nach Berlin' },
-            { id: 'b', label: 'Nach München' },
-            { id: 'c', label: 'Nach Hamburg' },
-          ],
+          id: 'q45',
+          prompt:
+            'Manus Mani lehnt Fortbildungen ab, weil dann seine eigene Arbeit liegen bleibt.',
         },
       ],
     },
-    answerKey: { q11: 'b', q12: 'a', q13: 'c', q14: 'b', q15: 'a' },
+    answerKey: { q41: '-', q42: '+', q43: '-', q44: '+', q45: '+' },
   },
+
   '2': {
     teil: {
       id: '2',
       title: 'Teil 2',
-      subtitle: 'Detailliertes Hören',
-      prompt: 'Sie hören ein Gespräch. Beantworten Sie die Fragen.',
-      imagePath: '',
+      subtitle: 'Hörverstehen, Teil 2',
+      prompt:
+        'Sie hören ein Gespräch. Sie hören das Gespräch zweimal. Entscheiden Sie beim Hören, ob die Aussagen 46–55 richtig (+) oder falsch (–) sind.',
+      imagePath: TEIL_IMAGE_URLS['2'],
       part: 2,
       durationMinutes: 10,
     },
     exercise: {
-      content_revision: 'mock-horen-teil-2-v1',
-      audio_url:
-        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      content_revision: 'modelltest-1-teil-2-v1',
+      audio_url: '',
       bundled_audio_asset: '',
+      imagePath: TEIL_IMAGE_URLS['2'],
       questions: [
         {
-          id: 'q21',
-          prompt: 'Was ist das Thema des Gesprächs?',
-          options: [
-            { id: 'a', label: 'Urlaub planen' },
-            { id: 'b', label: 'Eine Wohnung suchen' },
-            { id: 'c', label: 'Einen Arzttermin vereinbaren' },
-          ],
+          id: 'q46',
+          prompt: 'Frau Pauß möchte Herrn Lissitsky kurz sprechen.',
         },
         {
-          id: 'q22',
-          prompt: 'Wie groß soll die Wohnung sein?',
-          options: [
-            { id: 'a', label: '40 Quadratmeter' },
-            { id: 'b', label: '60 Quadratmeter' },
-            { id: 'c', label: '80 Quadratmeter' },
-          ],
+          id: 'q47',
+          prompt: 'Herr Lissitsky hat nicht so viel zu tun.',
         },
         {
-          id: 'q23',
-          prompt: 'In welchem Stadtteil soll die Wohnung liegen?',
-          options: [
-            { id: 'a', label: 'In der Stadtmitte' },
-            { id: 'b', label: 'Am Stadtrand' },
-            { id: 'c', label: 'Im Norden' },
-          ],
+          id: 'q48',
+          prompt:
+            'Herr Lissitsky meint, die Quartalszahlen zeigen eine positive Entwicklung.',
         },
         {
-          id: 'q24',
-          prompt: 'Wie hoch ist das monatliche Budget?',
-          options: [
-            { id: 'a', label: '500 Euro' },
-            { id: 'b', label: '700 Euro' },
-            { id: 'c', label: '900 Euro' },
-          ],
+          id: 'q49',
+          prompt:
+            'Frau Pauß spricht über die Lieferung an die ausländische Firma Novis.',
         },
         {
-          id: 'q25',
-          prompt: 'Wann möchten sie einziehen?',
-          options: [
-            { id: 'a', label: 'Sofort' },
-            { id: 'b', label: 'In einem Monat' },
-            { id: 'c', label: 'In drei Monaten' },
-          ],
+          id: 'q50',
+          prompt: 'Der Auftrag war leicht auszuführen.',
+        },
+        {
+          id: 'q51',
+          prompt: 'Die Firma Novis beklagt sich nun.',
+        },
+        {
+          id: 'q52',
+          prompt: 'Die Firma versteht die Mahnungen nicht.',
+        },
+        {
+          id: 'q53',
+          prompt:
+            'Herr Lissitsky hat sich um die bezahlten Rechnungen gekümmert.',
+        },
+        {
+          id: 'q54',
+          prompt:
+            'Frau Pauß bittet Herrn Lissitsky um seine Hilfe bei der Suche nach möglichen Ursachen.',
+        },
+        {
+          id: 'q55',
+          prompt: 'Frau Pauß erwartet keine Antwort von Herrn Lissitsky.',
         },
       ],
     },
-    answerKey: { q21: 'b', q22: 'c', q23: 'a', q24: 'b', q25: 'c' },
+    answerKey: {
+      q46: '+',
+      q47: '-',
+      q48: '-',
+      q49: '+',
+      q50: '-',
+      q51: '+',
+      q52: '+',
+      q53: '-',
+      q54: '+',
+      q55: '-',
+    },
   },
+
   '3': {
     teil: {
       id: '3',
       title: 'Teil 3',
-      subtitle: 'Selektives Hören',
+      subtitle: 'Hörverstehen, Teil 3',
       prompt:
-        'Sie hören Durchsagen. Notieren Sie die wichtigsten Informationen.',
-      imagePath: '',
+        'Sie hören fünf kurze Texte. Sie hören die Texte zweimal. Entscheiden Sie beim Hören, ob die Aussagen 56–60 richtig (+) oder falsch (–) sind.',
+      imagePath: TEIL_IMAGE_URLS['3'],
       part: 3,
       durationMinutes: 10,
     },
     exercise: {
-      content_revision: 'mock-horen-teil-3-v1',
-      audio_url:
-        'https://telc-speaking-api-bvftfmarf9e8cwfb.germanywestcentral-01.azurewebsites.net/static/audio/h%C3%B6renmuster.mpeg',
+      content_revision: 'modelltest-1-teil-3-v1',
+      audio_url: '',
       bundled_audio_asset: '',
+      imagePath: TEIL_IMAGE_URLS['3'],
       questions: [
         {
-          id: 'q31',
-          prompt: 'Welche Information wird zuerst genannt?',
-          options: [
-            { id: 'a', label: 'Abfahrtszeit' },
-            { id: 'b', label: 'Gleisnummer' },
-            { id: 'c', label: 'Zugverspätung' },
-          ],
+          id: 'q56',
+          prompt: 'Herr Lehmann würde gern später kommen.',
         },
         {
-          id: 'q32',
-          prompt: 'Wie lange ist die Verspätung?',
-          options: [
-            { id: 'a', label: '5 Minuten' },
-            { id: 'b', label: '15 Minuten' },
-            { id: 'c', label: '30 Minuten' },
-          ],
+          id: 'q57',
+          prompt: 'Der Chef berücksichtigt die Änderung in der Tagesordnung.',
         },
         {
-          id: 'q33',
-          prompt: 'Welches Gleis wird genannt?',
-          options: [
-            { id: 'a', label: 'Gleis 3' },
-            { id: 'b', label: 'Gleis 7' },
-            { id: 'c', label: 'Gleis 12' },
-          ],
+          id: 'q58',
+          prompt:
+            'Im Falle einer Notsituation kann Ihnen die Firma Sabel nicht helfen.',
         },
         {
-          id: 'q34',
-          prompt: 'Wohin fährt der Zug?',
-          options: [
-            { id: 'a', label: 'Frankfurt' },
-            { id: 'b', label: 'Köln' },
-            { id: 'c', label: 'Stuttgart' },
-          ],
+          id: 'q59',
+          prompt:
+            'Frau Arnold kann Ihnen zu Ihrer Fortbildung Auskunft geben.',
         },
         {
-          id: 'q35',
-          prompt: 'Was sollen die Fahrgäste tun?',
-          options: [
-            { id: 'a', label: 'Den nächsten Zug nehmen' },
-            { id: 'b', label: 'Am Gleis warten' },
-            { id: 'c', label: 'Am Informationsschalter anfragen' },
-          ],
+          id: 'q60',
+          prompt: 'Sie kommen nicht pünktlich am Zielort an.',
         },
       ],
     },
-    answerKey: { q31: 'c', q32: 'b', q33: 'a', q34: 'b', q35: 'b' },
+    answerKey: { q56: '+', q57: '+', q58: '+', q59: '-', q60: '+' },
   },
 };
 
@@ -321,6 +297,7 @@ export class ListeningService {
       });
     }
 
+    // Score computed for DB persistence only — not returned to frontend.
     const score = this.computeScore(dto.answers, entry.answerKey);
 
     try {
@@ -339,7 +316,7 @@ export class ListeningService {
       this.logger.error(`DB error on submit: ${(err as Error).message}`);
     }
 
-    return { score };
+    return { answerKey: entry.answerKey };
   }
 
   // ---------------------------------------------------------------------------

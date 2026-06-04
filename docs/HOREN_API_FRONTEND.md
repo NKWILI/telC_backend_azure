@@ -66,7 +66,7 @@ Authorization: Bearer <accessToken>
 | title           | string | `"Teil 1"`, `"Teil 2"`, `"Teil 3"`  |
 | subtitle        | string | Exercise type label                 |
 | prompt          | string | Short instruction                   |
-| imagePath       | string | Always `""` (no image currently)    |
+| imagePath       | string | URL of the Teil image (Cloudflare R2) |
 | progress        | number | `0` or `100` (100 = at least one completed attempt) |
 | part            | number | `1`, `2`, or `3`                    |
 | durationMinutes | number | `10` for all Teile                  |
@@ -78,31 +78,11 @@ Authorization: Bearer <accessToken>
   {
     "id": "1",
     "title": "Teil 1",
-    "subtitle": "Globales Hören",
-    "prompt": "Sie hören einen kurzen Text. Wählen Sie die richtige Antwort.",
-    "imagePath": "",
+    "subtitle": "Hörverstehen, Teil 1",
+    "prompt": "Sie hören die Aussagen von fünf Personen...",
+    "imagePath": "https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil1.png",
     "progress": 0,
     "part": 1,
-    "durationMinutes": 10
-  },
-  {
-    "id": "2",
-    "title": "Teil 2",
-    "subtitle": "Detailliertes Hören",
-    "prompt": "Sie hören ein Gespräch. Beantworten Sie die Fragen.",
-    "imagePath": "",
-    "progress": 100,
-    "part": 2,
-    "durationMinutes": 10
-  },
-  {
-    "id": "3",
-    "title": "Teil 3",
-    "subtitle": "Selektives Hören",
-    "prompt": "Sie hören Durchsagen. Notieren Sie die wichtigsten Informationen.",
-    "imagePath": "",
-    "progress": 0,
-    "part": 3,
     "durationMinutes": 10
   }
 ]
@@ -131,22 +111,8 @@ GET /api/listening/sessions?teilNumber=1
 | date            | string | ISO 8601 timestamp (optional)                 |
 | dateLabel       | string | `"Heute"`, `"Gestern"`, or `"dd.mm.yyyy"`     |
 | score           | number | 0–100 (optional)                              |
-| feedback        | string | Optional (null for auto-scored attempts)      |
+| feedback        | string | Optional                                      |
 | durationSeconds | number | Optional                                      |
-
-**Example:**
-
-```json
-[
-  {
-    "id": "3f1a2b4c-0000-0000-0000-000000000001",
-    "date": "2026-04-06T09:15:00.000Z",
-    "dateLabel": "Heute",
-    "score": 80,
-    "durationSeconds": null
-  }
-]
-```
 
 ---
 
@@ -165,68 +131,49 @@ Authorization: Bearer <accessToken>
 
 **Response (200):**
 
-| Field                | Type   | Description                                                                 |
-|----------------------|--------|-----------------------------------------------------------------------------|
-| content_revision     | string | Version string — cache-bust key for the Flutter client                      |
-| issued_at            | string | ISO 8601 timestamp of when the response was generated                       |
-| audio_url            | string | HTTPS URL of the audio file. Currently `""` (audio is bundled in the app)   |
-| bundled_audio_asset  | string | Path relative to Flutter `assets/` folder. Used when `audio_url` is empty   |
-| questions            | array  | List of multiple-choice questions (see below)                               |
+| Field                | Type   | Description                                                              |
+|----------------------|--------|--------------------------------------------------------------------------|
+| content_revision     | string | Version string — cache-bust key; send this back unchanged in submit      |
+| issued_at            | string | ISO 8601 timestamp of when the response was generated                    |
+| audio_url            | string | HTTPS URL of the audio file (`""` = use bundled asset)                   |
+| bundled_audio_asset  | string | Path relative to Flutter `assets/` folder                               |
+| imagePath            | string | URL of the Teil image (Cloudflare R2)                                    |
+| questions            | array  | List of richtig/falsch statements (see below)                            |
 
-**`questions[]` object:**
+**`questions[]` object — richtig (+) / falsch (−) format:**
 
-| Field   | Type   | Description                   |
-|---------|--------|-------------------------------|
-| id      | string | Stable question id, e.g. `"q11"` |
-| prompt  | string | Question text (German)        |
-| options | array  | 3 answer options (see below)  |
+| Field   | Type   | Description                      |
+|---------|--------|----------------------------------|
+| id      | string | Stable question id, e.g. `"q41"` |
+| prompt  | string | Statement text (German)          |
 
-**`options[]` object:**
-
-| Field | Type   | Description                         |
-|-------|--------|-------------------------------------|
-| id    | string | Option id: `"a"`, `"b"`, or `"c"`  |
-| label | string | Answer text (German)                |
+> **No `options` array.** The student answers each statement with `"+"` (richtig) or `"-"` (falsch).
 
 **Example (type=1):**
 
 ```json
 {
-  "content_revision": "mock-horen-teil-1-v1",
-  "issued_at": "2026-04-06T09:00:00.000Z",
+  "content_revision": "modelltest-1-teil-1-v1",
+  "issued_at": "2026-06-04T09:00:00.000Z",
   "audio_url": "",
-  "bundled_audio_asset": "images/modules/Telc - A1.mp3",
+  "bundled_audio_asset": "",
+  "imagePath": "https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil1.png",
   "questions": [
-    {
-      "id": "q11",
-      "prompt": "Wo findet das Gespräch statt?",
-      "options": [
-        { "id": "a", "label": "Im Supermarkt" },
-        { "id": "b", "label": "Im Bahnhof" },
-        { "id": "c", "label": "In der Schule" }
-      ]
-    },
-    {
-      "id": "q12",
-      "prompt": "Was möchte die Frau kaufen?",
-      "options": [
-        { "id": "a", "label": "Einen Fahrschein" },
-        { "id": "b", "label": "Ein Buch" },
-        { "id": "c", "label": "Lebensmittel" }
-      ]
-    }
+    { "id": "q41", "prompt": "Für Manfred Rienke ist das Fortbildungsangebot wichtig." },
+    { "id": "q42", "prompt": "Alena Groll bildet sich regelmäßig weiter." },
+    { "id": "q43", "prompt": "Weng Wang stellt vor dem Seminar viele Fragen an die Seminarleitung." },
+    { "id": "q44", "prompt": "Maria Vallomäinen erklärt, wie Fortbildungsveranstaltungen entstehen." },
+    { "id": "q45", "prompt": "Manus Mani lehnt Fortbildungen ab, weil dann seine eigene Arbeit liegen bleibt." }
   ]
 }
 ```
 
 **Errors:**
 
-| Status | Description                              |
-|--------|------------------------------------------|
-| 401    | Invalid or missing token                 |
+| Status | Description                               |
+|--------|-------------------------------------------|
+| 401    | Invalid or missing token                  |
 | 404    | Unknown `type` (not `"1"`, `"2"`, `"3"`) |
-
-> **Important for caching:** The Flutter client must compare `content_revision` with the locally cached value. If it differs, re-download the audio and re-render the questions. Always send the same `content_revision` back in the submit call.
 
 ---
 
@@ -240,41 +187,49 @@ Content-Type: application/json
 
 **Body:**
 
-| Field            | Type    | Required | Description                                                             |
-|------------------|---------|----------|-------------------------------------------------------------------------|
-| type             | string  | Yes      | Teil id — same as `type` used in GET exercise                           |
-| timed            | boolean | Yes      | `true` = exam mode, `false` = practice mode                             |
-| content_revision | string  | Yes      | Must match the `content_revision` from GET exercise                     |
-| answers          | object  | Yes      | Map of `question.id → option.id`. At least one entry required.          |
+| Field            | Type    | Required | Description                                                              |
+|------------------|---------|----------|--------------------------------------------------------------------------|
+| type             | string  | Yes      | Teil id — same as `type` used in GET exercise                            |
+| timed            | boolean | Yes      | `true` = exam mode, `false` = practice mode                              |
+| content_revision | string  | Yes      | Must match the `content_revision` from GET exercise                      |
+| answers          | object  | Yes      | Map of `question.id → "+" or "-"`. At least one entry required.          |
 
 **Example:**
 
 ```json
 {
   "type": "1",
-  "timed": true,
-  "content_revision": "mock-horen-teil-1-v1",
+  "timed": false,
+  "content_revision": "modelltest-1-teil-1-v1",
   "answers": {
-    "q11": "b",
-    "q12": "a",
-    "q13": "c",
-    "q14": "b",
-    "q15": "a"
+    "q41": "-",
+    "q42": "+",
+    "q43": "+",
+    "q44": "+",
+    "q45": "-"
   }
 }
 ```
 
 **Response (200):**
 
+| Field     | Type   | Description                                                               |
+|-----------|--------|---------------------------------------------------------------------------|
+| answerKey | object | Map of `question.id → "+" or "-"` — the correct answer for each question |
+
 ```json
 {
-  "score": 100
+  "answerKey": {
+    "q41": "-",
+    "q42": "+",
+    "q43": "-",
+    "q44": "+",
+    "q45": "+"
+  }
 }
 ```
 
-| Field | Type   | Description                        |
-|-------|--------|------------------------------------|
-| score | number | 0–100. Percentage of correct answers, rounded to nearest integer. |
+> **Score is computed frontend-side.** The frontend already holds the student's answers. Compare `answers[qId]` with `answerKey[qId]` to determine `isCorrect` per question, then compute `score = correct / total * 100`.
 
 **Errors:**
 
@@ -286,29 +241,26 @@ Content-Type: application/json
 | 422    | `listeningStaleRevision`    | `content_revision` doesn't match — reload the exercise first  |
 | 422    | `listeningEmptyAnswers`     | `answers` object is empty                                      |
 
-> **Note:** Even if the DB insert fails (e.g. network error), the score is still returned. The attempt may not appear in sessions history in that case, but the user sees their result.
-
 ---
 
-## 3. Content revisions (current values)
+## 3. Content revisions (current values — Modelltest 1)
 
-| Teil | content_revision          |
-|------|---------------------------|
-| 1    | `mock-horen-teil-1-v1`    |
-| 2    | `mock-horen-teil-2-v1`    |
-| 3    | `mock-horen-teil-3-v1`    |
-
-These values are fixed until the exercise catalog is updated. When they change, update your local cache.
+| Teil | content_revision              | Questions  |
+|------|-------------------------------|------------|
+| 1    | `modelltest-1-teil-1-v1`      | q41–q45    |
+| 2    | `modelltest-1-teil-2-v1`      | q46–q55    |
+| 3    | `modelltest-1-teil-3-v1`      | q56–q60    |
 
 ---
 
 ## 4. Quick test flow (Hören only)
 
 1. **Get token** — POST `/api/auth/activate` or `/api/auth/login-with-code`
-2. **List Teile** — GET `/api/listening/teils` → note the `id` values (`"1"`, `"2"`, `"3"`)
+2. **List Teile** — GET `/api/listening/teils` → note `id`, `imagePath` values
 3. **Fetch exercise** — GET `/api/listening/exercise?type=1` → note `content_revision` and question ids
-4. **Submit answers** — POST `/api/listening/submit` with the `content_revision` and an `answers` map
-5. **Check history** — GET `/api/listening/sessions` → new attempt appears with the returned score
+4. **Submit answers** — POST `/api/listening/submit` with `content_revision` and `answers` map (`"+"` or `"-"` per question)
+5. **Use answerKey** — compare returned `answerKey` against submitted `answers` to compute per-question verdicts
+6. **Check history** — GET `/api/listening/sessions` → new attempt appears with the stored score
 
 ---
 

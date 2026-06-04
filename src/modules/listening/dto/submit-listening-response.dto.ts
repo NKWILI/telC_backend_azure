@@ -1,7 +1,12 @@
-/**
- * Response body for POST /api/listening/submit.
- * Frontend parses with ListeningSubmitResult.fromJson — accepts "score" or "note".
- */
-export interface SubmitListeningResponseDto {
-  score: number;
+import { ApiProperty } from '@nestjs/swagger';
+
+export class SubmitListeningResponseDto {
+  @ApiProperty({
+    description:
+      'Correct answer per question. "+" = richtig, "−" = falsch. ' +
+      'Frontend computes per-question verdicts by comparing submitted answers against this key.',
+    example: { q41: '-', q42: '+', q43: '-', q44: '+', q45: '+' },
+    additionalProperties: { type: 'string', enum: ['+', '-'] },
+  })
+  answerKey: Record<string, string>;
 }

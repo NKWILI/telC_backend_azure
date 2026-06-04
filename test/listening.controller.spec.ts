@@ -114,8 +114,8 @@ describe('ListeningController', () => {
     const dto = {
       type: '1',
       timed: true,
-      content_revision: 'mock-horen-teil-1-v1',
-      answers: { q11: 'b' },
+      content_revision: 'modelltest-1-teil-1-v1',
+      answers: { q41: '-' },
     };
 
     it('delegates to service.submit with studentId and dto, returns result', async () => {

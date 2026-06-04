@@ -6,16 +6,16 @@ import {
 import { ListeningService } from '../src/modules/listening/listening.service';
 import { PrismaService } from '../src/shared/services/prisma.service';
 
-const TEIL1_REVISION = 'mock-horen-teil-1-v1';
-const TEIL2_REVISION = 'mock-horen-teil-2-v1';
-const TEIL3_REVISION = 'mock-horen-teil-3-v1';
+const TEIL1_REVISION = 'modelltest-1-teil-1-v1';
+const TEIL2_REVISION = 'modelltest-1-teil-2-v1';
+const TEIL3_REVISION = 'modelltest-1-teil-3-v1';
 
 const TEIL1_CORRECT_ANSWERS: Record<string, string> = {
-  q11: 'b',
-  q12: 'a',
-  q13: 'c',
-  q14: 'b',
-  q15: 'a',
+  q41: '-',
+  q42: '+',
+  q43: '-',
+  q44: '+',
+  q45: '+',
 };
 
 describe('ListeningService', () => {
@@ -192,19 +192,26 @@ describe('ListeningService', () => {
       expect(result.questions.length).toBeGreaterThan(0);
     });
 
-    it('each question has id, prompt, and options array with id+label', async () => {
+    it('each question has id and prompt only — no options array', async () => {
       const result = await service.getExercise('1');
 
       for (const q of result.questions) {
         expect(q.id).toBeDefined();
         expect(q.prompt).toBeDefined();
-        expect(Array.isArray(q.options)).toBe(true);
-        expect(q.options.length).toBeGreaterThan(0);
-        for (const opt of q.options) {
-          expect(opt.id).toBeDefined();
-          expect(opt.label).toBeDefined();
-        }
+        expect((q as any).options).toBeUndefined();
       }
+    });
+
+    it('returns imagePath string', async () => {
+      const result = await service.getExercise('1');
+
+      expect(typeof result.imagePath).toBe('string');
+    });
+
+    it('Teil 2 has exactly 10 questions', async () => {
+      const result = await service.getExercise('2');
+
+      expect(result.questions).toHaveLength(10);
     });
 
     it('does NOT expose the answer key in the response', async () => {
@@ -263,7 +270,7 @@ describe('ListeningService', () => {
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
-    it('returns score 100 when all answers are correct', async () => {
+    it('returns answerKey when all answers are correct', async () => {
       mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
       const result = await service.submit('student-1', {
@@ -273,61 +280,34 @@ describe('ListeningService', () => {
         answers: TEIL1_CORRECT_ANSWERS,
       });
 
-      expect(result.score).toBe(100);
+      expect(result.answerKey).toBeDefined();
+      expect(typeof result.answerKey).toBe('object');
+      expect((result as any).score).toBeUndefined();
     });
 
-    it('returns score 0 when all answers are wrong', async () => {
+    it('answerKey contains correct +/- values for Teil 1', async () => {
       mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      const allWrong: Record<string, string> = {};
-      for (const qId of Object.keys(TEIL1_CORRECT_ANSWERS)) {
-        allWrong[qId] = 'z';
-      }
 
       const result = await service.submit('student-1', {
         type: '1',
         timed: false,
         content_revision: TEIL1_REVISION,
-        answers: allWrong,
+        answers: TEIL1_CORRECT_ANSWERS,
       });
 
-      expect(result.score).toBe(0);
+      expect(result.answerKey).toEqual(TEIL1_CORRECT_ANSWERS);
     });
 
-    it('returns a partial score for partially correct answers', async () => {
+    it('DB insert receives the computed score even though it is not returned', async () => {
       mockPrismaService.listeningAttempt.create.mockResolvedValue({});
 
-      const partial: Record<string, string> = {
-        q11: TEIL1_CORRECT_ANSWERS['q11'],
-        q12: TEIL1_CORRECT_ANSWERS['q12'],
-        q13: 'z',
-        q14: 'z',
-        q15: 'z',
-      };
-
-      const result = await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: partial,
-      });
-
-      expect(result.score).toBe(40);
-    });
-
-    it('inserts a completed attempt row and returns score', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      const result = await service.submit('student-1', {
+      await service.submit('student-1', {
         type: '1',
         timed: true,
         content_revision: TEIL1_REVISION,
         answers: TEIL1_CORRECT_ANSWERS,
       });
 
-      expect(typeof result.score).toBe('number');
-      expect(result.score).toBeGreaterThanOrEqual(0);
-      expect(result.score).toBeLessThanOrEqual(100);
       expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -340,19 +320,44 @@ describe('ListeningService', () => {
       );
     });
 
-    it('does not throw when DB insert fails — logs and returns score anyway', async () => {
+    it('partial answers — DB still receives a numeric score', async () => {
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
+
+      const partial: Record<string, string> = {
+        q41: '-',  // correct
+        q42: '+',  // correct
+        q43: '+',  // wrong
+        q44: '-',  // wrong
+        q45: '-',  // wrong
+      };
+
+      await service.submit('student-1', {
+        type: '1',
+        timed: false,
+        content_revision: TEIL1_REVISION,
+        answers: partial,
+      });
+
+      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ score: 40 }),
+        }),
+      );
+    });
+
+    it('does not throw when DB insert fails — still returns answerKey', async () => {
       mockPrismaService.listeningAttempt.create.mockRejectedValue(
         new Error('DB down'),
       );
 
-      await expect(
-        service.submit('student-1', {
-          type: '1',
-          timed: false,
-          content_revision: TEIL1_REVISION,
-          answers: TEIL1_CORRECT_ANSWERS,
-        }),
-      ).resolves.toMatchObject({ score: expect.any(Number) });
+      const result = await service.submit('student-1', {
+        type: '1',
+        timed: false,
+        content_revision: TEIL1_REVISION,
+        answers: TEIL1_CORRECT_ANSWERS,
+      });
+
+      expect(result.answerKey).toBeDefined();
     });
   });
 });
