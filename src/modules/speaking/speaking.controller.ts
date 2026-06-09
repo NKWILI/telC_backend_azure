@@ -14,20 +14,15 @@ import {
   ApiOperation,
   ApiOkResponse,
   ApiUnauthorizedResponse,
-  ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
-import { GuestBlockGuard } from '../../shared/guards/guest-block.guard';
 import { EvaluationService } from './services';
 import { EvaluateSpeakingDto, SpeakingEvaluationResponseDto } from './dto';
 
 @ApiTags('Speaking')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
-@ApiForbiddenResponse({
-  description: 'Guest accounts cannot use Speaking (messageKey: guestNotAllowed)',
-})
-@UseGuards(JwtAuthGuard, GuestBlockGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('api/speaking')
 export class SpeakingController {
   private readonly logger = new Logger(SpeakingController.name);
