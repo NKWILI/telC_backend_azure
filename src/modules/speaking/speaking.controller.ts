@@ -1,12 +1,9 @@
 import {
   Controller,
   Post,
-  Patch,
   Body,
-  Param,
   UseGuards,
   Request,
-  BadRequestException,
   Logger,
   HttpCode,
   HttpStatus,
@@ -14,222 +11,53 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
+  ApiOperation,
+  ApiOkResponse,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { GuestBlockGuard } from '../../shared/guards/guest-block.guard';
-import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
-import { SpeakingGateway } from './speaking.gateway';
-import { SpeakingService, EvaluationService } from './services';
-import {
-  StartSessionDto,
-  StartSessionResponseDto,
-  PauseSessionResponseDto,
-  ResumeSessionResponseDto,
-  EndSessionResponseDto,
-  EndSessionDto,
-  EvaluationResponseDto,
-} from './dto';
+import { EvaluationService } from './services';
+import { EvaluateSpeakingDto, SpeakingEvaluationResponseDto } from './dto';
 
-/**
- * Speaking Exam Controller
- * Handles REST endpoints for SPRECHEN module
- * All endpoints require JWT authentication. Guest tokens are rejected
- * (GuestBlockGuard) because Speaking uses the per-minute Gemini Live audio.
- */
 @ApiTags('Speaking')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
 @ApiForbiddenResponse({
-  description:
-    'Guest accounts cannot use Speaking (messageKey: guestNotAllowed). ' +
-    'The client should prompt the user to join the waitlist / register.',
+  description: 'Guest accounts cannot use Speaking (messageKey: guestNotAllowed)',
 })
 @UseGuards(JwtAuthGuard, GuestBlockGuard)
-@Controller('api/speaking/session')
+@Controller('api/speaking')
 export class SpeakingController {
   private readonly logger = new Logger(SpeakingController.name);
 
-  constructor(
-    private readonly speakingService: SpeakingService,
-    private readonly evaluationService: EvaluationService,
-    private readonly speakingGateway: SpeakingGateway,
-  ) {}
+  constructor(private readonly evaluationService: EvaluationService) {}
 
   /**
-   * POST /api/speaking/session/start
-   * Create a new speaking exam session
-   *
-   * Authorization: JWT required via @UseGuards(JwtAuthGuard)
-   * Ownership: Session automatically created for authenticated student from token
+   * POST /api/speaking/evaluate
+   * Accepts a student transcript and returns an AI evaluation.
+   * The frontend records + transcribes audio locally, then submits the text here.
+   * The returned evaluationText is a German paragraph ready for TTS playback.
    */
-  @Post('start')
-  @HttpCode(HttpStatus.CREATED)
-  async startSession(
-    @Request() req: any,
-    @Body() dto: StartSessionDto,
-  ): Promise<StartSessionResponseDto> {
-    try {
-      const studentPayload: AccessTokenPayload = req.student;
-
-      this.logger.log(
-        `Starting session for student ${studentPayload.studentId}, Teil ${dto.teilNumber}, useTimer: ${dto.useTimer}`,
-      );
-
-      const response = await this.speakingService.startSession(
-        studentPayload.studentId,
-        dto.teilNumber,
-        dto.useTimer,
-      );
-
-      return response;
-    } catch (error) {
-      this.logger.error(`Error starting session: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * PATCH /api/speaking/session/:sessionId/pause
-   * Pause an active session
-   *
-   * Authorization: JWT required via @UseGuards(JwtAuthGuard)
-   * Ownership: Verified in service layer (speakingService.pauseSession)
-   */
-  /**
-   * @deprecated Use WebSocket 'pause_session' event instead.
-   * This REST endpoint only updates DB status and does NOT manage Gemini lifecycle.
-   */
-  @Patch(':sessionId/pause')
+  @Post('evaluate')
   @HttpCode(HttpStatus.OK)
-  async pauseSession(
+  @ApiOperation({
+    summary: 'Evaluate a speaking transcript',
+    description:
+      'Submit a student transcript. Returns scores (grammar, vocabulary, coherence, overall), ' +
+      'a spoken German evaluation paragraph for TTS, and up to 10 corrections.',
+  })
+  @ApiOkResponse({ type: SpeakingEvaluationResponseDto })
+  async evaluate(
     @Request() req: any,
-    @Param('sessionId') sessionId: string,
-  ): Promise<PauseSessionResponseDto> {
-    try {
-      const studentPayload: AccessTokenPayload = req.student;
+    @Body() dto: EvaluateSpeakingDto,
+  ): Promise<SpeakingEvaluationResponseDto> {
+    this.logger.log(
+      `Evaluate request — student: ${req.student?.studentId}, Teil: ${dto.teilNumber}, ` +
+        `transcript length: ${dto.transcript.length} chars`,
+    );
 
-      this.logger.warn(
-        `DEPRECATED: REST pause called for session ${sessionId}. ` +
-          `Client should use WebSocket 'pause_session' event for proper Gemini management.`,
-      );
-
-      const response = await this.speakingService.pauseSession(
-        sessionId,
-        studentPayload.studentId,
-      );
-
-      return response;
-    } catch (error) {
-      this.logger.error(`Error pausing session: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * PATCH /api/speaking/session/:sessionId/resume
-   * Resume a paused session
-   *
-   * Authorization: JWT required via @UseGuards(JwtAuthGuard)
-   * Ownership: Verified in service layer (speakingService.resumeSession)
-   */
-  /**
-   * @deprecated Use WebSocket 'resume_session' event instead.
-   * This REST endpoint only updates DB status and does NOT re-initialize Gemini if closed.
-   */
-  @Patch(':sessionId/resume')
-  @HttpCode(HttpStatus.OK)
-  async resumeSession(
-    @Request() req: any,
-    @Param('sessionId') sessionId: string,
-  ): Promise<ResumeSessionResponseDto> {
-    try {
-      const studentPayload: AccessTokenPayload = req.student;
-
-      this.logger.warn(
-        `DEPRECATED: REST resume called for session ${sessionId}. ` +
-          `Client should use WebSocket 'resume_session' event for proper Gemini management.`,
-      );
-
-      const response = await this.speakingService.resumeSession(
-        sessionId,
-        studentPayload.studentId,
-      );
-
-      return response;
-    } catch (error) {
-      this.logger.error(`Error resuming session: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * POST /api/speaking/session/:sessionId/end
-   * End a session
-   *
-   * Authorization: JWT required via @UseGuards(JwtAuthGuard)
-   * Ownership: Verified in service layer (speakingService.endSession)
-   */
-  @Post(':sessionId/end')
-  @HttpCode(HttpStatus.OK)
-  async endSession(
-    @Request() req: any,
-    @Param('sessionId') sessionId: string,
-    @Body() dto?: EndSessionDto,
-  ): Promise<EndSessionResponseDto> {
-    try {
-      const studentPayload: AccessTokenPayload = req.student;
-
-      this.logger.log(
-        `Ending session ${sessionId} for student ${studentPayload.studentId}, reason: ${dto?.reason || 'not specified'}`,
-      );
-
-      const response = await this.speakingService.endSession(
-        sessionId,
-        studentPayload.studentId,
-        dto?.reason,
-      );
-
-      await this.speakingGateway.closeSessionImmediately(sessionId);
-
-      return response;
-    } catch (error) {
-      this.logger.error(`Error ending session: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * POST /api/speaking/session/:sessionId/evaluate
-   * Evaluate a completed speaking session using Gemini AI
-   *
-   * Authorization: JWT required via @UseGuards(JwtAuthGuard)
-   * Ownership: Verified via session lookup (student must own the session)
-   * Precondition: Session must be 'completed' or 'interrupted'
-   */
-  @Post(':sessionId/evaluate')
-  @HttpCode(HttpStatus.OK)
-  async evaluateSession(
-    @Request() req: any,
-    @Param('sessionId') sessionId: string,
-  ): Promise<EvaluationResponseDto> {
-    try {
-      const studentPayload: AccessTokenPayload = req.student;
-
-      this.logger.log(
-        `Evaluating session ${sessionId} for student ${studentPayload.studentId}`,
-      );
-
-      const evaluation = await this.evaluationService.evaluateSession(
-        sessionId,
-        studentPayload.studentId,
-      );
-
-      return evaluation;
-    } catch (error) {
-      this.logger.error(`Error evaluating session: ${error.message}`);
-      throw error;
-    }
+    return this.evaluationService.evaluateTranscript(dto.teilNumber, dto.transcript);
   }
 }
