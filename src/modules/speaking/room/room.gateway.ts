@@ -5,12 +5,13 @@ import {
   OnGatewayDisconnect,
   OnGatewayConnection,
 } from '@nestjs/websockets';
-import { OnApplicationShutdown, Logger } from '@nestjs/common';
+import { OnApplicationShutdown, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ROOM_GATEWAY_NAMESPACE } from './constants';
 import { RoomService } from './room.service';
 import { JoinRoomDto } from './dto/join-room.dto';
 
+@UsePipes(new ValidationPipe({ whitelist: true }))
 @WebSocketGateway({ namespace: ROOM_GATEWAY_NAMESPACE, cors: { origin: '*' } })
 export class RoomGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnApplicationShutdown
@@ -171,14 +172,18 @@ export class RoomGateway
 
     if (client.id === room.hostSocketId) {
       if (room.guest) {
+        const guestSocket = this.server.sockets.sockets.get(room.guest.socketId);
+        if (guestSocket) guestSocket.data.roomId = undefined;
         this.server.to(room.guest.socketId).emit('room-ended', {});
       }
+      client.data.roomId = undefined;
       this.roomService.deleteRoom(roomId);
       this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'host', reason: 'intentional' }));
     } else {
       if (room.hostSocketId) {
         this.server.to(room.hostSocketId).emit('partner-left', {});
       }
+      client.data.roomId = undefined;
       this.roomService.removeGuest(roomId);
       this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'guest', reason: 'intentional' }));
     }
@@ -206,6 +211,8 @@ export class RoomGateway
 
       this.roomService.startGracePeriod(roomId, (capturedGuestSocketId) => {
         if (capturedGuestSocketId) {
+          const guestSocket = this.server.sockets.sockets.get(capturedGuestSocketId);
+          if (guestSocket) guestSocket.data.roomId = undefined;
           this.server.to(capturedGuestSocketId).emit('room-ended', {});
         }
         this.roomService.deleteRoom(roomId);

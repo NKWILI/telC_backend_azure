@@ -62,7 +62,7 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
     gateway = module.get<RoomGateway>(RoomGateway);
     mockEmit = jest.fn();
     mockTo = jest.fn().mockReturnValue({ emit: mockEmit });
-    gateway.server = { to: mockTo } as any;
+    gateway.server = { to: mockTo, sockets: { sockets: new Map() } } as any;
   });
 
   afterEach(() => jest.clearAllMocks());
