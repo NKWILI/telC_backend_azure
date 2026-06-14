@@ -6,7 +6,7 @@ import {
   OnGatewayConnection,
 } from '@nestjs/websockets';
 import { OnApplicationShutdown, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Socket } from 'socket.io';
 import { ROOM_GATEWAY_NAMESPACE } from './constants';
 import { RoomService } from './room.service';
 import { JoinRoomDto } from './dto/join-room.dto';
@@ -16,8 +16,12 @@ import { JoinRoomDto } from './dto/join-room.dto';
 export class RoomGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnApplicationShutdown
 {
+  // NestJS injects the namespace-scoped server here (the gateway is
+  // namespaced), so the runtime type is Namespace, not Server. This matters:
+  // Namespace.sockets is the Map<socketId, Socket>, whereas Server.sockets is
+  // the default Namespace. Typing it correctly lets us call .sockets.get().
   @WebSocketServer()
-  server: Server;
+  server: Namespace;
 
   private readonly logger = new Logger(RoomGateway.name);
 
