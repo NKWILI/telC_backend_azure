@@ -172,7 +172,7 @@ export class RoomGateway
 
     if (client.id === room.hostSocketId) {
       if (room.guest) {
-        const guestSocket = this.server.sockets.sockets.get(room.guest.socketId);
+        const guestSocket = this.server.sockets.get(room.guest.socketId);
         if (guestSocket) guestSocket.data.roomId = undefined;
         this.server.to(room.guest.socketId).emit('room-ended', {});
       }
@@ -211,7 +211,7 @@ export class RoomGateway
 
       this.roomService.startGracePeriod(roomId, (capturedGuestSocketId) => {
         if (capturedGuestSocketId) {
-          const guestSocket = this.server.sockets.sockets.get(capturedGuestSocketId);
+          const guestSocket = this.server.sockets.get(capturedGuestSocketId);
           if (guestSocket) guestSocket.data.roomId = undefined;
           this.server.to(capturedGuestSocketId).emit('room-ended', {});
         }
