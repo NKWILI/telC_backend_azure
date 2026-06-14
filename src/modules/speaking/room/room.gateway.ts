@@ -34,7 +34,7 @@ export class RoomGateway
 
     // EDGE-06: one-socket-one-room invariant
     if (client.data.roomId) {
-      if (client.data.roomId === roomId) return; // idempotent no-op
+      if (client.data.roomId === roomId) return;
       client.emit('already-in-room', {});
       return;
     }
@@ -49,14 +49,22 @@ export class RoomGateway
     const isHost = this.roomService.verifyHostToken(roomId, hostToken ?? '');
 
     if (isHost) {
+      // RC-03: capture whether we are in a grace-period reconnect BEFORE setHost mutates status
+      const isReconnect = room.status === 'ended' && room.hostSocketId === null;
+
       this.roomService.setHost(roomId, client.id);
       client.data.roomId = roomId;
-      this.logger.log(JSON.stringify({ event: 'socket.joined', roomId, role: 'host' }));
 
-      // RC-01: guest was already waiting before host connected
-      if (room.guest) {
+      if (isReconnect && room.guest) {
+        // Host reconnected during grace period — notify guest, do NOT emit guest-joined to host
+        this.server.to(room.guest.socketId).emit('host-reconnected', {});
+        this.logger.log(JSON.stringify({ event: 'host.reconnected', roomId }));
+      } else if (room.guest) {
+        // RC-01: guest was already waiting before host's first connection
         client.emit('guest-joined', { displayName: room.guest.displayName });
       }
+
+      this.logger.log(JSON.stringify({ event: 'socket.joined', roomId, role: 'host' }));
     } else {
       // Guest path
       if (room.guest) {
@@ -83,13 +91,11 @@ export class RoomGateway
     const room = this.roomService.getRoom(roomId);
     if (!room) { client.emit('room-not-found', {}); return; }
 
-    // SEC-03: sender must be host
     if (client.id !== room.hostSocketId) {
       client.emit('unauthorized', {});
       return;
     }
 
-    // EDGE-01: no guest ready
     if (!room.guest) {
       client.emit('no-guest-ready', {});
       return;
@@ -108,7 +114,6 @@ export class RoomGateway
     const room = this.roomService.getRoom(roomId);
     if (!room) { client.emit('room-not-found', {}); return; }
 
-    // SEC-03: sender must be guest
     if (client.id !== room.guest?.socketId) {
       client.emit('unauthorized', {});
       return;
@@ -142,7 +147,6 @@ export class RoomGateway
       targetSocketId = room.hostSocketId;
       direction = 'guest→host';
     } else {
-      // sender is neither — discard silently
       this.logger.log(JSON.stringify({ event: 'signal.dropped', type: 'ice-candidate', roomId, reason: 'unknown-sender' }));
       return;
     }
@@ -156,17 +160,83 @@ export class RoomGateway
     this.logger.log(JSON.stringify({ event: 'signal.relayed', type: 'ice-candidate', roomId, direction }));
   }
 
+  // ─── leave-room ────────────────────────────────────────────────────────────
+
+  @SubscribeMessage('leave-room')
+  handleLeaveRoom(client: Socket): void {
+    const room = this.roomService.getRoomBySocketId(client.id);
+    if (!room) return;
+
+    const roomId = room.roomId;
+
+    if (client.id === room.hostSocketId) {
+      if (room.guest) {
+        this.server.to(room.guest.socketId).emit('room-ended', {});
+      }
+      this.roomService.deleteRoom(roomId);
+      this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'host', reason: 'intentional' }));
+    } else {
+      if (room.hostSocketId) {
+        this.server.to(room.hostSocketId).emit('partner-left', {});
+      }
+      this.roomService.removeGuest(roomId);
+      this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'guest', reason: 'intentional' }));
+    }
+  }
+
   // ─── disconnect ────────────────────────────────────────────────────────────
 
   handleDisconnect(client: Socket): void {
-    this.logger.log(JSON.stringify({ event: 'socket.disconnected', socketId: client.id }));
-    // Task 6 implements full disconnect logic
+    // EDGE-06: O(1) lookup via client.data.roomId, fall back to linear scan
+    const room = client.data.roomId
+      ? this.roomService.getRoom(client.data.roomId as string)
+      : this.roomService.getRoomBySocketId(client.id);
+
+    if (!room) return;
+
+    const roomId = room.roomId;
+
+    if (client.id === room.hostSocketId) {
+      // RC-03: start grace period — capture guestSocketId NOW (GAP-2 fix)
+      const guestSocketId = room.guest?.socketId ?? null;
+
+      if (guestSocketId) {
+        this.server.to(guestSocketId).emit('host-disconnected', {});
+      }
+
+      this.roomService.startGracePeriod(roomId, (capturedGuestSocketId) => {
+        if (capturedGuestSocketId) {
+          this.server.to(capturedGuestSocketId).emit('room-ended', {});
+        }
+        this.roomService.deleteRoom(roomId);
+        this.logger.log(JSON.stringify({ event: 'grace.expired', roomId }));
+      });
+
+      this.logger.log(JSON.stringify({ event: 'socket.disconnected', roomId, role: 'host', reason: 'unexpected' }));
+    } else {
+      // Guest disconnected
+      if (room.hostSocketId) {
+        this.server.to(room.hostSocketId).emit('partner-left', {});
+      }
+      this.roomService.removeGuest(roomId);
+      this.logger.log(JSON.stringify({ event: 'socket.disconnected', roomId, role: 'guest', reason: 'unexpected' }));
+    }
   }
 
   // ─── graceful shutdown ─────────────────────────────────────────────────────
 
   onApplicationShutdown(signal?: string): void {
-    // Task 6 implements full shutdown logic
-    this.logger.log(JSON.stringify({ event: 'server.shutdown', signal }));
+    const rooms = [...this.roomService.getAllRooms()];
+
+    for (const room of rooms) {
+      if (room.hostSocketId) {
+        this.server.to(room.hostSocketId).emit('server-shutting-down', {});
+      }
+      if (room.guest?.socketId) {
+        this.server.to(room.guest.socketId).emit('server-shutting-down', {});
+      }
+    }
+
+    this.logger.log(JSON.stringify({ event: 'server.shutdown', signal, activeRooms: rooms.length }));
   }
 }
