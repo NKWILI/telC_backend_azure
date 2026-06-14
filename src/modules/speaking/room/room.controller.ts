@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, Logger, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Param, Logger, NotFoundException, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { RoomService } from './room.service';
 import { CreateRoomResponseDto } from './dto/create-room-response.dto';
 import { RoomInfoResponseDto } from './dto/room-info-response.dto';
@@ -12,6 +13,7 @@ export class RoomController {
   constructor(private readonly roomService: RoomService) {}
 
   @Post()
+  @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Create a new speaking practice room' })
   createRoom(): CreateRoomResponseDto {
     const result = this.roomService.createRoom();

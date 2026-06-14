@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { RoomController } from '../src/modules/speaking/room/room.controller';
 import { RoomService } from '../src/modules/speaking/room/room.service';
 import { Room } from '../src/modules/speaking/room/interfaces/room.interface';
@@ -34,7 +35,10 @@ describe('RoomController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
       providers: [{ provide: RoomService, useValue: mockRoomService }],
-    }).compile();
+    })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<RoomController>(RoomController);
   });
