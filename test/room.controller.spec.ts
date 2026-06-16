@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { RoomController } from '../src/modules/speaking/room/room.controller';
 import { RoomService } from '../src/modules/speaking/room/room.service';
+import { TurnCredentialsService } from '../src/modules/speaking/room/turn-credentials.service';
+import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { Room } from '../src/modules/speaking/room/interfaces/room.interface';
 
 const VALID_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
@@ -11,6 +13,10 @@ const EXPIRES_AT = '2026-06-14T16:00:00.000Z';
 const mockRoomService = {
   createRoom: jest.fn(),
   getRoom: jest.fn(),
+};
+
+const mockTurnService = {
+  getIceServers: jest.fn(),
 };
 
 function makeRoom(overrides: Partial<Room> = {}): Room {
@@ -34,9 +40,14 @@ describe('RoomController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
-      providers: [{ provide: RoomService, useValue: mockRoomService }],
+      providers: [
+        { provide: RoomService, useValue: mockRoomService },
+        { provide: TurnCredentialsService, useValue: mockTurnService },
+      ],
     })
       .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -121,6 +132,30 @@ describe('RoomController', () => {
       const result = controller.getRoom(VALID_UUID);
 
       expect(result.expiresAt).toBe(EXPIRES_AT);
+    });
+  });
+
+  // ─── GET /api/speaking/rooms/ice-servers ──────────────────────────────────
+
+  describe('getIceServers()', () => {
+    it('delegates to TurnCredentialsService with the studentId from the JWT', () => {
+      const dto = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], ttlSeconds: 3600 };
+      mockTurnService.getIceServers.mockReturnValue(dto);
+      const req = { student: { studentId: 'student-1', deviceId: 'd1' } } as any;
+
+      const result = controller.getIceServers(req);
+
+      expect(mockTurnService.getIceServers).toHaveBeenCalledWith('student-1');
+      expect(result).toBe(dto);
+    });
+
+    it('falls back to "anonymous" when no studentId is present', () => {
+      mockTurnService.getIceServers.mockReturnValue({ iceServers: [], ttlSeconds: 3600 });
+      const req = { student: {} } as any;
+
+      controller.getIceServers(req);
+
+      expect(mockTurnService.getIceServers).toHaveBeenCalledWith('anonymous');
     });
   });
 });
