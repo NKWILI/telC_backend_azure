@@ -26,26 +26,26 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
           socket: {
             connectTimeout: 5_000,
             reconnectStrategy: (retries) =>
-              retries >= 5 ? false : Math.min(100 * 2 ** retries, 3_000),
+              Math.min(250 * 2 ** Math.min(retries, 4), 5_000),
           },
         })
       : null;
-    this.client?.on('error', () => this.logDegraded());
+    this.client?.on('error', (error) => this.logDegraded(error));
   }
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     if (!this.client) {
       this.logger.warn(
         'VALKEY_URL not configured; rate limits are instance-local',
       );
       return;
     }
-    try {
-      await this.client.connect();
-      this.logger.log('Valkey connected; distributed rate limits enabled');
-    } catch {
-      this.logDegraded();
-    }
+    void this.client
+      .connect()
+      .then(() =>
+        this.logger.log('Valkey connected; distributed rate limits enabled'),
+      )
+      .catch((error: unknown) => this.logDegraded(error));
   }
 
   async enforce(buckets: RateLimitBucket[]): Promise<boolean | null> {
@@ -94,13 +94,13 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
-  async isSessionRevoked(sessionId: string): Promise<boolean> {
-    if (!this.client?.isReady) return false;
+  async isSessionRevoked(sessionId: string): Promise<boolean | null> {
+    if (!this.client?.isReady) return null;
     try {
       return (await this.client.exists(`revoked:session:${sessionId}`)) === 1;
-    } catch {
-      this.logDegraded();
-      return false;
+    } catch (error) {
+      this.logDegraded(error);
+      return null;
     }
   }
 
@@ -108,10 +108,16 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     if (this.client?.isOpen) await this.client.close();
   }
 
-  private logDegraded(): void {
+  private logDegraded(error?: unknown): void {
     const now = Date.now();
     if (now - this.lastFailureLogAt < 60_000) return;
     this.lastFailureLogAt = now;
-    this.logger.warn('Valkey unavailable; using instance-local rate limits');
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String(error.code)
+        : 'UNKNOWN';
+    this.logger.error(
+      `Valkey unavailable (${code}); using database session verification and instance-local rate limits`,
+    );
   }
 }
