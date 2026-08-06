@@ -10,7 +10,10 @@ describe('AuthController.createGuestSession', () => {
   };
 
   beforeAll(() => {
-    process.env.JWT_SECRET = 'test-secret-key-for-guest-controller-tests-1234567890';
+    process.env.JWT_ACCESS_SECRET =
+      'test-access-secret-for-guest-controller-tests-that-is-at-least-64-characters';
+    process.env.JWT_REFRESH_SECRET =
+      'test-refresh-secret-for-guest-controller-tests-that-is-at-least-64-characters';
     process.env.JWT_ACCESS_TOKEN_EXPIRY = '15m';
   });
 
@@ -78,8 +81,8 @@ describe('AuthController.createGuestSession', () => {
       );
     });
 
-    await expect(
-      controller.createGuestSession('1.2.3.4'),
-    ).rejects.toThrow(HttpException);
+    await expect(controller.createGuestSession('1.2.3.4')).rejects.toThrow(
+      HttpException,
+    );
   });
 });

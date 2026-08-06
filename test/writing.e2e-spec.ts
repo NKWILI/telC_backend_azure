@@ -17,6 +17,7 @@ import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
 
 const defaultPayload: AccessTokenPayload = {
+  type: 'access',
   studentId: 'student-1',
   isRegistered: true,
   deviceId: 'device-1',

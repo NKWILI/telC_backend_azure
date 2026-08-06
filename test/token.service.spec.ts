@@ -6,8 +6,10 @@ describe('TokenService', () => {
 
   beforeAll(() => {
     // Set env vars for testing
-    process.env.JWT_SECRET =
-      'test-secret-key-that-is-long-enough-for-testing-purposes-1234567890';
+    process.env.JWT_ACCESS_SECRET =
+      'test-access-secret-that-is-long-enough-for-testing-purposes-1234567890';
+    process.env.JWT_REFRESH_SECRET =
+      'test-refresh-secret-that-is-different-and-long-enough-1234567890';
     process.env.JWT_ACCESS_TOKEN_EXPIRY = '1h';
     process.env.JWT_REFRESH_TOKEN_EXPIRY = '30d';
   });
@@ -39,6 +41,7 @@ describe('TokenService', () => {
       const decoded = tokenService.verifyAccessToken(token);
       expect(decoded.studentId).toBe('student-123');
       expect(decoded.deviceId).toBe('device-456');
+      expect(decoded.type).toBe('access');
     });
   });
 
@@ -90,11 +93,16 @@ describe('TokenService', () => {
       const jwt = require('jsonwebtoken');
       const expiredToken = jwt.sign(
         {
+          type: 'access',
           studentId: 'student-123',
           deviceId: 'device-456',
         },
-        process.env.JWT_SECRET,
-        { expiresIn: '0s' }, // Immediately expired
+        process.env.JWT_ACCESS_SECRET,
+        {
+          issuer: 'lerniqo-api',
+          audience: 'lerniqo-app',
+          expiresIn: '0s',
+        }, // Immediately expired
       );
 
       // Small delay to ensure expiry
@@ -105,6 +113,18 @@ describe('TokenService', () => {
 
     it('should reject a malformed token', () => {
       expect(() => tokenService.verifyAccessToken('not-a-jwt')).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should reject a refresh token used as an access token', () => {
+      const refreshToken = tokenService.generateRefreshToken({
+        studentId: 'student-123',
+        deviceId: 'device-456',
+        sessionId: 'session-789',
+      });
+
+      expect(() => tokenService.verifyAccessToken(refreshToken)).toThrow(
         UnauthorizedException,
       );
     });
@@ -168,6 +188,7 @@ describe('TokenService', () => {
       expect(decoded.studentId).toBe('student-123');
       expect(decoded.deviceId).toBe('device-456');
       expect(decoded.sessionId).toBe('session-789');
+      expect(decoded.type).toBe('refresh');
     });
   });
 
@@ -215,6 +236,53 @@ describe('TokenService', () => {
       expect(() => tokenService.verifyRefreshToken(wrongToken)).toThrow(
         UnauthorizedException,
       );
+    });
+
+    it('should reject an access token used as a refresh token', () => {
+      const accessToken = tokenService.generateAccessToken({
+        studentId: 'student-123',
+        deviceId: 'device-456',
+      });
+
+      expect(() => tokenService.verifyRefreshToken(accessToken)).toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  describe('secret configuration', () => {
+    const accessSecret =
+      'test-access-secret-that-is-long-enough-for-testing-purposes-1234567890';
+    const refreshSecret =
+      'test-refresh-secret-that-is-different-and-long-enough-1234567890';
+
+    afterEach(() => {
+      process.env.JWT_ACCESS_SECRET = accessSecret;
+      process.env.JWT_REFRESH_SECRET = refreshSecret;
+    });
+
+    it('should refuse to start without JWT_ACCESS_SECRET', () => {
+      delete process.env.JWT_ACCESS_SECRET;
+
+      expect(() => new TokenService()).toThrow('JWT_ACCESS_SECRET');
+    });
+
+    it('should refuse to start without JWT_REFRESH_SECRET', () => {
+      delete process.env.JWT_REFRESH_SECRET;
+
+      expect(() => new TokenService()).toThrow('JWT_REFRESH_SECRET');
+    });
+
+    it('should refuse to start with a weak access-token secret', () => {
+      process.env.JWT_ACCESS_SECRET = 'too-short';
+
+      expect(() => new TokenService()).toThrow('JWT_ACCESS_SECRET');
+    });
+
+    it('should refuse to start with a weak refresh-token secret', () => {
+      process.env.JWT_REFRESH_SECRET = 'too-short';
+
+      expect(() => new TokenService()).toThrow('JWT_REFRESH_SECRET');
     });
   });
 

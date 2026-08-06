@@ -1,4 +1,5 @@
 export interface AccessTokenPayload {
+  type: 'access';
   studentId: string;
   deviceId: string;
   isGuest?: boolean;
@@ -7,6 +8,7 @@ export interface AccessTokenPayload {
 }
 
 export interface RefreshTokenPayload {
+  type: 'refresh';
   studentId: string;
   deviceId: string;
   sessionId: string;
@@ -15,6 +17,7 @@ export interface RefreshTokenPayload {
 }
 
 export interface LinkingTokenPayload {
+  type: 'linking';
   email: string;
   provider: string;
   providerId: string;

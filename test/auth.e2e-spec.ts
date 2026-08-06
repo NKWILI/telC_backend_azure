@@ -48,11 +48,19 @@ describe('AuthController (e2e)', () => {
   let app: INestApplication<App>;
 
   const deviceSessions = [
-    { id: 'session-1', device_id: 'dev-1', device_name: 'Pixel', last_used_at: '2026-05-03T00:00:00.000Z', created_at: '2026-05-01T00:00:00.000Z' },
+    {
+      id: 'session-1',
+      device_id: 'dev-1',
+      device_name: 'Pixel',
+      last_used_at: '2026-05-03T00:00:00.000Z',
+      created_at: '2026-05-01T00:00:00.000Z',
+    },
   ];
 
   const authService = {
-    register: jest.fn().mockResolvedValue({ message: 'verification email sent' }),
+    register: jest
+      .fn()
+      .mockResolvedValue({ message: 'verification email sent' }),
     verifyEmail: jest.fn().mockResolvedValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -91,6 +99,7 @@ describe('AuthController (e2e)', () => {
     canActivate: (context: any) => {
       const request = context.switchToHttp().getRequest();
       const payload: AccessTokenPayload = {
+        type: 'access',
         studentId: 'student-1',
         isRegistered: true,
         deviceId: 'device-1',
@@ -103,7 +112,9 @@ describe('AuthController (e2e)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    authService.register.mockResolvedValue({ message: 'verification email sent' });
+    authService.register.mockResolvedValue({
+      message: 'verification email sent',
+    });
     authService.verifyEmail.mockResolvedValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -322,7 +333,11 @@ describe('AuthController (e2e)', () => {
     });
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'john.doe@example.com', password: 'password123', deviceId: 'device-1' })
+      .send({
+        email: 'john.doe@example.com',
+        password: 'password123',
+        deviceId: 'device-1',
+      })
       .expect(201)
       .expect((res) => {
         expect(res.body.accessToken).toBe('access-token');
@@ -331,13 +346,17 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/login returns 403 for unverified email', async () => {
-    authService.login = jest.fn().mockRejectedValueOnce(
-      new ForbiddenException('EMAIL_NOT_VERIFIED'),
-    );
+    authService.login = jest
+      .fn()
+      .mockRejectedValueOnce(new ForbiddenException('EMAIL_NOT_VERIFIED'));
 
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'john.doe@example.com', password: 'password123', deviceId: 'device-1' })
+      .send({
+        email: 'john.doe@example.com',
+        password: 'password123',
+        deviceId: 'device-1',
+      })
       .expect(403)
       .expect((res) => {
         expect(res.body.error).toBe('EMAIL_NOT_VERIFIED');
@@ -346,13 +365,17 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/login returns 401 for invalid credentials', async () => {
-    authService.login = jest.fn().mockRejectedValueOnce(
-      new UnauthorizedException('INVALID_CREDENTIALS'),
-    );
+    authService.login = jest
+      .fn()
+      .mockRejectedValueOnce(new UnauthorizedException('INVALID_CREDENTIALS'));
 
     await request(app.getHttpServer())
       .post('/api/auth/login')
-      .send({ email: 'john.doe@example.com', password: 'wrongpass', deviceId: 'device-1' })
+      .send({
+        email: 'john.doe@example.com',
+        password: 'wrongpass',
+        deviceId: 'device-1',
+      })
       .expect(401)
       .expect((res) => {
         expect(res.body.error).toBe('INVALID_CREDENTIALS');
@@ -360,7 +383,9 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/forgot-password always returns success', async () => {
-    authService.forgotPassword = jest.fn().mockResolvedValueOnce({ message: 'password reset sent' });
+    authService.forgotPassword = jest
+      .fn()
+      .mockResolvedValueOnce({ message: 'password reset sent' });
 
     await request(app.getHttpServer())
       .post('/api/auth/forgot-password')
@@ -380,7 +405,11 @@ describe('AuthController (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/api/auth/reset-password')
-      .send({ token: 'reset-token', newPassword: 'newpassword123', deviceId: 'device-1' })
+      .send({
+        token: 'reset-token',
+        newPassword: 'newpassword123',
+        deviceId: 'device-1',
+      })
       .expect(201)
       .expect((res) => {
         expect(res.body.accessToken).toBe('access-token');
@@ -421,9 +450,9 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/google returns 401 for invalid token', async () => {
-    authService.googleLogin = jest.fn().mockRejectedValueOnce(
-      new UnauthorizedException('INVALID_GOOGLE_TOKEN'),
-    );
+    authService.googleLogin = jest
+      .fn()
+      .mockRejectedValueOnce(new UnauthorizedException('INVALID_GOOGLE_TOKEN'));
 
     await request(app.getHttpServer())
       .post('/api/auth/google')
@@ -451,9 +480,11 @@ describe('AuthController (e2e)', () => {
   });
 
   it('POST /api/auth/google/link returns 401 for invalid linking token', async () => {
-    authService.googleLink = jest.fn().mockRejectedValueOnce(
-      new UnauthorizedException('LINKING_TOKEN_INVALID'),
-    );
+    authService.googleLink = jest
+      .fn()
+      .mockRejectedValueOnce(
+        new UnauthorizedException('LINKING_TOKEN_INVALID'),
+      );
 
     await request(app.getHttpServer())
       .post('/api/auth/google/link')

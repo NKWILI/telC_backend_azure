@@ -9,14 +9,28 @@ import {
 
 @Injectable()
 export class TokenService {
-  private readonly jwtSecret: string;
+  private readonly accessTokenSecret: string;
+  private readonly refreshTokenSecret: string;
   private readonly accessTokenExpiry: string;
   private readonly refreshTokenExpiry: string;
+  private readonly issuer = 'lerniqo-api';
+  private readonly audience = 'lerniqo-app';
 
   constructor() {
-    this.jwtSecret = process.env.JWT_SECRET || 'fallback-dev-secret';
+    this.accessTokenSecret = this.requireSecret('JWT_ACCESS_SECRET');
+    this.refreshTokenSecret = this.requireSecret('JWT_REFRESH_SECRET');
     this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
     this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
+  }
+
+  private requireSecret(
+    name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET',
+  ): string {
+    const value = process.env[name];
+    if (!value || value.length < 64) {
+      throw new Error(`${name} must be configured with at least 64 characters`);
+    }
+    return value;
   }
 
   /**
@@ -29,11 +43,17 @@ export class TokenService {
   }): string {
     return jwt.sign(
       {
+        type: 'access',
         studentId: payload.studentId,
         deviceId: payload.deviceId,
       },
-      this.jwtSecret,
-      { expiresIn: this.accessTokenExpiry as jwt.SignOptions['expiresIn'] },
+      this.accessTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: this.accessTokenExpiry as jwt.SignOptions['expiresIn'],
+      },
     );
   }
 
@@ -45,12 +65,18 @@ export class TokenService {
   generateGuestAccessToken(payload: { studentId: string }): string {
     return jwt.sign(
       {
+        type: 'access',
         studentId: payload.studentId,
         deviceId: 'guest',
         isGuest: true,
       },
-      this.jwtSecret,
-      { expiresIn: '2h' },
+      this.accessTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: '2h',
+      },
     );
   }
 
@@ -65,12 +91,18 @@ export class TokenService {
   }): string {
     return jwt.sign(
       {
+        type: 'refresh',
         studentId: payload.studentId,
         deviceId: payload.deviceId,
         sessionId: payload.sessionId,
       },
-      this.jwtSecret,
-      { expiresIn: this.refreshTokenExpiry as jwt.SignOptions['expiresIn'] },
+      this.refreshTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: this.refreshTokenExpiry as jwt.SignOptions['expiresIn'],
+      },
     );
   }
 
@@ -101,7 +133,18 @@ export class TokenService {
    */
   verifyAccessToken(token: string): AccessTokenPayload {
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as AccessTokenPayload;
+      const decoded = jwt.verify(token, this.accessTokenSecret, {
+        algorithms: ['HS256'],
+        issuer: this.issuer,
+        audience: this.audience,
+      }) as AccessTokenPayload;
+      if (
+        decoded.type !== 'access' ||
+        typeof decoded.studentId !== 'string' ||
+        typeof decoded.deviceId !== 'string'
+      ) {
+        throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
+      }
       return decoded;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
@@ -120,7 +163,19 @@ export class TokenService {
    */
   verifyRefreshToken(token: string): RefreshTokenPayload {
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as RefreshTokenPayload;
+      const decoded = jwt.verify(token, this.refreshTokenSecret, {
+        algorithms: ['HS256'],
+        issuer: this.issuer,
+        audience: this.audience,
+      }) as RefreshTokenPayload;
+      if (
+        decoded.type !== 'refresh' ||
+        typeof decoded.studentId !== 'string' ||
+        typeof decoded.deviceId !== 'string' ||
+        typeof decoded.sessionId !== 'string'
+      ) {
+        throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
+      }
       return decoded;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
@@ -159,12 +214,18 @@ export class TokenService {
   }): string {
     return jwt.sign(
       {
+        type: 'linking',
         email: payload.email,
         provider: payload.provider,
         providerId: payload.providerId,
       },
-      this.jwtSecret,
-      { expiresIn: '30m' },
+      this.accessTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: '30m',
+      },
     );
   }
 
@@ -173,7 +234,19 @@ export class TokenService {
    */
   verifyLinkingToken(token: string): LinkingTokenPayload {
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as LinkingTokenPayload;
+      const decoded = jwt.verify(token, this.accessTokenSecret, {
+        algorithms: ['HS256'],
+        issuer: this.issuer,
+        audience: this.audience,
+      }) as LinkingTokenPayload;
+      if (
+        decoded.type !== 'linking' ||
+        typeof decoded.email !== 'string' ||
+        typeof decoded.provider !== 'string' ||
+        typeof decoded.providerId !== 'string'
+      ) {
+        throw new UnauthorizedException('LINKING_TOKEN_INVALID');
+      }
       return decoded;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {

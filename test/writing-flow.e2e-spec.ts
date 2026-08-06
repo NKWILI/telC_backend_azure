@@ -1,7 +1,8 @@
 /**
  * Full-stack Writing (Schreiben) flow E2E: POST submit + Socket.IO correction_ready.
  *
- * Requires: Supabase (writing_attempts + students), JWT_SECRET, GEMINI_API_KEY recommended.
+ * Requires: Supabase (writing_attempts + students), JWT_ACCESS_SECRET,
+ * JWT_REFRESH_SECRET, GEMINI_API_KEY recommended.
  *
  * Run (bash):
  *   RUN_WRITING_FLOW_E2E=1 npm run test:e2e -- test/writing-flow.e2e-spec.ts
