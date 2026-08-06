@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 const student = {
   id: 'student-1',
@@ -556,5 +557,27 @@ describe('AuthController (e2e)', () => {
       .expect(403);
 
     await unauthApp.close();
+  });
+
+  it('publishes the hardened authentication contract in OpenAPI', () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().addBearerAuth().build(),
+    );
+
+    expect(document.paths['/api/auth/login']?.post?.responses).toHaveProperty(
+      '401',
+    );
+    expect(document.paths['/api/auth/refresh']?.post?.description).toContain(
+      'single-use',
+    );
+    expect(document.paths['/api/auth/device-sessions']?.get?.security).toEqual([
+      { bearer: [] },
+    ]);
+    expect(document.paths['/api/auth/google']?.post?.deprecated).toBe(true);
+    expect(document.components?.schemas).toHaveProperty('AuthTokenResponseDto');
+    expect(document.components?.schemas).toHaveProperty(
+      'DeviceSessionResponseDto',
+    );
   });
 });

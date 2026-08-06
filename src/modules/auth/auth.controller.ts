@@ -35,10 +35,29 @@ import {
   ApiOperation,
   ApiCreatedResponse,
   ApiTooManyRequestsResponse,
+  ApiOkResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiBearerAuth,
+  ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
+  getSchemaPath,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
+import {
+  AuthErrorResponseDto,
+  AuthStudentDto,
+  AuthTokenResponseDto,
+  DeviceSessionResponseDto,
+  GoogleLinkingRequiredDto,
+  MessageResponseDto,
+  SuccessResponseDto,
+  VerifiedResponseDto,
+} from './dto/auth-swagger-response.dto';
 
 interface StudentResponseDto {
   id: string;
@@ -49,6 +68,12 @@ interface StudentResponseDto {
 }
 
 @ApiTags('Auth')
+@ApiExtraModels(
+  AuthTokenResponseDto,
+  AuthStudentDto,
+  RefreshResponseDto,
+  GoogleLinkingRequiredDto,
+)
 @Controller('api/auth')
 export class AuthController {
   constructor(
@@ -62,6 +87,16 @@ export class AuthController {
    * Register a new student account and send a verification email.
    */
   @Post('register')
+  @ApiOperation({
+    summary: 'Register with email and password',
+    description:
+      'Creates an unverified account and sends a branded Lerniqo verification email. The response is intentionally generic for both new and existing addresses to prevent account enumeration.',
+  })
+  @ApiCreatedResponse({ type: MessageResponseDto })
+  @ApiBadRequestResponse({
+    type: AuthErrorResponseDto,
+    description: 'Invalid request body.',
+  })
   async register(
     @Body() dto: RegisterRequestDto,
   ): Promise<{ message: string }> {
@@ -73,6 +108,16 @@ export class AuthController {
    * Verify a student's email and issue tokens.
    */
   @Post('verify-email')
+  @ApiOperation({
+    summary: 'Verify an email and start a device session',
+    description:
+      'Consumes the one-time email token and returns an access/refresh token pair bound to deviceId. Repeating a successful verification is idempotent while the token remains valid.',
+  })
+  @ApiCreatedResponse({ type: AuthTokenResponseDto })
+  @ApiBadRequestResponse({
+    type: AuthErrorResponseDto,
+    description: 'Verification token is invalid or expired.',
+  })
   async verifyEmail(
     @Body() dto: VerifyEmailRequestDto,
   ): Promise<AuthTokenResponse> {
@@ -85,6 +130,14 @@ export class AuthController {
    * Flips email_verified=true. No JWT, no device session.
    */
   @Post('verify-email-public')
+  @ApiOperation({
+    summary: 'Verify an email without creating a session',
+    description:
+      'Used by the public website verification page. It creates no JWT or device session.',
+  })
+  @ApiCreatedResponse({ type: VerifiedResponseDto })
+  @ApiBadRequestResponse({ type: AuthErrorResponseDto })
+  @ApiTooManyRequestsResponse({ type: AuthErrorResponseDto })
   async verifyEmailPublic(
     @Body() dto: VerifyEmailPublicRequestDto,
     @Ip() ip: string,
@@ -97,6 +150,13 @@ export class AuthController {
    * POST /api/auth/forgot-password
    */
   @Post('forgot-password')
+  @ApiOperation({
+    summary: 'Request a password-recovery email',
+    description:
+      'Always returns the same success response, even when the email is unknown, to prevent account discovery. A valid account receives a one-time recovery link.',
+  })
+  @ApiCreatedResponse({ type: MessageResponseDto })
+  @ApiTooManyRequestsResponse({ type: AuthErrorResponseDto })
   async forgotPassword(
     @Body() dto: ForgotPasswordRequestDto,
     @Ip() ip: string,
@@ -109,6 +169,17 @@ export class AuthController {
    * POST /api/auth/reset-password
    */
   @Post('reset-password')
+  @ApiOperation({
+    summary: 'Reset the password and start a device session',
+    description:
+      'Consumes the one-time recovery token, changes the password, invalidates existing sessions, and returns a fresh access/refresh token pair for this device.',
+  })
+  @ApiCreatedResponse({ type: AuthTokenResponseDto })
+  @ApiBadRequestResponse({
+    type: AuthErrorResponseDto,
+    description: 'Reset token is invalid, expired, or already used.',
+  })
+  @ApiTooManyRequestsResponse({ type: AuthErrorResponseDto })
   async resetPassword(
     @Body() dto: ResetPasswordRequestDto,
     @Ip() ip: string,
@@ -122,6 +193,21 @@ export class AuthController {
    * Login with email and password and issue tokens
    */
   @Post('login')
+  @ApiOperation({
+    summary: 'Log in with email and password',
+    description:
+      'Creates or replaces the session for this student and deviceId. Use accessToken as a Bearer token and store refreshToken securely for rotation.',
+  })
+  @ApiCreatedResponse({ type: AuthTokenResponseDto })
+  @ApiUnauthorizedResponse({
+    type: AuthErrorResponseDto,
+    description: 'Credentials are invalid.',
+  })
+  @ApiForbiddenResponse({
+    type: AuthErrorResponseDto,
+    description: 'Email is not verified or membership has expired.',
+  })
+  @ApiTooManyRequestsResponse({ type: AuthErrorResponseDto })
   async login(
     @Body() dto: LoginRequestDto,
     @Ip() ip: string,
@@ -165,6 +251,20 @@ export class AuthController {
    * Refresh access and refresh tokens
    */
   @Post('refresh')
+  @ApiOperation({
+    summary: 'Rotate a refresh token and obtain a new token pair',
+    description:
+      'Refresh tokens are single-use. On success, atomically replace the stored refresh token with the returned one. Concurrent or repeated use of the old token returns 401 and must not overwrite the newer client tokens.',
+  })
+  @ApiCreatedResponse({ type: RefreshResponseDto })
+  @ApiUnauthorizedResponse({
+    type: AuthErrorResponseDto,
+    description: 'Token is invalid, expired, revoked, or already rotated.',
+  })
+  @ApiForbiddenResponse({
+    type: AuthErrorResponseDto,
+    description: 'Membership has expired.',
+  })
   async refresh(
     @Body() refreshDto: RefreshRequestDto,
   ): Promise<RefreshResponseDto> {
@@ -230,6 +330,30 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Patch('profile')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update the authenticated student profile and rotate tokens',
+  })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(RefreshResponseDto) },
+        {
+          type: 'object',
+          properties: { student: { $ref: getSchemaPath(AuthStudentDto) } },
+        },
+      ],
+    },
+  })
+  @ApiBadRequestResponse({
+    type: AuthErrorResponseDto,
+    description: 'No profile fields or invalid values.',
+  })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiServiceUnavailableResponse({
+    type: AuthErrorResponseDto,
+    description: 'Session validity cannot be established safely.',
+  })
   async updateProfile(
     @CurrentStudent() student: AccessTokenPayload,
     @Body() profileDto: ProfileUpdateDto,
@@ -288,6 +412,13 @@ export class AuthController {
    * Revoke the device session tied to the refresh token
    */
   @Post('logout')
+  @ApiOperation({
+    summary: 'Log out one device session',
+    description:
+      'Revokes the session identified by the refresh token. Its refresh token is rejected immediately, and its access token is rejected by protected endpoints from the next request.',
+  })
+  @ApiCreatedResponse({ type: SuccessResponseDto })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
   async logout(
     @Body() logoutDto: LogoutRequestDto,
   ): Promise<{ success: true }> {
@@ -331,12 +462,31 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('device-sessions')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List active device sessions for the authenticated student',
+  })
+  @ApiOkResponse({ type: DeviceSessionResponseDto, isArray: true })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiServiceUnavailableResponse({ type: AuthErrorResponseDto })
   async getDeviceSessions(@CurrentStudent() student: AccessTokenPayload) {
     return this.authService.getDeviceSessions(student.studentId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Delete('device-sessions/:sessionId')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Revoke one of the authenticated student’s device sessions',
+    description:
+      'The session must belong to the authenticated student. Revocation takes effect immediately.',
+  })
+  @ApiOkResponse({ type: SuccessResponseDto })
+  @ApiUnauthorizedResponse({ type: AuthErrorResponseDto })
+  @ApiNotFoundResponse({
+    type: AuthErrorResponseDto,
+    description: 'Session does not exist or belongs to another student.',
+  })
   async revokeDeviceSession(
     @CurrentStudent() student: AccessTokenPayload,
     @Param('sessionId') sessionId: string,
@@ -353,6 +503,19 @@ export class AuthController {
    * Login or request linking with Google OAuth
    */
   @Post('google')
+  @ApiOperation({
+    summary: 'Google login (currently disabled)',
+    deprecated: true,
+  })
+  @ApiCreatedResponse({
+    description: 'Legacy response; this integration is currently not in use.',
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(AuthTokenResponseDto) },
+        { $ref: getSchemaPath(GoogleLinkingRequiredDto) },
+      ],
+    },
+  })
   async googleLogin(
     @Body() dto: GoogleLoginRequestDto,
   ): Promise<
@@ -366,6 +529,11 @@ export class AuthController {
    * Link Google account to existing student
    */
   @Post('google/link')
+  @ApiOperation({
+    summary: 'Link a Google account (currently disabled)',
+    deprecated: true,
+  })
+  @ApiCreatedResponse({ type: AuthTokenResponseDto })
   async googleLink(
     @Body() dto: GoogleLinkRequestDto,
   ): Promise<AuthTokenResponse> {

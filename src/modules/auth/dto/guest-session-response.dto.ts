@@ -6,13 +6,15 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export class GuestSessionResponseDto {
   @ApiProperty({
-    description: 'Short-lived (2h) guest JWT. Send as Bearer on protected routes.',
+    description:
+      'Short-lived (2h) guest JWT. Send as Bearer on protected routes.',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   accessToken: string;
 
   @ApiProperty({
-    description: 'Always true for this endpoint; lets the client flag the demo session.',
+    description:
+      'Always true for this endpoint; lets the client flag the demo session.',
     example: true,
   })
   isGuest: true;

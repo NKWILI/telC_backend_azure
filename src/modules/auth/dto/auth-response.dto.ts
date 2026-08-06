@@ -1,7 +1,3 @@
-import { AuthStudentResponse } from '../../../shared/interfaces/student.interface';
+import { AuthTokenResponseDto } from './auth-swagger-response.dto';
 
-export interface AuthTokenResponse {
-  accessToken: string;
-  refreshToken: string;
-  student: AuthStudentResponse;
-}
+export type AuthTokenResponse = AuthTokenResponseDto;
