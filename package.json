@@ -89,6 +89,12 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
+  "overrides": {
+    "body-parser": "2.3.0",
+    "fast-uri": "3.1.5",
+    "js-yaml": "5.2.3",
+    "qs": "6.15.3"
+  },
   "jest": {
     "moduleFileExtensions": [
       "js",
