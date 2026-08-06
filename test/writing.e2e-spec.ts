@@ -23,24 +23,12 @@ const defaultPayload: AccessTokenPayload = {
   deviceId: 'device-1',
 };
 
-const teilsResponse = [
-  {
-    id: '1',
-    title: 'E-Mail',
-    subtitle: 'Formelle E-Mail schreiben',
-    progress: 0,
-    part: 1,
-    durationMinutes: 15,
-  },
-  {
-    id: '2',
-    title: 'Beitrag',
-    subtitle: 'Forumsbeitrag',
-    progress: 0,
-    part: 2,
-    durationMinutes: 20,
-  },
-];
+const exerciseResponse = {
+  id: 'exercise-1',
+  modelltestId: 'modelltest-1',
+  title: 'E-Mail',
+  instructions: 'Schreiben Sie eine formelle E-Mail.',
+};
 
 const sessionsResponse = [
   {
@@ -56,7 +44,7 @@ const sessionsResponse = [
 describe('WritingController (e2e)', () => {
   let app: INestApplication<App>;
   const writingService = {
-    getTeils: jest.fn().mockResolvedValue(teilsResponse),
+    getExerciseByModelltest: jest.fn().mockResolvedValue(exerciseResponse),
     getSessions: jest.fn().mockResolvedValue(sessionsResponse),
     submit: jest.fn().mockResolvedValue({
       attemptId: 'attempt-uuid-new',
@@ -83,7 +71,7 @@ describe('WritingController (e2e)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    writingService.getTeils.mockResolvedValue(teilsResponse);
+    writingService.getExerciseByModelltest.mockResolvedValue(exerciseResponse);
     writingService.getSessions.mockResolvedValue(sessionsResponse);
     writingService.submit.mockResolvedValue({
       attemptId: 'attempt-uuid-new',
@@ -118,20 +106,15 @@ describe('WritingController (e2e)', () => {
     await app.close();
   });
 
-  it('GET /api/writing/teils returns 200 and array with id, title, etc.', async () => {
+  it('GET /api/writing/exercise returns the exercise for a Modelltest', async () => {
     await request(app.getHttpServer())
-      .get('/api/writing/teils')
+      .get('/api/writing/exercise?modelltest=1')
       .set('Authorization', 'Bearer fake-token')
       .expect(200)
       .expect((res) => {
-        expect(Array.isArray(res.body)).toBe(true);
-        expect(res.body.length).toBe(2);
-        expect(res.body[0]).toHaveProperty('id', '1');
-        expect(res.body[0]).toHaveProperty('title', 'E-Mail');
-        expect(res.body[0]).toHaveProperty('progress');
-        expect(res.body[0]).toHaveProperty('part', 1);
-        expect(res.body[0]).toHaveProperty('durationMinutes', 15);
+        expect(res.body).toMatchObject(exerciseResponse);
       });
+    expect(writingService.getExerciseByModelltest).toHaveBeenCalledWith(1);
   });
 
   it('GET /api/writing/sessions returns 200 and array', async () => {
@@ -147,8 +130,10 @@ describe('WritingController (e2e)', () => {
       });
   });
 
-  it('GET /api/writing/teils without token returns 401', async () => {
-    await request(app.getHttpServer()).get('/api/writing/teils').expect(401);
+  it('GET /api/writing/exercise without token returns 401', async () => {
+    await request(app.getHttpServer())
+      .get('/api/writing/exercise?modelltest=1')
+      .expect(401);
   });
 
   it('GET /api/writing/sessions without token returns 401', async () => {

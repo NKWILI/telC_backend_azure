@@ -19,7 +19,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { io, Socket } from 'socket.io-client';
 import { AppModule } from '../src/app.module';
-import { DatabaseService } from '../src/shared/services/database.service';
+import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 
@@ -36,12 +36,11 @@ const FLAWED_GERMAN =
   'Writing flow (E2E — real submit + WebSocket)',
   () => {
     let app: INestApplication<App> | undefined;
-    let databaseService: DatabaseService | undefined;
+    let prisma: PrismaService | undefined;
     let tokenService: TokenService;
     let baseUrl: string;
     let socket: Socket | undefined;
     let testStudentId: string;
-    let testActivationCode = '';
     let validJwt: string;
 
     beforeAll(async () => {
@@ -66,7 +65,7 @@ const FLAWED_GERMAN =
       }
       baseUrl = `http://127.0.0.1:${addr.port}`;
 
-      databaseService = moduleFixture.get<DatabaseService>(DatabaseService);
+      prisma = moduleFixture.get<PrismaService>(PrismaService);
       tokenService = moduleFixture.get<TokenService>(TokenService);
     });
 
@@ -77,61 +76,15 @@ const FLAWED_GERMAN =
     });
 
     beforeEach(async () => {
-      testActivationCode = `E2E-W-${Date.now()}`;
-      const now = new Date().toISOString();
-
-      const acInsert: Record<string, string> = {
-        code: testActivationCode,
-        status: 'available',
-        created_at: now,
-      };
-
-      const { error: acError } = await databaseService!
-        .getClient()
-        .from('activation_codes')
-        .insert(acInsert);
-
-      if (acError) {
-        throw new Error(
-          `Failed to insert activation_codes: ${acError.message}`,
-        );
-      }
-
-      const { data: row, error } = await databaseService!
-        .getClient()
-        .from('students')
-        .insert({
-          activation_code: testActivationCode,
+      const row = await prisma!.student.create({
+        data: {
           first_name: 'E2E',
           last_name: 'Writing',
-          email: `${testActivationCode}@test.com`,
-          is_registered: true,
-          created_at: now,
-          updated_at: now,
-        })
-        .select()
-        .single();
+          email: `e2e-writing-${Date.now()}@test.com`,
+        },
+      });
 
-      if (error || !row) {
-        throw new Error(
-          `Failed to insert test student: ${error?.message ?? 'no row'}`,
-        );
-      }
-
-      testStudentId = row.id as string;
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      await databaseService!
-        .getClient()
-        .from('activation_codes')
-        .update({
-          status: 'active',
-          student_id: testStudentId,
-          claimed_at: now,
-          expires_at: expiresAt.toISOString(),
-        })
-        .eq('code', testActivationCode);
+      testStudentId = row.id;
 
       validJwt = tokenService.generateAccessToken({
         studentId: testStudentId,
@@ -145,26 +98,13 @@ const FLAWED_GERMAN =
         socket.disconnect();
       }
       socket = undefined;
-      if (!databaseService) {
+      if (!prisma) {
         return;
       }
-      await databaseService
-        .getClient()
-        .from('writing_attempts')
-        .delete()
-        .eq('student_id', testStudentId);
-      await databaseService
-        .getClient()
-        .from('students')
-        .delete()
-        .eq('id', testStudentId);
-      if (testActivationCode) {
-        await databaseService
-          .getClient()
-          .from('activation_codes')
-          .delete()
-          .eq('code', testActivationCode);
-      }
+      await prisma.writingAttempt.deleteMany({
+        where: { student_id: testStudentId },
+      });
+      await prisma.student.deleteMany({ where: { id: testStudentId } });
     });
 
     it('submits flawed German text and receives correction_ready with matching attemptId', async () => {

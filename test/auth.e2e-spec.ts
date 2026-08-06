@@ -14,6 +14,7 @@ import { TokenService } from '../src/modules/auth/token.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
+import { RateLimitService } from '../src/shared/services/rate-limit.service';
 
 const student = {
   id: 'student-1',
@@ -69,6 +70,7 @@ describe('AuthController (e2e)', () => {
     createDeviceSession: jest.fn().mockResolvedValue(session),
     validateRefreshToken: jest.fn().mockResolvedValue(session),
     updateDeviceSessionRefreshHash: jest.fn().mockResolvedValue(undefined),
+    rotateDeviceSessionRefreshHash: jest.fn().mockResolvedValue(true),
     updateStudentProfile: jest.fn().mockResolvedValue({
       ...student,
       first_name: 'Jane',
@@ -93,6 +95,14 @@ describe('AuthController (e2e)', () => {
       sessionId: 'session-1',
     }),
     compareRefreshToken: jest.fn().mockResolvedValue(true),
+  };
+
+  const rateLimitService = {
+    checkLoginLimit: jest.fn().mockResolvedValue(undefined),
+    checkForgotPasswordLimit: jest.fn().mockResolvedValue(undefined),
+    checkResetPasswordLimit: jest.fn().mockResolvedValue(undefined),
+    checkVerifyEmailPublicLimit: jest.fn().mockResolvedValue(undefined),
+    checkGuestSessionLimit: jest.fn().mockResolvedValue(undefined),
   };
 
   const guard = {
@@ -123,6 +133,7 @@ describe('AuthController (e2e)', () => {
     authService.createDeviceSession.mockResolvedValue(session);
     authService.validateRefreshToken.mockResolvedValue(session);
     authService.updateDeviceSessionRefreshHash.mockResolvedValue(undefined);
+    authService.rotateDeviceSessionRefreshHash.mockResolvedValue(true);
     authService.updateStudentProfile.mockResolvedValue({
       ...student,
       first_name: 'Jane',
@@ -148,6 +159,7 @@ describe('AuthController (e2e)', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: TokenService, useValue: tokenService },
+        { provide: RateLimitService, useValue: rateLimitService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -283,6 +295,20 @@ describe('AuthController (e2e)', () => {
         expect(res.body.accessToken).toBe('access-token');
         expect(res.body.refreshToken).toBe('refresh-token');
       });
+  });
+
+  it('POST /api/auth/refresh rejects a lost concurrent rotation without revoking the session', async () => {
+    authService.rotateDeviceSessionRefreshHash.mockResolvedValueOnce(false);
+
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'refresh-token' })
+      .expect(401)
+      .expect((res) => {
+        expect(res.body.error).toBe('INVALID_REFRESH_TOKEN');
+      });
+
+    expect(authService.revokeDeviceSession).not.toHaveBeenCalled();
   });
 
   it('POST /api/auth/refresh rejects expired membership', async () => {
@@ -514,6 +540,7 @@ describe('AuthController (e2e)', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: TokenService, useValue: tokenService },
+        { provide: RateLimitService, useValue: rateLimitService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
