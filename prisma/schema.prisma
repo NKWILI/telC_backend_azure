@@ -58,7 +58,7 @@ model DeviceSession {
 
   student Student @relation(fields: [student_id], references: [id])
 
-  @@unique([device_id])
+  @@unique([student_id, device_id])
   @@index([student_id])
   @@map("device_sessions")
 }

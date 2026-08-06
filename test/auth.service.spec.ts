@@ -117,9 +117,13 @@ describe('AuthService', () => {
       );
       expect(txMock.deviceSession.deleteMany).not.toHaveBeenCalled();
       expect(txMock.deviceSession.upsert).toHaveBeenCalledWith({
-        where: { device_id: 'device-1' },
+        where: {
+          student_id_device_id: {
+            student_id: 'student-1',
+            device_id: 'device-1',
+          },
+        },
         update: {
-          student_id: 'student-1',
           device_name: 'Pixel',
           refresh_token_hash: 'refresh-hash-1',
           revoked_at: null,
@@ -162,7 +166,7 @@ describe('AuthService', () => {
       expect(result).toEqual(session);
     });
 
-    it('reuses an existing device_id without evicting', async () => {
+    it('reuses an existing device for the same student without evicting', async () => {
       const session = { id: 'session-3' };
 
       txMock.deviceSession.findFirst.mockResolvedValueOnce({
@@ -179,7 +183,14 @@ describe('AuthService', () => {
 
       expect(txMock.deviceSession.deleteMany).not.toHaveBeenCalled();
       expect(txMock.deviceSession.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { device_id: 'device-1' } }),
+        expect.objectContaining({
+          where: {
+            student_id_device_id: {
+              student_id: 'student-1',
+              device_id: 'device-1',
+            },
+          },
+        }),
       );
       expect(result).toEqual(session);
     });

@@ -369,7 +369,7 @@ export class AuthService {
   /**
    * Upsert device session
    * Ensures a maximum of 3 active sessions by evicting the oldest session
-   * for new devices, then upserts by device_id in one transaction.
+   * for new devices, then upserts by student_id + device_id in one transaction.
    */
   async upsertDeviceSession(
     studentId: string,
@@ -411,9 +411,13 @@ export class AuthService {
         }
 
         const upsertedSession = await tx.deviceSession.upsert({
-          where: { device_id: deviceId },
+          where: {
+            student_id_device_id: {
+              student_id: studentId,
+              device_id: deviceId,
+            },
+          },
           update: {
-            student_id: studentId,
             device_name: deviceName?.trim() || null,
             refresh_token_hash: refreshTokenHash,
             revoked_at: null,
