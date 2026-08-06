@@ -1,5 +1,11 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  HttpException,
+  HttpStatus,
+  Optional,
+} from '@nestjs/common';
 import NodeCache from 'node-cache';
+import { ValkeyService, type RateLimitBucket } from './valkey.service';
 
 @Injectable()
 export class RateLimitService {
@@ -9,6 +15,9 @@ export class RateLimitService {
   private readonly writingWindowSeconds: number;
   private readonly forgotPasswordMaxAttempts: number;
   private readonly forgotPasswordWindowSeconds: number;
+  private readonly loginIpMaxAttempts: number;
+  private readonly loginEmailMaxAttempts: number;
+  private readonly loginWindowSeconds: number;
   private readonly verifyEmailPublicMaxAttempts: number;
   private readonly verifyEmailPublicWindowSeconds: number;
   private readonly resetPasswordMaxAttempts: number;
@@ -22,7 +31,7 @@ export class RateLimitService {
   private readonly writingGuestSubmitMaxAttempts: number;
   private readonly writingGuestSubmitWindowSeconds: number;
 
-  constructor() {
+  constructor(@Optional() private readonly valkeyService?: ValkeyService) {
     this.cache = new NodeCache();
     this.writingMaxAttempts = parseInt(
       process.env.RATE_LIMIT_WRITING_SUBMIT_MAX_ATTEMPTS || '10',
@@ -43,6 +52,17 @@ export class RateLimitService {
       10,
     );
     this.forgotPasswordWindowSeconds = forgotPasswordWindowMinutes * 60;
+
+    this.loginIpMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_LOGIN_IP_MAX_ATTEMPTS || '20',
+      10,
+    );
+    this.loginEmailMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_LOGIN_EMAIL_MAX_ATTEMPTS || '10',
+      10,
+    );
+    this.loginWindowSeconds =
+      parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MINUTES || '15', 10) * 60;
 
     this.verifyEmailPublicMaxAttempts = parseInt(
       process.env.RATE_LIMIT_VERIFY_EMAIL_PUBLIC_MAX_ATTEMPTS || '10',
@@ -123,7 +143,11 @@ export class RateLimitService {
   }
 
   /** Increment a key's counter, (re)setting its TTL window. */
-  private record(cacheKey: string, current: number, windowSeconds: number): void {
+  private record(
+    cacheKey: string,
+    current: number,
+    windowSeconds: number,
+  ): void {
     this.cache.set(cacheKey, current + 1, windowSeconds);
   }
 
@@ -133,40 +157,84 @@ export class RateLimitService {
     this.record(cacheKey, current, windowSeconds);
   }
 
+  private enforceDistributed(buckets: RateLimitBucket[]): void | Promise<void> {
+    if (!this.valkeyService) {
+      for (const bucket of buckets) {
+        this.enforce(bucket.key, bucket.max, bucket.ttlSeconds);
+      }
+      return;
+    }
+
+    return this.valkeyService.enforce(buckets).then((allowed) => {
+      if (allowed === false) {
+        throw new HttpException(
+          'RATE_LIMIT_EXCEEDED',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      if (allowed === null) {
+        for (const bucket of buckets) {
+          this.enforce(bucket.key, bucket.max, bucket.ttlSeconds);
+        }
+      }
+    });
+  }
+
   /**
    * Rate limit for POST /api/writing/submit per student.
    * Throws 429 when exceeded.
    */
-  checkWritingSubmitLimit(studentId: string): void {
-    this.enforce(
-      `ratelimit:writing:submit:${studentId}`,
-      this.writingMaxAttempts,
-      this.writingWindowSeconds,
-    );
+  checkWritingSubmitLimit(studentId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:writing:submit:${studentId}`,
+        max: this.writingMaxAttempts,
+        ttlSeconds: this.writingWindowSeconds,
+      },
+    ]);
   }
 
   /**
    * Rate limit for POST /api/auth/forgot-password. Throws 429 when exceeded.
    * Key is typically the requester's IP address.
    */
-  checkForgotPasswordLimit(key: string): void {
-    this.enforce(
-      `ratelimit:auth:forgot-password:${key}`,
-      this.forgotPasswordMaxAttempts,
-      this.forgotPasswordWindowSeconds,
-    );
+  checkForgotPasswordLimit(key: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:auth:forgot-password:${key}`,
+        max: this.forgotPasswordMaxAttempts,
+        ttlSeconds: this.forgotPasswordWindowSeconds,
+      },
+    ]);
+  }
+
+  checkLoginLimit(ip: string, email: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:auth:login:ip:${ip}`,
+        max: this.loginIpMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+      {
+        key: `ratelimit:auth:login:email:${email.trim().toLowerCase()}`,
+        max: this.loginEmailMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+    ]);
   }
 
   /**
    * Rate limit for POST /api/auth/verify-email-public. Throws 429 when exceeded.
    * Key is typically the requester's IP address.
    */
-  checkVerifyEmailPublicLimit(key: string): void {
-    this.enforce(
-      `ratelimit:auth:verify-email-public:${key}`,
-      this.verifyEmailPublicMaxAttempts,
-      this.verifyEmailPublicWindowSeconds,
-    );
+  checkVerifyEmailPublicLimit(key: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:auth:verify-email-public:${key}`,
+        max: this.verifyEmailPublicMaxAttempts,
+        ttlSeconds: this.verifyEmailPublicWindowSeconds,
+      },
+    ]);
   }
 
   /**
@@ -174,12 +242,14 @@ export class RateLimitService {
    * Key is typically the requester's IP address. Defends against random-spray
    * brute-force against the 6-digit reset-code space.
    */
-  checkResetPasswordLimit(key: string): void {
-    this.enforce(
-      `ratelimit:auth:reset-password:${key}`,
-      this.resetPasswordMaxAttempts,
-      this.resetPasswordWindowSeconds,
-    );
+  checkResetPasswordLimit(key: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:auth:reset-password:${key}`,
+        max: this.resetPasswordMaxAttempts,
+        ttlSeconds: this.resetPasswordWindowSeconds,
+      },
+    ]);
   }
 
   /**
@@ -188,33 +258,39 @@ export class RateLimitService {
    * targeted spam from rotating IPs; per-IP defends against bursts.
    * Both buckets are asserted before either is incremented.
    */
-  checkNewsletterSubscribeLimit(ipKey: string, emailKey: string): void {
+  checkNewsletterSubscribeLimit(
+    ipKey: string,
+    emailKey: string,
+  ): void | Promise<void> {
     const emailCacheKey = `ratelimit:newsletter:subscribe:email:${emailKey}`;
     const ipCacheKey = `ratelimit:newsletter:subscribe:ip:${ipKey}`;
 
-    const emailCurrent = this.assertUnderLimit(
-      emailCacheKey,
-      this.newsletterEmailMaxAttempts,
-    );
-    const ipCurrent = this.assertUnderLimit(
-      ipCacheKey,
-      this.newsletterIpMaxAttempts,
-    );
-
-    this.record(emailCacheKey, emailCurrent, this.newsletterEmailWindowSeconds);
-    this.record(ipCacheKey, ipCurrent, this.newsletterIpWindowSeconds);
+    return this.enforceDistributed([
+      {
+        key: emailCacheKey,
+        max: this.newsletterEmailMaxAttempts,
+        ttlSeconds: this.newsletterEmailWindowSeconds,
+      },
+      {
+        key: ipCacheKey,
+        max: this.newsletterIpMaxAttempts,
+        ttlSeconds: this.newsletterIpWindowSeconds,
+      },
+    ]);
   }
 
   /**
    * Rate limit for POST /api/auth/guest. Caps how many guest JWTs a single IP
    * can mint per window. Throws 429 when exceeded.
    */
-  checkGuestSessionLimit(ip: string): void {
-    this.enforce(
-      `ratelimit:guest:session:${ip}`,
-      this.guestSessionMaxAttempts,
-      this.guestSessionWindowSeconds,
-    );
+  checkGuestSessionLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:guest:session:${ip}`,
+        max: this.guestSessionMaxAttempts,
+        ttlSeconds: this.guestSessionWindowSeconds,
+      },
+    ]);
   }
 
   /**
@@ -222,11 +298,13 @@ export class RateLimitService {
    * Capped per IP (default 3/hour) — much tighter than the per-student limit
    * for logged-in users. Protects the free-tier Gemini quota from scripted abuse.
    */
-  checkWritingGuestSubmitLimit(ip: string): void {
-    this.enforce(
-      `ratelimit:writing:submit:guest:${ip}`,
-      this.writingGuestSubmitMaxAttempts,
-      this.writingGuestSubmitWindowSeconds,
-    );
+  checkWritingGuestSubmitLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:writing:submit:guest:${ip}`,
+        max: this.writingGuestSubmitMaxAttempts,
+        ttlSeconds: this.writingGuestSubmitWindowSeconds,
+      },
+    ]);
   }
 }

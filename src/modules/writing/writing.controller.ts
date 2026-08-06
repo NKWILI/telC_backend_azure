@@ -59,8 +59,12 @@ export class WritingController {
     example: 1,
   })
   @ApiOkResponse({ type: WritingExerciseDto })
-  @ApiNotFoundResponse({ description: 'No writing exercise found for this Modelltest' })
-  @ApiBadRequestResponse({ description: 'modelltest query param is missing or not a number' })
+  @ApiNotFoundResponse({
+    description: 'No writing exercise found for this Modelltest',
+  })
+  @ApiBadRequestResponse({
+    description: 'modelltest query param is missing or not a number',
+  })
   async getExerciseByModelltest(
     @Query('modelltest') modelltest: string,
   ): Promise<WritingExerciseDto> {
@@ -83,19 +87,22 @@ export class WritingController {
       'Returns the full exercise content (stimulus, task instructions, bullet points). ' +
       'Obtain the UUID from GET /api/modelltests/:number → exercises.writing[0].',
   })
-  @ApiParam({ name: 'id', description: 'Exercise UUID', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiParam({
+    name: 'id',
+    description: 'Exercise UUID',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   @ApiOkResponse({ type: WritingExerciseDto })
   @ApiNotFoundResponse({ description: 'Exercise not found' })
-  async getExercise(
-    @Param('id') id: string,
-  ): Promise<WritingExerciseDto> {
+  async getExercise(@Param('id') id: string): Promise<WritingExerciseDto> {
     return this.writingService.getExercise(id);
   }
 
   @Get('sessions')
   @ApiOperation({
     summary: 'List past writing attempts for the authenticated student',
-    description: 'Returns up to 50 attempts, newest first. Optionally filter by exercise UUID.',
+    description:
+      'Returns up to 50 attempts, newest first. Optionally filter by exercise UUID.',
   })
   @ApiQuery({
     name: 'exerciseId',
@@ -141,9 +148,9 @@ export class WritingController {
       throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
     }
     if (student.isGuest === true) {
-      this.rateLimitService.checkWritingGuestSubmitLimit(ip || 'unknown');
+      await this.rateLimitService.checkWritingGuestSubmitLimit(ip || 'unknown');
     } else {
-      this.rateLimitService.checkWritingSubmitLimit(studentId);
+      await this.rateLimitService.checkWritingSubmitLimit(studentId);
     }
     return this.writingService.submit(studentId, dto);
   }

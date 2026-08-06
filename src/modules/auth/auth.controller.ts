@@ -60,7 +60,9 @@ export class AuthController {
    * Register a new student account and send a verification email.
    */
   @Post('register')
-  async register(@Body() dto: RegisterRequestDto): Promise<{ message: string }> {
+  async register(
+    @Body() dto: RegisterRequestDto,
+  ): Promise<{ message: string }> {
     return this.authService.register(dto);
   }
 
@@ -85,7 +87,7 @@ export class AuthController {
     @Body() dto: VerifyEmailPublicRequestDto,
     @Ip() ip: string,
   ): Promise<{ verified: true }> {
-    this.rateLimitService.checkVerifyEmailPublicLimit(ip || 'unknown');
+    await this.rateLimitService.checkVerifyEmailPublicLimit(ip || 'unknown');
     return this.authService.verifyEmailPublic(dto.token);
   }
 
@@ -97,7 +99,7 @@ export class AuthController {
     @Body() dto: ForgotPasswordRequestDto,
     @Ip() ip: string,
   ): Promise<{ message: string }> {
-    this.rateLimitService.checkForgotPasswordLimit(ip || 'unknown');
+    await this.rateLimitService.checkForgotPasswordLimit(ip || 'unknown');
     return this.authService.forgotPassword(dto);
   }
 
@@ -109,7 +111,7 @@ export class AuthController {
     @Body() dto: ResetPasswordRequestDto,
     @Ip() ip: string,
   ): Promise<AuthTokenResponse> {
-    this.rateLimitService.checkResetPasswordLimit(ip || 'unknown');
+    await this.rateLimitService.checkResetPasswordLimit(ip || 'unknown');
     return this.authService.resetPassword(dto);
   }
 
@@ -118,7 +120,11 @@ export class AuthController {
    * Login with email and password and issue tokens
    */
   @Post('login')
-  async login(@Body() dto: LoginRequestDto): Promise<AuthTokenResponse> {
+  async login(
+    @Body() dto: LoginRequestDto,
+    @Ip() ip: string,
+  ): Promise<AuthTokenResponse> {
+    await this.rateLimitService.checkLoginLimit(ip || 'unknown', dto.email);
     return this.authService.login(dto);
   }
 
@@ -143,10 +149,8 @@ export class AuthController {
   @ApiTooManyRequestsResponse({
     description: 'Too many guest sessions from this IP (RATE_LIMIT_EXCEEDED)',
   })
-  async createGuestSession(
-    @Ip() ip: string,
-  ): Promise<GuestSessionResponseDto> {
-    this.rateLimitService.checkGuestSessionLimit(ip || 'unknown');
+  async createGuestSession(@Ip() ip: string): Promise<GuestSessionResponseDto> {
+    await this.rateLimitService.checkGuestSessionLimit(ip || 'unknown');
     const studentId = crypto.randomUUID();
     const accessToken = this.tokenService.generateGuestAccessToken({
       studentId,
@@ -321,9 +325,7 @@ export class AuthController {
    */
   @UseGuards(JwtAuthGuard)
   @Get('device-sessions')
-  async getDeviceSessions(
-    @CurrentStudent() student: AccessTokenPayload,
-  ) {
+  async getDeviceSessions(@CurrentStudent() student: AccessTokenPayload) {
     return this.authService.getDeviceSessions(student.studentId);
   }
 
@@ -332,7 +334,11 @@ export class AuthController {
    * Login or request linking with Google OAuth
    */
   @Post('google')
-  async googleLogin(@Body() dto: GoogleLoginRequestDto): Promise<AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }> {
+  async googleLogin(
+    @Body() dto: GoogleLoginRequestDto,
+  ): Promise<
+    AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }
+  > {
     return this.authService.googleLogin(dto);
   }
 
@@ -341,7 +347,9 @@ export class AuthController {
    * Link Google account to existing student
    */
   @Post('google/link')
-  async googleLink(@Body() dto: GoogleLinkRequestDto): Promise<AuthTokenResponse> {
+  async googleLink(
+    @Body() dto: GoogleLinkRequestDto,
+  ): Promise<AuthTokenResponse> {
     return this.authService.googleLink(dto);
   }
 }

@@ -11,6 +11,7 @@ import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine
 import { LesenModule } from './modules/lesen/lesen.module';
 import { ModelltestsModule } from './modules/modelltests/modelltests.module';
 import { NewsletterModule } from './modules/newsletter/newsletter.module';
+import { RateLimitModule } from './shared/rate-limit.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { NewsletterModule } from './modules/newsletter/newsletter.module';
       envFilePath: '.env',
     }),
     PrismaModule,
+    RateLimitModule,
     AuthModule,
     SpeakingModule,
     WritingModule,

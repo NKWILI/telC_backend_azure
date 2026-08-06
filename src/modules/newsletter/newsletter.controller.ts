@@ -18,7 +18,7 @@ export class NewsletterController {
     @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<SubscribeResponseDto> {
-    this.rateLimitService.checkNewsletterSubscribeLimit(
+    await this.rateLimitService.checkNewsletterSubscribeLimit(
       ip || 'unknown',
       dto.email,
     );

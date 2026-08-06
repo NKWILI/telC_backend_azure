@@ -8,7 +8,6 @@ import { WritingGateway } from './writing.gateway';
 import { WritingCorrectionService } from './writing-correction.service';
 import { GrokService } from './services/grok.service';
 import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
-import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { AuthModule } from '../auth/auth.module';
 import { SpeakingModule } from '../speaking/speaking.module';
 import { GeminiService } from '../speaking/services/gemini.service';
@@ -26,7 +25,6 @@ import { GeminiService } from '../speaking/services/gemini.service';
     WritingService,
     WritingGateway,
     WritingCorrectionService,
-    RateLimitService,
     GrokService,
     {
       provide: MODEL_SERVICE_TOKEN,
