@@ -2,6 +2,7 @@ export interface AccessTokenPayload {
   type: 'access';
   studentId: string;
   deviceId: string;
+  sessionId?: string;
   isGuest?: boolean;
   iat?: number;
   exp?: number;

@@ -78,6 +78,32 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  async revokeSession(
+    sessionId: string,
+    ttlSeconds = 86_400,
+  ): Promise<boolean> {
+    if (!this.client?.isReady) return false;
+    try {
+      await this.client.set(`revoked:session:${sessionId}`, '1', {
+        expiration: { type: 'EX', value: ttlSeconds },
+      });
+      return true;
+    } catch {
+      this.logDegraded();
+      return false;
+    }
+  }
+
+  async isSessionRevoked(sessionId: string): Promise<boolean> {
+    if (!this.client?.isReady) return false;
+    try {
+      return (await this.client.exists(`revoked:session:${sessionId}`)) === 1;
+    } catch {
+      this.logDegraded();
+      return false;
+    }
+  }
+
   async onApplicationShutdown(): Promise<void> {
     if (this.client?.isOpen) await this.client.close();
   }

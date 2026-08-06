@@ -5,6 +5,7 @@ import {
   BadGatewayException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
@@ -18,6 +19,7 @@ import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RegisterRequestDto } from './dto/register-request.dto';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
+import { ValkeyService } from '../../shared/services/valkey.service';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -51,6 +53,7 @@ export class AuthService {
     private readonly tokenCrypto: TokenCryptoService,
     private readonly emailService: EmailService,
     private readonly googleService: GoogleService,
+    @Optional() private readonly valkeyService?: ValkeyService,
   ) {}
 
   /**
@@ -88,7 +91,9 @@ export class AuthService {
     if (existingStudent) {
       if (
         existingStudent.email_verification_expires &&
-        this.wasVerificationSentRecently(existingStudent.email_verification_expires)
+        this.wasVerificationSentRecently(
+          existingStudent.email_verification_expires,
+        )
       ) {
         return { message: 'verification email sent' };
       }
@@ -229,7 +234,11 @@ export class AuthService {
         data: { email_verified: true },
       });
 
-      return this.issueAuthResponse(updatedStudent, dto.deviceId, dto.deviceName);
+      return this.issueAuthResponse(
+        updatedStudent,
+        dto.deviceId,
+        dto.deviceName,
+      );
     }
 
     return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
@@ -266,8 +275,12 @@ export class AuthService {
     return { verified: true };
   }
 
-  async forgotPassword(dto: import('./dto/forgot-password-request.dto').ForgotPasswordRequestDto): Promise<{ message: string }> {
-    const GENERIC_RESPONSE = { message: 'If that email exists, a reset link was sent.' };
+  async forgotPassword(
+    dto: import('./dto/forgot-password-request.dto').ForgotPasswordRequestDto,
+  ): Promise<{ message: string }> {
+    const GENERIC_RESPONSE = {
+      message: 'If that email exists, a reset link was sent.',
+    };
 
     const student = await this.prisma.student.findUnique({
       where: { email: dto.email },
@@ -299,9 +312,11 @@ export class AuthService {
     return GENERIC_RESPONSE;
   }
 
-  async resetPassword(dto: import('./dto/reset-password-request.dto').ResetPasswordRequestDto): Promise<AuthTokenResponse> {
+  async resetPassword(
+    dto: import('./dto/reset-password-request.dto').ResetPasswordRequestDto,
+  ): Promise<AuthTokenResponse> {
     const tokenHash = this.tokenCrypto.hashToken(dto.token);
-    const student = await this.prisma.student.findFirst({
+    const student = (await this.prisma.student.findFirst({
       where: { password_reset_token: tokenHash },
       select: {
         id: true,
@@ -310,15 +325,22 @@ export class AuthService {
         email: true,
         password_reset_expires: true,
       } as any,
-    }) as VerificationStudentRecord | null;
+    })) as VerificationStudentRecord | null;
 
     if (!student) throw new BadRequestException('RESET_TOKEN_INVALID');
 
-    if (student.password_reset_expires && this.tokenCrypto.isExpired(student.password_reset_expires)) {
+    if (
+      student.password_reset_expires &&
+      this.tokenCrypto.isExpired(student.password_reset_expires)
+    ) {
       throw new BadRequestException('RESET_TOKEN_EXPIRED');
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const sessionsToRevoke = await this.prisma.deviceSession.findMany({
+      where: { student_id: student.id, revoked_at: null },
+      select: { id: true },
+    });
 
     // rotate password and remove tokens, revoke sessions, then issue a session
     await this.prisma.$transaction(async (tx) => {
@@ -332,6 +354,13 @@ export class AuthService {
         },
       });
     });
+
+    const valkeyService = this.valkeyService;
+    if (valkeyService) {
+      await Promise.all(
+        sessionsToRevoke.map(({ id }) => valkeyService.revokeSession(id)),
+      );
+    }
 
     // issue tokens for the provided device
     return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
@@ -355,7 +384,11 @@ export class AuthService {
     try {
       const session = await this.prisma.$transaction(async (tx) => {
         const existingSession = await tx.deviceSession.findFirst({
-          where: { student_id: studentId, device_id: deviceId, revoked_at: null },
+          where: {
+            student_id: studentId,
+            device_id: deviceId,
+            revoked_at: null,
+          },
           select: { id: true },
         });
 
@@ -575,9 +608,24 @@ export class AuthService {
         where: { id: sessionId },
         data: { revoked_at: new Date() },
       });
+      await this.valkeyService?.revokeSession(sessionId);
     } catch {
       throw new BadRequestException('SESSION_REVOKE_FAILED');
     }
+  }
+
+  async revokeStudentDeviceSession(
+    studentId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const result = await this.prisma.deviceSession.updateMany({
+      where: { id: sessionId, student_id: studentId, revoked_at: null },
+      data: { revoked_at: new Date() },
+    });
+    if (result.count !== 1) {
+      throw new UnauthorizedException('INVALID_SESSION');
+    }
+    await this.valkeyService?.revokeSession(sessionId);
   }
 
   async updateStudentLastSeen(studentId: string): Promise<void> {
@@ -587,17 +635,25 @@ export class AuthService {
     });
   }
 
-  async getDeviceSessions(studentId: string): Promise<{
-    id: string;
-    device_id: string;
-    device_name: string | null;
-    last_used_at: Date;
-    created_at: Date;
-  }[]> {
+  async getDeviceSessions(studentId: string): Promise<
+    {
+      id: string;
+      device_id: string;
+      device_name: string | null;
+      last_used_at: Date;
+      created_at: Date;
+    }[]
+  > {
     return this.prisma.deviceSession.findMany({
       where: { student_id: studentId, revoked_at: null },
       orderBy: { last_used_at: 'desc' },
-      select: { id: true, device_id: true, device_name: true, last_used_at: true, created_at: true },
+      select: {
+        id: true,
+        device_id: true,
+        device_name: true,
+        last_used_at: true,
+        created_at: true,
+      },
     }) as any;
   }
 
@@ -625,7 +681,13 @@ export class AuthService {
    * Google OAuth Login
    * Handles returning users, new users, and accounts awaiting linking
    */
-  async googleLogin(dto: { idToken: string; deviceId: string; deviceName?: string }): Promise<AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }> {
+  async googleLogin(dto: {
+    idToken: string;
+    deviceId: string;
+    deviceName?: string;
+  }): Promise<
+    AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }
+  > {
     const googlePayload = await this.googleService.verifyIdToken(dto.idToken);
 
     // Check for returning user (existing OAuthAccount)
@@ -643,7 +705,7 @@ export class AuthService {
     }
 
     // Check if email exists
-    const existingStudent = await this.prisma.student.findUnique({
+    const existingStudent = (await this.prisma.student.findUnique({
       where: { email: googlePayload.email },
       select: {
         id: true,
@@ -652,7 +714,7 @@ export class AuthService {
         email: true,
         email_verified: true,
       } as any,
-    }) as VerificationStudentRecord | null;
+    })) as VerificationStudentRecord | null;
 
     if (existingStudent) {
       // Email exists but no OAuth link → require linking
@@ -703,11 +765,17 @@ export class AuthService {
    * Link Google account to existing student
    * Consumes a linking token and creates OAuthAccount
    */
-  async googleLink(dto: { linkingToken: string; deviceId: string; deviceName?: string }): Promise<AuthTokenResponse> {
-    const linkingPayload = this.tokenService.verifyLinkingToken(dto.linkingToken);
+  async googleLink(dto: {
+    linkingToken: string;
+    deviceId: string;
+    deviceName?: string;
+  }): Promise<AuthTokenResponse> {
+    const linkingPayload = this.tokenService.verifyLinkingToken(
+      dto.linkingToken,
+    );
 
     // Find student by email
-    const student = await this.prisma.student.findUnique({
+    const student = (await this.prisma.student.findUnique({
       where: { email: linkingPayload.email },
       select: {
         id: true,
@@ -715,7 +783,7 @@ export class AuthService {
         last_name: true,
         email: true,
       } as any,
-    }) as VerificationStudentRecord | null;
+    })) as VerificationStudentRecord | null;
 
     if (!student) {
       throw new BadRequestException('STUDENT_NOT_FOUND');

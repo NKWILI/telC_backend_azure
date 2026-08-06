@@ -315,6 +315,7 @@ describe('TokenService', () => {
 
       expect(accessDecoded.studentId).toBe(refreshDecoded.studentId);
       expect(accessDecoded.deviceId).toBe(refreshDecoded.deviceId);
+      expect(accessDecoded.sessionId).toBe('session-789');
     });
   });
 

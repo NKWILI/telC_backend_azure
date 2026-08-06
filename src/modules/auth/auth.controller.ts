@@ -9,6 +9,8 @@ import {
   UnauthorizedException,
   HttpException,
   Ip,
+  Delete,
+  Param,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
@@ -186,6 +188,7 @@ export class AuthController {
       );
 
       if (!isMatch) {
+        await this.authService.revokeDeviceSession(refreshPayload.sessionId);
         throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
       }
 
@@ -327,6 +330,19 @@ export class AuthController {
   @Get('device-sessions')
   async getDeviceSessions(@CurrentStudent() student: AccessTokenPayload) {
     return this.authService.getDeviceSessions(student.studentId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('device-sessions/:sessionId')
+  async revokeDeviceSession(
+    @CurrentStudent() student: AccessTokenPayload,
+    @Param('sessionId') sessionId: string,
+  ): Promise<{ success: true }> {
+    await this.authService.revokeStudentDeviceSession(
+      student.studentId,
+      sessionId,
+    );
+    return { success: true };
   }
 
   /**

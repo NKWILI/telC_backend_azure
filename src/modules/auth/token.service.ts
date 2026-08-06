@@ -40,12 +40,14 @@ export class TokenService {
   generateAccessToken(payload: {
     studentId: string;
     deviceId: string;
+    sessionId?: string;
   }): string {
     return jwt.sign(
       {
         type: 'access',
         studentId: payload.studentId,
         deviceId: payload.deviceId,
+        sessionId: payload.sessionId,
       },
       this.accessTokenSecret,
       {
@@ -118,6 +120,7 @@ export class TokenService {
       accessToken: this.generateAccessToken({
         studentId: payload.studentId,
         deviceId: payload.deviceId,
+        sessionId: payload.sessionId,
       }),
       refreshToken: this.generateRefreshToken({
         studentId: payload.studentId,

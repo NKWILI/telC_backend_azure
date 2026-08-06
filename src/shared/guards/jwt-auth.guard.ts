@@ -5,12 +5,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { TokenService } from '../../modules/auth/token.service';
+import { ValkeyService } from '../services/valkey.service';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly tokenService: TokenService) {}
+  constructor(
+    private readonly tokenService: TokenService,
+    private readonly valkeyService: ValkeyService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'];
 
@@ -26,6 +30,15 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = this.tokenService.verifyAccessToken(token);
+      if (!payload.isGuest && !payload.sessionId) {
+        throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
+      }
+      if (
+        payload.sessionId &&
+        (await this.valkeyService.isSessionRevoked(payload.sessionId))
+      ) {
+        throw new UnauthorizedException('SESSION_REVOKED');
+      }
       // Attach the decoded payload to the request for downstream use
       request.student = payload;
       return true;

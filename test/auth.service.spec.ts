@@ -1,4 +1,8 @@
-import { BadGatewayException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../src/modules/auth/auth.service';
 
@@ -22,10 +26,12 @@ describe('AuthService', () => {
       },
       deviceSession: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn(),
         deleteMany: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       oAuthAccount: {
         create: jest.fn(),
@@ -44,10 +50,12 @@ describe('AuthService', () => {
       },
       deviceSession: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn(),
         deleteMany: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       oAuthAccount: {
         findFirst: jest.fn(),
@@ -104,7 +112,9 @@ describe('AuthService', () => {
         'Pixel',
       );
 
-      expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function));
+      expect(prismaMock.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+      );
       expect(txMock.deviceSession.deleteMany).not.toHaveBeenCalled();
       expect(txMock.deviceSession.upsert).toHaveBeenCalledWith({
         where: { device_id: 'device-1' },
@@ -130,7 +140,9 @@ describe('AuthService', () => {
 
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
       txMock.deviceSession.count.mockResolvedValueOnce(3);
-      txMock.deviceSession.findFirst.mockResolvedValueOnce({ id: 'oldest-session' });
+      txMock.deviceSession.findFirst.mockResolvedValueOnce({
+        id: 'oldest-session',
+      });
       txMock.deviceSession.upsert.mockResolvedValueOnce(session);
 
       const result = await service.upsertDeviceSession(
@@ -153,7 +165,9 @@ describe('AuthService', () => {
     it('reuses an existing device_id without evicting', async () => {
       const session = { id: 'session-3' };
 
-      txMock.deviceSession.findFirst.mockResolvedValueOnce({ id: 'existing-session' });
+      txMock.deviceSession.findFirst.mockResolvedValueOnce({
+        id: 'existing-session',
+      });
       txMock.deviceSession.count.mockResolvedValueOnce(3);
       txMock.deviceSession.upsert.mockResolvedValueOnce(session);
 
@@ -175,7 +189,11 @@ describe('AuthService', () => {
       txMock.deviceSession.count.mockResolvedValueOnce(0);
       txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-4' });
 
-      await service.upsertDeviceSession('student-2', 'device-4', 'refresh-hash-4');
+      await service.upsertDeviceSession(
+        'student-2',
+        'device-4',
+        'refresh-hash-4',
+      );
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(prismaMock.deviceSession.findFirst).not.toHaveBeenCalled();
@@ -481,7 +499,9 @@ describe('AuthService', () => {
     it('throws VERIFICATION_TOKEN_INVALID for unknown token hash', async () => {
       prismaMock.student.findFirst.mockResolvedValueOnce(null);
 
-      await expect(service.verifyEmailPublic('raw-token')).rejects.toMatchObject({
+      await expect(
+        service.verifyEmailPublic('raw-token'),
+      ).rejects.toMatchObject({
         response: { message: 'VERIFICATION_TOKEN_INVALID' },
       });
     });
@@ -493,7 +513,9 @@ describe('AuthService', () => {
       });
       tokenCryptoMock.isExpired.mockReturnValueOnce(true);
 
-      await expect(service.verifyEmailPublic('raw-token')).rejects.toMatchObject({
+      await expect(
+        service.verifyEmailPublic('raw-token'),
+      ).rejects.toMatchObject({
         response: { message: 'VERIFICATION_TOKEN_EXPIRED' },
       });
       expect(prismaMock.student.update).not.toHaveBeenCalled();
@@ -505,7 +527,9 @@ describe('AuthService', () => {
       prismaMock.student.findUnique.mockResolvedValueOnce(null);
       await expect(
         service.forgotPassword({ email: 'noone@example.com' } as any),
-      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
+      ).resolves.toEqual({
+        message: 'If that email exists, a reset link was sent.',
+      });
     });
 
     it('updates reset token and sends email when email exists', async () => {
@@ -514,7 +538,9 @@ describe('AuthService', () => {
 
       await expect(
         service.forgotPassword({ email: 'john.doe@example.com' } as any),
-      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
+      ).resolves.toEqual({
+        message: 'If that email exists, a reset link was sent.',
+      });
 
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
       expect(prismaMock.student.update).toHaveBeenCalledTimes(1);
@@ -530,7 +556,9 @@ describe('AuthService', () => {
 
       await expect(
         service.forgotPassword({ email: 'john.doe@example.com' } as any),
-      ).resolves.toEqual({ message: 'If that email exists, a reset link was sent.' });
+      ).resolves.toEqual({
+        message: 'If that email exists, a reset link was sent.',
+      });
     });
 
     it('creates a reset token that expires in approximately 10 minutes', async () => {
@@ -721,7 +749,9 @@ describe('AuthService', () => {
         email: 'john.doe@example.com',
       });
       prismaMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
-      emailServiceMock.sendVerificationEmail.mockRejectedValueOnce(new Error('smtp down'));
+      emailServiceMock.sendVerificationEmail.mockRejectedValueOnce(
+        new Error('smtp down'),
+      );
 
       await expect(service.login(dto as any)).rejects.toMatchObject({
         status: 403,
@@ -758,7 +788,12 @@ describe('AuthService', () => {
     });
 
     it('last_seen_at is updated after issueAuthResponse completes', async () => {
-      const student = { id: 'student-1', first_name: 'John', last_name: 'Doe', email: 'john.doe@example.com' };
+      const student = {
+        id: 'student-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john.doe@example.com',
+      };
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
       txMock.deviceSession.count.mockResolvedValueOnce(0);
       txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
@@ -784,7 +819,11 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.login({ email: 'john.doe@example.com', password: 'wrong', deviceId: 'device-1' } as any),
+        service.login({
+          email: 'john.doe@example.com',
+          password: 'wrong',
+          deviceId: 'device-1',
+        } as any),
       ).rejects.toMatchObject({ response: { message: 'INVALID_CREDENTIALS' } });
 
       expect(prismaMock.student.update).not.toHaveBeenCalled();
@@ -794,18 +833,38 @@ describe('AuthService', () => {
   describe('getDeviceSessions', () => {
     it('returns non-revoked sessions for the given student ordered by last_used_at desc', async () => {
       const sessions = [
-        { id: 'session-2', device_id: 'dev-2', device_name: 'Chrome', last_used_at: new Date('2026-05-03'), created_at: new Date('2026-05-01') },
-        { id: 'session-1', device_id: 'dev-1', device_name: 'Pixel', last_used_at: new Date('2026-05-02'), created_at: new Date('2026-04-30') },
+        {
+          id: 'session-2',
+          device_id: 'dev-2',
+          device_name: 'Chrome',
+          last_used_at: new Date('2026-05-03'),
+          created_at: new Date('2026-05-01'),
+        },
+        {
+          id: 'session-1',
+          device_id: 'dev-1',
+          device_name: 'Pixel',
+          last_used_at: new Date('2026-05-02'),
+          created_at: new Date('2026-04-30'),
+        },
       ];
 
-      prismaMock.deviceSession.findMany = jest.fn().mockResolvedValueOnce(sessions);
+      prismaMock.deviceSession.findMany = jest
+        .fn()
+        .mockResolvedValueOnce(sessions);
 
       const result = await service.getDeviceSessions('student-1');
 
       expect(prismaMock.deviceSession.findMany).toHaveBeenCalledWith({
         where: { student_id: 'student-1', revoked_at: null },
         orderBy: { last_used_at: 'desc' },
-        select: { id: true, device_id: true, device_name: true, last_used_at: true, created_at: true },
+        select: {
+          id: true,
+          device_id: true,
+          device_name: true,
+          last_used_at: true,
+          created_at: true,
+        },
       });
       expect(result).toEqual(sessions);
     });
@@ -815,7 +874,8 @@ describe('AuthService', () => {
 
       const result = await service.getDeviceSessions('student-1');
 
-      const call = (prismaMock.deviceSession.findMany as jest.Mock).mock.calls[0][0];
+      const call = (prismaMock.deviceSession.findMany as jest.Mock).mock
+        .calls[0][0];
       expect(call.where.revoked_at).toBe(null);
       expect(result).toEqual([]);
     });
@@ -824,13 +884,11 @@ describe('AuthService', () => {
   describe('googleLogin', () => {
     it('returns tokens for returning user (existing OAuthAccount)', async () => {
       const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest
-        .fn()
-        .mockResolvedValueOnce({
-          sub: 'google-user-123',
-          email: 'john@example.com',
-          email_verified: true,
-        });
+      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
+        sub: 'google-user-123',
+        email: 'john@example.com',
+        email_verified: true,
+      });
 
       const oauthAccount = {
         id: 'oauth-1',
@@ -860,13 +918,11 @@ describe('AuthService', () => {
 
     it('returns LINKING_REQUIRED for existing unverified student email with no OAuth', async () => {
       const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest
-        .fn()
-        .mockResolvedValueOnce({
-          sub: 'google-user-123',
-          email: 'john@example.com',
-          email_verified: false,
-        });
+      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
+        sub: 'google-user-123',
+        email: 'john@example.com',
+        email_verified: false,
+      });
 
       prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
       prismaMock.student.findUnique.mockResolvedValueOnce({
@@ -895,13 +951,11 @@ describe('AuthService', () => {
 
     it('returns LINKING_REQUIRED for existing verified student email with no OAuth', async () => {
       const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest
-        .fn()
-        .mockResolvedValueOnce({
-          sub: 'google-user-456',
-          email: 'verified@example.com',
-          email_verified: true,
-        });
+      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
+        sub: 'google-user-456',
+        email: 'verified@example.com',
+        email_verified: true,
+      });
 
       prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
       prismaMock.student.findUnique.mockResolvedValueOnce({
@@ -930,15 +984,13 @@ describe('AuthService', () => {
 
     it('creates new student for brand new email', async () => {
       const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest
-        .fn()
-        .mockResolvedValueOnce({
-          sub: 'google-user-123',
-          email: 'newuser@example.com',
-          email_verified: true,
-          given_name: 'John',
-          family_name: 'Doe',
-        });
+      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
+        sub: 'google-user-123',
+        email: 'newuser@example.com',
+        email_verified: true,
+        given_name: 'John',
+        family_name: 'Doe',
+      });
 
       prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
       prismaMock.student.findUnique.mockResolvedValueOnce(null);
@@ -967,9 +1019,7 @@ describe('AuthService', () => {
     it('throws INVALID_GOOGLE_TOKEN for invalid token', async () => {
       const googleService = (service as any).googleService;
       const error = new Error('INVALID_GOOGLE_TOKEN');
-      googleService.verifyIdToken = jest
-        .fn()
-        .mockRejectedValueOnce(error);
+      googleService.verifyIdToken = jest.fn().mockRejectedValueOnce(error);
 
       await expect(
         service.googleLogin({
@@ -983,13 +1033,11 @@ describe('AuthService', () => {
   describe('googleLink', () => {
     it('links OAuth account and returns tokens', async () => {
       const tokenService = (service as any).tokenService;
-      tokenService.verifyLinkingToken = jest
-        .fn()
-        .mockReturnValueOnce({
-          email: 'john@example.com',
-          provider: 'google',
-          providerId: 'google-user-123',
-        });
+      tokenService.verifyLinkingToken = jest.fn().mockReturnValueOnce({
+        email: 'john@example.com',
+        provider: 'google',
+        providerId: 'google-user-123',
+      });
 
       prismaMock.student.findUnique.mockResolvedValueOnce({
         id: 'student-1',
@@ -1017,11 +1065,9 @@ describe('AuthService', () => {
     it('throws error for invalid linking token', async () => {
       const tokenService = (service as any).tokenService;
       const error = new Error('LINKING_TOKEN_INVALID');
-      tokenService.verifyLinkingToken = jest
-        .fn()
-        .mockImplementationOnce(() => {
-          throw error;
-        });
+      tokenService.verifyLinkingToken = jest.fn().mockImplementationOnce(() => {
+        throw error;
+      });
 
       await expect(
         service.googleLink({
@@ -1033,13 +1079,11 @@ describe('AuthService', () => {
 
     it('throws STUDENT_NOT_FOUND if email not in system', async () => {
       const tokenService = (service as any).tokenService;
-      tokenService.verifyLinkingToken = jest
-        .fn()
-        .mockReturnValueOnce({
-          email: 'unknown@example.com',
-          provider: 'google',
-          providerId: 'google-user-123',
-        });
+      tokenService.verifyLinkingToken = jest.fn().mockReturnValueOnce({
+        email: 'unknown@example.com',
+        provider: 'google',
+        providerId: 'google-user-123',
+      });
 
       prismaMock.student.findUnique.mockResolvedValueOnce(null);
 
@@ -1051,6 +1095,34 @@ describe('AuthService', () => {
       ).rejects.toMatchObject({
         response: { message: 'STUDENT_NOT_FOUND' },
       });
+    });
+  });
+
+  describe('revokeStudentDeviceSession', () => {
+    it('revokes only a session owned by the authenticated student', async () => {
+      prismaMock.deviceSession.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      await service.revokeStudentDeviceSession('student-1', 'session-1');
+
+      expect(prismaMock.deviceSession.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'session-1',
+          student_id: 'student-1',
+          revoked_at: null,
+        },
+        data: { revoked_at: expect.any(Date) },
+      });
+    });
+
+    it('rejects a session that does not belong to the student', async () => {
+      prismaMock.deviceSession.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        service.revokeStudentDeviceSession(
+          'student-1',
+          'someone-elses-session',
+        ),
+      ).rejects.toThrow('INVALID_SESSION');
     });
   });
 });
