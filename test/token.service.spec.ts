@@ -190,6 +190,19 @@ describe('TokenService', () => {
       expect(decoded.sessionId).toBe('session-789');
       expect(decoded.type).toBe('refresh');
     });
+
+    it('generates distinct refresh tokens within the same second', () => {
+      const payload = {
+        studentId: 'student-123',
+        deviceId: 'device-456',
+        sessionId: 'session-789',
+      };
+
+      const first = tokenService.generateRefreshToken(payload);
+      const second = tokenService.generateRefreshToken(payload);
+
+      expect(second).not.toBe(first);
+    });
   });
 
   describe('verifyRefreshToken', () => {

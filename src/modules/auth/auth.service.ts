@@ -604,6 +604,29 @@ export class AuthService {
   }
 
   /**
+   * Atomically rotate a refresh-token hash. Only the request that validated
+   * the currently stored hash can update it; concurrent requests lose safely.
+   */
+  async rotateDeviceSessionRefreshHash(
+    sessionId: string,
+    expectedRefreshTokenHash: string,
+    newRefreshTokenHash: string,
+  ): Promise<boolean> {
+    const result = await this.prisma.deviceSession.updateMany({
+      where: {
+        id: sessionId,
+        refresh_token_hash: expectedRefreshTokenHash,
+        revoked_at: null,
+      },
+      data: {
+        refresh_token_hash: newRefreshTokenHash,
+        last_used_at: new Date(),
+      },
+    });
+    return result.count === 1;
+  }
+
+  /**
    * Revoke a device session
    */
   async revokeDeviceSession(sessionId: string): Promise<void> {

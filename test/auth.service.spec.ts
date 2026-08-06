@@ -892,6 +892,44 @@ describe('AuthService', () => {
     });
   });
 
+  describe('rotateDeviceSessionRefreshHash', () => {
+    it('rotates only when the expected hash is still current', async () => {
+      prismaMock.deviceSession.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      await expect(
+        service.rotateDeviceSessionRefreshHash(
+          'session-1',
+          'current-hash',
+          'new-hash',
+        ),
+      ).resolves.toBe(true);
+
+      expect(prismaMock.deviceSession.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'session-1',
+          refresh_token_hash: 'current-hash',
+          revoked_at: null,
+        },
+        data: {
+          refresh_token_hash: 'new-hash',
+          last_used_at: expect.any(Date),
+        },
+      });
+    });
+
+    it('reports a lost refresh race without changing the session', async () => {
+      prismaMock.deviceSession.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        service.rotateDeviceSessionRefreshHash(
+          'session-1',
+          'stale-hash',
+          'new-hash',
+        ),
+      ).resolves.toBe(false);
+    });
+  });
+
   describe('googleLogin', () => {
     it('returns tokens for returning user (existing OAuthAccount)', async () => {
       const googleService = (service as any).googleService;

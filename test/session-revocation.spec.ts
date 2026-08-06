@@ -126,7 +126,7 @@ describe('session revocation', () => {
     );
   });
 
-  it('revokes a session when an old rotated refresh token is replayed', async () => {
+  it('rejects an old rotated refresh token without revoking the active session', async () => {
     const authService = {
       validateRefreshToken: jest.fn().mockResolvedValue({
         device_id: 'device-1',
@@ -151,6 +151,45 @@ describe('session revocation', () => {
     await expect(
       controller.refresh({ refreshToken: 'old-token' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(authService.revokeDeviceSession).toHaveBeenCalledWith('session-1');
+    expect(authService.revokeDeviceSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects the losing concurrent refresh without revoking the session', async () => {
+    const authService = {
+      validateRefreshToken: jest.fn().mockResolvedValue({
+        device_id: 'device-1',
+        refresh_token_hash: 'current-hash',
+      }),
+      rotateDeviceSessionRefreshHash: jest.fn().mockResolvedValue(false),
+      revokeDeviceSession: jest.fn(),
+    } as unknown as AuthService;
+    const tokenService = {
+      verifyRefreshToken: jest.fn().mockReturnValue({
+        studentId: 'student-1',
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+      }),
+      compareRefreshToken: jest.fn().mockResolvedValue(true),
+      generateTokenPair: jest.fn().mockReturnValue({
+        accessToken: 'new-access',
+        refreshToken: 'new-refresh',
+      }),
+      hashRefreshToken: jest.fn().mockResolvedValue('new-hash'),
+    } as unknown as TokenService;
+    const controller = new AuthController(
+      authService,
+      tokenService,
+      {} as RateLimitService,
+    );
+
+    await expect(
+      controller.refresh({ refreshToken: 'current-token' }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(authService.rotateDeviceSessionRefreshHash).toHaveBeenCalledWith(
+      'session-1',
+      'current-hash',
+      'new-hash',
+    );
+    expect(authService.revokeDeviceSession).not.toHaveBeenCalled();
   });
 });

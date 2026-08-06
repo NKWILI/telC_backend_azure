@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import {
   AccessTokenPayload,
   RefreshTokenPayload,
@@ -103,6 +104,7 @@ export class TokenService {
         algorithm: 'HS256',
         issuer: this.issuer,
         audience: this.audience,
+        jwtid: randomUUID(),
         expiresIn: this.refreshTokenExpiry as jwt.SignOptions['expiresIn'],
       },
     );

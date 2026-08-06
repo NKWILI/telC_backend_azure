@@ -188,7 +188,6 @@ export class AuthController {
       );
 
       if (!isMatch) {
-        await this.authService.revokeDeviceSession(refreshPayload.sessionId);
         throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
       }
 
@@ -202,10 +201,14 @@ export class AuthController {
         tokens.refreshToken,
       );
 
-      await this.authService.updateDeviceSessionRefreshHash(
+      const rotated = await this.authService.rotateDeviceSessionRefreshHash(
         refreshPayload.sessionId,
+        session.refresh_token_hash,
         newRefreshHash,
       );
+      if (!rotated) {
+        throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
+      }
 
       await this.authService.updateStudentLastSeen(refreshPayload.studentId);
 
