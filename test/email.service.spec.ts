@@ -15,7 +15,7 @@ describe('EmailService', () => {
         throw new Error(`missing config: ${key}`);
       },
       get: (key: string) => values[key],
-    } as unknown as ConfigService);
+    }) as unknown as ConfigService;
 
   describe('sendVerificationEmail', () => {
     it('uses VITRINE_URL when set', async () => {
@@ -73,6 +73,27 @@ describe('EmailService', () => {
 
       const arg = send.mock.calls[0][0];
       expect(arg.html).toContain('042713');
+    });
+
+    it('uses the Lerniqo branding and embeds the official logo', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendPasswordResetEmail('user@example.com', '042713');
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.subject).toBe(
+        'Dein Lerniqo-Code zum Zurücksetzen des Passworts',
+      );
+      expect(arg.html).toContain('cid:lerniqo-logo');
+      expect(arg.html).toContain('www.lerniqo.tech');
+      expect(arg.text).toContain('Dein Bestätigungscode: 042713');
+      expect(arg.attachments).toEqual([
+        expect.objectContaining({
+          filename: 'lerniqo-logo.png',
+          contentId: 'lerniqo-logo',
+        }),
+      ]);
     });
 
     it('does NOT include a /reset-password URL link', async () => {

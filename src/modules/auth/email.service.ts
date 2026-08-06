@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class EmailService {
@@ -27,20 +29,120 @@ export class EmailService {
 
   async sendPasswordResetEmail(to: string, rawCode: string): Promise<void> {
     const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
+    const logo = readFileSync(
+      join(__dirname, '..', '..', '..', 'public', 'logo.png'),
+    );
+
+    const subject = 'Dein Lerniqo-Code zum Zurücksetzen des Passworts';
+
+    const text = `
+Passwort zurücksetzen
+
+Hallo,
+
+wir haben eine Anfrage erhalten, dein Lerniqo-Passwort zurückzusetzen.
+
+Dein Bestätigungscode: ${rawCode}
+
+Gib diesen Code in der Lerniqo-App ein. Er ist 10 Minuten gültig.
+
+Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert.
+
+Lerniqo
+Deine KI-gestützte Prüfungsvorbereitung für die telC-Sprachprüfung.
+www.lerniqo.tech
+    `.trim();
 
     const html = `
-      <p>Guten Tag,</p>
-      <p>Sie haben das Zurücksetzen Ihres Passworts angefordert. Ihr Bestätigungscode lautet:</p>
-      <p style="font-size: 32px; letter-spacing: 0.25em; font-weight: 700; text-align: center; margin: 24px 0; font-family: 'Courier New', monospace;">${rawCode}</p>
-      <p>Geben Sie diesen Code in der App ein, um ein neues Passwort festzulegen. Der Code ist <strong>10 Minuten</strong> gültig.</p>
-      <p>Falls Sie keine Zurücksetzung angefordert haben, ignorieren Sie diese E-Mail. Ihr Passwort bleibt unverändert.</p>
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light only">
+    <title>${subject}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f3f6fa;font-family:Arial,Helvetica,sans-serif;color:#172033;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Mit diesem Code kannst du dein Lerniqo-Passwort zurücksetzen.
+    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#f3f6fa;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;background-color:#ffffff;border:1px solid #dfe7f1;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(15,35,65,0.08);">
+            <tr>
+              <td align="center" style="padding:28px 36px;background-color:#06285a;">
+                <img src="cid:lerniqo-logo" width="150" alt="Lerniqo" style="display:block;width:150px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;">
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:38px 36px 34px;">
+                <h1 style="margin:0 0 24px;color:#06285a;font-size:26px;line-height:1.25;font-weight:800;text-align:center;">
+                  Passwort zurücksetzen
+                </h1>
+
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.65;">Hallo,</p>
+                <p style="margin:0 0 22px;font-size:16px;line-height:1.65;">
+                  wir haben eine Anfrage erhalten, dein Lerniqo-Passwort zurückzusetzen.
+                </p>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#f7f9fc;border:1px solid #cbd9eb;border-radius:14px;">
+                  <tr>
+                    <td align="center" style="padding:24px 16px;">
+                      <p style="margin:0 0 12px;color:#172033;font-size:15px;line-height:1.4;font-weight:700;">
+                        Dein Bestätigungscode:
+                      </p>
+                      <p style="margin:0;color:#06285a;font-family:'Courier New',Courier,monospace;font-size:38px;line-height:1.2;font-weight:800;letter-spacing:8px;">
+                        ${rawCode}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:24px 0;font-size:16px;line-height:1.65;">
+                  Gib diesen Code in der Lerniqo-App ein. Er ist <strong>10 Minuten gültig</strong>.
+                </p>
+
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#fff8e8;border:1px solid #f2b441;border-radius:10px;">
+                  <tr>
+                    <td style="padding:16px;color:#694f00;font-size:14px;line-height:1.6;">
+                      <strong>Sicherheitshinweis:</strong> Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren. Dein Passwort bleibt unverändert.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:24px 36px;background-color:#f9fbfd;border-top:1px solid #dfe7f1;color:#667085;font-size:13px;line-height:1.6;">
+                <strong style="color:#172033;font-size:16px;">Lerniqo</strong><br>
+                Deine KI-gestützte Prüfungsvorbereitung für die telC-Sprachprüfung.<br>
+                <span style="color:#086bd8;">www.lerniqo.tech</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
     `;
 
     await this.resend.emails.send({
       from: emailFrom,
       to,
-      subject: 'Ihr Passwort-Bestätigungscode',
+      subject,
       html,
+      text,
+      attachments: [
+        {
+          filename: 'lerniqo-logo.png',
+          content: logo,
+          contentId: 'lerniqo-logo',
+        },
+      ],
     });
   }
 }
