@@ -274,9 +274,10 @@ model LesenTeil2Exercise {
 
   questions LesenTeil2Question[]
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("lesen_teil2_exercises")
 }
 
@@ -318,9 +319,10 @@ model SprachbausteineExercise {
 
   gaps SprachbausteineGap[]
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("sprachbausteine_exercises")
 }
 
@@ -363,9 +365,10 @@ model SprachbausteineTeil2Exercise {
   words SprachbausteineTeil2Word[]
   gaps  SprachbausteineTeil2Gap[]
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("sprachbausteine_teil2_exercises")
 }
 
@@ -407,9 +410,10 @@ model LesenTeil1Exercise {
   texts  LesenTeil1Text[]
   titles LesenTeil1Title[]
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("lesen_teil1_exercises")
 }
 
@@ -451,9 +455,10 @@ model LesenTeil3Exercise {
   situations    LesenTeil3Situation[]
   announcements LesenTeil3Announcement[]
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("lesen_teil3_exercises")
 }
 
@@ -514,8 +519,9 @@ model WritingExercise {
   closing_reminder  String?
   created_at        DateTime    @default(now())
 
-  modelltest_id String?     @db.Uuid
-  modelltest    Modelltest? @relation(fields: [modelltest_id], references: [id])
+  modelltest_id String     @db.Uuid
+  modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])
 
+  @@unique([modelltest_id])
   @@map("writing_exercises")
 }
