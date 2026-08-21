@@ -300,6 +300,8 @@ export class ListeningService {
     // Score computed for DB persistence only — not returned to frontend.
     const score = this.computeScore(dto.answers, entry.answerKey);
 
+    const modelltestId = await this.resolveModelltestId(dto.content_revision);
+
     try {
       await this.prisma.listeningAttempt.create({
         data: {
@@ -309,6 +311,7 @@ export class ListeningService {
           score,
           timed: dto.timed,
           content_revision: dto.content_revision,
+          modelltest_id: modelltestId,
           completed_at: new Date(),
         },
       });
@@ -322,6 +325,39 @@ export class ListeningService {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Which Modelltest an attempt belongs to, derived from its content revision.
+   *
+   * Hoeren content is still hardcoded in this service rather than stored in the
+   * database, so `content_revision` is the only signal available. Revisions are
+   * named `modelltest-<n>-teil-<t>-v<v>`; anything that does not match — the
+   * historic `mock-horen-*` rows, for instance — genuinely belongs to no exam
+   * and stays unattributed. Same rule the backfill in migration
+   * 20260821160000 uses, deliberately, so old and new rows agree.
+   *
+   * Never throws. Attribution is metadata; losing a student's result because
+   * this lookup failed would be a far worse outcome than an unattributed row.
+   */
+  private async resolveModelltestId(
+    contentRevision: string | undefined,
+  ): Promise<string | null> {
+    const match = /^modelltest-(\d+)-/.exec(contentRevision ?? '');
+    if (!match) return null;
+
+    try {
+      const modelltest = await this.prisma.modelltest.findUnique({
+        where: { number: Number(match[1]) },
+        select: { id: true },
+      });
+      return modelltest?.id ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not resolve Modelltest for "${contentRevision}": ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
 
   private computeScore(
     answers: Record<string, string>,
