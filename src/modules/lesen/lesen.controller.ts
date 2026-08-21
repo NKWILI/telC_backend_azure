@@ -1,5 +1,14 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
-import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  UseGuards,
+  DefaultValuePipe,
+  ParseIntPipe,
+} from '@nestjs/common';
+import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { LesenService } from './lesen.service';
 import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
@@ -12,20 +21,20 @@ export class LesenController {
   constructor(private readonly lesenService: LesenService) {}
 
   @Get('exercise')
+  @ApiQuery({
+    name: 'modelltest',
+    required: false,
+    schema: { type: 'integer', default: 1 },
+    example: 1,
+    description:
+      'Which Modelltest to serve. Defaults to 1 when omitted. All three Teils come from the same Modelltest.',
+  })
   @ApiOkResponse({ type: LesenExerciseResponseDto })
-  async getExercise(): Promise<LesenExerciseResponseDto> {
-    const [teil1, teil2Result, teil3] = await Promise.all([
-      this.lesenService.getTeil1Exercise(),
-      this.lesenService.getTeil2Exercise(),
-      this.lesenService.getTeil3Exercise(),
-    ]);
-    return {
-      contentRevision: teil2Result.contentRevision,
-      issuedAt: teil2Result.issuedAt,
-      teil1,
-      teil2: teil2Result.teil2,
-      teil3,
-    };
+  getExercise(
+    @Query('modelltest', new DefaultValuePipe(1), ParseIntPipe)
+    modelltest: number,
+  ): Promise<LesenExerciseResponseDto> {
+    return this.lesenService.getExercise(modelltest);
   }
 
   @Post('submit')

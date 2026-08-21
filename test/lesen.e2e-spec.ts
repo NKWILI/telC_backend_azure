@@ -29,13 +29,7 @@ describe('LesenController (e2e)', () => {
   let app: INestApplication<App>;
 
   const lesenService = {
-    getTeil1Exercise: jest.fn().mockResolvedValue(exerciseResponse.teil1),
-    getTeil2Exercise: jest.fn().mockResolvedValue({
-      contentRevision: exerciseResponse.contentRevision,
-      issuedAt: exerciseResponse.issuedAt,
-      teil2: exerciseResponse.teil2,
-    }),
-    getTeil3Exercise: jest.fn().mockResolvedValue(exerciseResponse.teil3),
+    getExercise: jest.fn().mockResolvedValue(exerciseResponse),
     submitTeil2: jest.fn().mockResolvedValue(submitResponse),
   };
 
@@ -83,6 +77,33 @@ describe('LesenController (e2e)', () => {
         expect(res.body).toHaveProperty('teil2');
         expect(res.body).toHaveProperty('teil3');
       });
+  });
+
+  it('GET /api/reading/exercise defaults to Modelltest 1', async () => {
+    await request(app.getHttpServer())
+      .get('/api/reading/exercise')
+      .set('Authorization', 'Bearer fake-token')
+      .expect(200);
+
+    expect(lesenService.getExercise).toHaveBeenCalledWith(1);
+  });
+
+  it('GET /api/reading/exercise?modelltest=2 requests Modelltest 2', async () => {
+    await request(app.getHttpServer())
+      .get('/api/reading/exercise?modelltest=2')
+      .set('Authorization', 'Bearer fake-token')
+      .expect(200);
+
+    expect(lesenService.getExercise).toHaveBeenCalledWith(2);
+  });
+
+  it('GET /api/reading/exercise?modelltest=abc returns 400', async () => {
+    await request(app.getHttpServer())
+      .get('/api/reading/exercise?modelltest=abc')
+      .set('Authorization', 'Bearer fake-token')
+      .expect(400);
+
+    expect(lesenService.getExercise).not.toHaveBeenCalled();
   });
 
   it('GET /api/reading/exercise without token returns 401', async () => {

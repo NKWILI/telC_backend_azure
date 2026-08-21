@@ -17,8 +17,44 @@ export class LesenService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getTeil1Exercise(): Promise<LesenTeil1Dto> {
+  /**
+   * Resolve the Modelltest once, then fetch all three Teils scoped to it.
+   *
+   * Every Teil query must filter on modelltest_id. Without it, `findFirst`
+   * returns an unordered row and the three Teils can come from different
+   * Modelltests — a mixed exam scored against the wrong answer key.
+   */
+  async getExercise(modelltestNumber = 1): Promise<LesenExerciseResponseDto> {
+    const modelltest = await this.prisma.modelltest.findUnique({
+      where: { number: modelltestNumber },
+    });
+
+    if (!modelltest) {
+      throw new NotFoundException(`Modelltest ${modelltestNumber} not found`);
+    }
+
+    const [teil1, teil2Result, teil3] = await Promise.all([
+      this.getTeil1Exercise(modelltest.id),
+      this.getTeil2Exercise(modelltest.id),
+      this.getTeil3Exercise(modelltest.id),
+    ]);
+
+    return {
+      contentRevision: teil2Result.contentRevision,
+      issuedAt: teil2Result.issuedAt,
+      teil1,
+      teil2: teil2Result.teil2,
+      teil3,
+    };
+  }
+
+  async getTeil1Exercise(modelltestId: string): Promise<LesenTeil1Dto> {
     const exercise = await this.prisma.lesenTeil1Exercise.findFirst({
+      where: { modelltest_id: modelltestId },
+      // Deterministic pick if a Modelltest ever ends up with two rows for the
+      // same Teil. A unique constraint on modelltest_id would make this
+      // unnecessary, but nothing enforces one yet.
+      orderBy: { createdAt: 'asc' },
       include: {
         texts: { orderBy: { sortOrder: 'asc' } },
         titles: { orderBy: { sortOrder: 'asc' } },
@@ -26,7 +62,9 @@ export class LesenService {
     });
 
     if (!exercise) {
-      throw new NotFoundException('No Lesen Teil 1 exercise found');
+      throw new NotFoundException(
+        `No Lesen Teil 1 exercise found for Modelltest with id ${modelltestId}`,
+      );
     }
 
     const correctMatches: Record<string, string> = {};
@@ -49,10 +87,15 @@ export class LesenService {
     };
   }
 
-  async getTeil2Exercise(): Promise<
-    Omit<LesenExerciseResponseDto, 'teil1' | 'teil3'>
-  > {
+  async getTeil2Exercise(
+    modelltestId: string,
+  ): Promise<Omit<LesenExerciseResponseDto, 'teil1' | 'teil3'>> {
     const exercise = await this.prisma.lesenTeil2Exercise.findFirst({
+      where: { modelltest_id: modelltestId },
+      // Deterministic pick if a Modelltest ever ends up with two rows for the
+      // same Teil. A unique constraint on modelltest_id would make this
+      // unnecessary, but nothing enforces one yet.
+      orderBy: { createdAt: 'asc' },
       include: {
         questions: {
           orderBy: { sortOrder: 'asc' },
@@ -64,7 +107,9 @@ export class LesenService {
     });
 
     if (!exercise) {
-      throw new NotFoundException('No Lesen Teil 2 exercise found');
+      throw new NotFoundException(
+        `No Lesen Teil 2 exercise found for Modelltest with id ${modelltestId}`,
+      );
     }
 
     const questions: LesenTeil2QuestionDto[] = exercise.questions.map((q) => {
@@ -100,8 +145,13 @@ export class LesenService {
     };
   }
 
-  async getTeil3Exercise(): Promise<LesenTeil3Dto> {
+  async getTeil3Exercise(modelltestId: string): Promise<LesenTeil3Dto> {
     const exercise = await this.prisma.lesenTeil3Exercise.findFirst({
+      where: { modelltest_id: modelltestId },
+      // Deterministic pick if a Modelltest ever ends up with two rows for the
+      // same Teil. A unique constraint on modelltest_id would make this
+      // unnecessary, but nothing enforces one yet.
+      orderBy: { createdAt: 'asc' },
       include: {
         announcements: { orderBy: { sortOrder: 'asc' } },
         situations: { orderBy: { sortOrder: 'asc' } },
@@ -109,7 +159,9 @@ export class LesenService {
     });
 
     if (!exercise) {
-      throw new NotFoundException('No Lesen Teil 3 exercise found');
+      throw new NotFoundException(
+        `No Lesen Teil 3 exercise found for Modelltest with id ${modelltestId}`,
+      );
     }
 
     const letterMap = new Map<string, string>();
