@@ -1,201 +1,224 @@
 # Backlog
 
-Open work, most consequential first. Started 2026-08-21 from the Modelltest 2
-readiness audit; items found since have been folded in.
+Open work only. Every item below was re-verified against the codebase or against
+production on **2026-08-21**; anything that turned out to be already fixed has
+been removed rather than marked done.
 
-Status: ⬜ open · 🔵 needs a decision before it can start · ✅ done
+🔵 = blocked on a decision, not on effort.
 
 ---
 
 ## 1 — User-facing bugs
 
-### ⬜ Registration silently discards a re-registered password
-`auth.service.ts:102-107`
+### Registration silently discards a re-registered password
+`auth.service.ts:102-107` — **verified still present**
 
-A student registers, never verifies, registers again later with a different
-password. Only the verification token and expiry are updated — the new password
-and name are dropped. She verifies, gets logged in, and the next day cannot log
-in with the password she actually chose. No error, nothing in the logs, and
-support has no way to see it.
+The `update` on the unverified-re-registration path writes only
+`email_verification_token` and `email_verification_expires`. The password and
+name from the second attempt are dropped.
 
-Safe to fix because the account is unverified — nobody has proven ownership, so
-nothing is being hijacked. Add `password_hash`, `first_name`, `last_name` to
-that `update`.
+A student registers, never verifies, registers again weeks later with a
+different password, verifies, gets logged in — and the next day cannot log in
+with the password she actually chose. No error, nothing in the logs, nothing
+support can see.
+
+Safe to fix precisely because the account is unverified: nobody has proven
+ownership, so no account is being hijacked. Add `password_hash`, `first_name`,
+`last_name` to that `update`.
 
 **Three lines. Highest user impact on this list.**
 
-### ⬜ `emailVerified` is hardcoded true in the auth response
-`auth.service.ts:467`
+### `emailVerified` is hardcoded `true` in the auth response
+`auth.service.ts:468` — **verified still present**
 
-`issueAuthResponse` always returns `emailVerified: true` instead of reading
-`student.email_verified`. On the email/password paths that is true by
-construction. On the Google path the account is created with
-`email_verified: googlePayload.email_verified`, which can be `false` — so the
-response tells the frontend the address is verified when it is not.
-
-Fix alongside adding an `emailVerified` claim to the JWT (see item 4).
+`issueAuthResponse` returns a literal `true` rather than reading
+`student.email_verified`. True by construction on the email/password paths; on
+the Google path the account is created with `email_verified` taken from the
+Google payload, which can be `false`. The response then tells the frontend the
+address is verified when it is not.
 
 ---
 
-## 2 — Modelltest 2: remaining gates
+## 2 — Correctness
+
+### Sprachbausteine serves Modelltest 1 for a malformed `?modelltest=`
+`sprachbausteine.controller.ts:37` — **verified in production today**
+
+```
+GET /api/sprachbausteine/exercise?modelltest=abc  →  200, Modelltest 1
+GET /api/writing/exercise?modelltest=abc          →  400   ← correct
+GET /api/reading/exercise?modelltest=abc          →  400   ← fixed 2026-08-21
+```
+
+Identical cause to the Lesen bug fixed earlier today: the param is declared as
+`number` with `DefaultValuePipe(1)` and `ParseIntPipe`, but `main.ts` installs a
+global `ValidationPipe({ transform: true })`. Global pipes run **before**
+parameter pipes, so `'abc'` is coerced before `ParseIntPipe` ever sees it and
+`DefaultValuePipe` substitutes 1. Malformed input silently yields a valid-looking
+exam instead of an error, hiding client bugs.
+
+Fix is the same: take the raw string and parse explicitly, as
+`writing.controller.ts:69` and now `lesen.controller.ts` do. This becomes more
+than cosmetic the moment a second Modelltest exists.
+
+### Two e2e suites do not install the global pipes
+`test/app.e2e-spec.ts`, `test/speaking-websocket.e2e-spec.ts` — **verified**
+
+They build test apps without the global `ValidationPipe` from `main.ts`, so any
+assertion they make about validation or transformation does not represent
+production. This is not hypothetical: it is exactly how `lesen.e2e-spec.ts`
+asserted `400` for `?modelltest=abc` and passed, while production returned `200`.
+
+### JWT carries no `emailVerified` claim, and no guard checks one
+`token-payload.interface.ts`, `jwt-auth.guard.ts` — **verified**
+
+`AccessTokenPayload` is `{ type, studentId, deviceId, sessionId?, isGuest? }`.
+The guard verifies signature, requires a `sessionId`, and checks revocation —
+there is no verification check anywhere.
+
+The invariant holds today only because of *where* tokens are issued, which is
+correct but implicit. A future sixth call site for `issueAuthResponse()` could
+hand a token to an unverified student with nothing to stop it. Adding the claim
+also unblocks the `emailVerified` fix above.
+
+### `contentRevision` describes only Teil 2
+`lesen.service.ts:44` — **verified**
+
+The response-level revision is taken from Teil 2 but serves as the client's
+staleness key for the whole payload. Edit Modelltest 2's Teil 1 or Teil 3 and no
+cache invalidates.
+
+---
+
+## 3 — Modelltest 2 gates
 
 ### 🔵 Hören content lives in TypeScript, not the database
-`listening.service.ts:30-398` — audit finding 02
+`listening.service.ts` — **verified: 3 hardcoded `modelltest-1-*` revisions, 0 listening models in the schema**
 
 No table, no `modelltest_id`, nothing for a seed to insert into. Adding a second
 exam to Hören is a code change, not a content change.
 
-**Blocked on one answer: how many Modelltests in total?**
+**Blocked on one product answer: how many Modelltests in total?**
 - Two and done → duplicate the `CATALOG` object (~1 day)
-- Four or five → migrate to the database now (~2–3 days), while there is a
-  single dataset to move. Pays for itself at Modelltest 3.
+- Four or five → migrate to the database now (~2–3 days), while a single dataset
+  exists to move. Pays for itself at Modelltest 3.
 
-This is the largest single cost in the whole effort and the only item that needs
-a product decision rather than an engineering one.
+Largest single cost in the whole effort, and the only item here needing a
+product decision rather than engineering.
 
-### ⬜ Settle the seed convention before writing the Modelltest 2 seed
-audit finding 06
+### Settle the seed convention before writing the Modelltest 2 seed
+**verified: 7 numbered `.sql` files at the repo root, plus 1 seed inside `prisma/migrations/`**
 
-Content currently enters through two unrelated mechanisms: numbered `.sql` files
-at the repo root (`001_`–`007_`) and at least one Prisma migration
-(`20260530100001_seed_writing_exercise_modelltest1`). Neither is documented.
+Two unrelated mechanisms, neither documented. Pick one home
+(`prisma/seeds/modelltest-N/`), make inserts idempotent with
+`ON CONFLICT DO NOTHING`, namespace the deterministic UUIDs by exam number.
+Costs nothing extra while writing the seed anyway.
 
-Pick one home (`prisma/seeds/modelltest-N/`), make every insert idempotent with
-`ON CONFLICT DO NOTHING`, and namespace the deterministic UUIDs by exam number
-(`aaaaaaaa-0002-…`). Costs nothing extra while writing the seed anyway; saves
-reinventing it for Modelltest 3.
+### `ListeningAttempt` cannot be attributed to an exam
+`schema.prisma` — **verified: 0 `modelltest_id` on the model**
 
-### ⬜ `ListeningAttempt` cannot be attributed to an exam
-`schema.prisma:158-173` — audit finding 05
+`WritingAttempt` and `SprachbausteineAttempt` both carry it. `ListeningAttempt`
+has only a nullable `content_revision` and an `exercise_id` that is not a real
+foreign key.
 
-`WritingAttempt` and `SprachbausteineAttempt` both carry `modelltest_id`.
-`ListeningAttempt` has only a nullable `content_revision` string and an
-`exercise_id` that is not a real foreign key.
-
-Historical rows can be backfilled to Modelltest 1 with certainty **only while
-one exam exists**. That window closes the moment Modelltest 2 is seeded. Folds
-naturally into whichever Hören option is chosen.
+Existing rows can be backfilled to Modelltest 1 with certainty **only while one
+exam exists**. That window closes when Modelltest 2 is seeded.
 
 ---
 
-## 3 — Infrastructure
+## 4 — Infrastructure
 
-### ⬜ No CI — nothing enforces that `main` is green
-Deleting `.github/workflows/main_telc-speaking-api.yml` removed the build+test
-gate as well as the deploy. `main` is currently green only because the suites
-were run locally before each push; nothing enforces it, and there is no build
-gate before a deploy either.
+### No CI — nothing enforces that `main` is green
+**verified: no `.github/workflows` directory at all**
+
+Deleting the deploy workflow removed the build+test gate with it. `main` is
+currently green only because the suites were run locally before each push;
+nothing enforces it, and there is no build gate before a deploy either. Since
+DigitalOcean auto-deploys on push, a broken commit reaches production directly.
 
 A test-only workflow is ~15 lines and needs no cloud credentials — restore it
 separately from whatever replaced the deploy half.
 
-### ⬜ Confirm App Platform instance count is 1
-Console check, not a code change. All speaking-room state lives in an in-memory
-`Map` in one Node process, so it is correct only at exactly one instance. On
-Azure this was pinned by the B1 plan; on App Platform it is a slider, and
-raising it fails silently:
+### Confirm App Platform instance count is 1
+Console check, not code. All speaking-room state lives in an in-memory `Map` in
+one Node process, so it is correct only at exactly one instance. On Azure this
+was pinned by the B1 plan; on App Platform it is a slider, and raising it fails
+silently — host and guest land on different processes and the guest gets
+`room-not-found` for a room that demonstrably exists.
 
-> Host lands on instance A, guest on instance B where that `roomId` does not
-> exist. Guest gets `room-not-found` for a room that demonstrably exists.
-> Retrying may work, because routing is per-connection.
+`ValkeyService` already exists (used by `JwtAuthGuard`), so DO Managed Caching
+for Valkey is the natural target if scale-out is ever needed.
 
-If scale-out is ever needed, `ValkeyService` already exists (used by
-`JwtAuthGuard`), so DO Managed Caching for Valkey is the natural target.
+### `prisma migrate deploy` runs from the app start command
+`package.json:11` — **verified**
 
-### ⬜ `prisma migrate deploy` runs from the app start command
-`package.json` — `"start": "prisma migrate deploy && node …"`
+Every instance races to migrate on boot (Prisma's advisory lock makes this mostly
+safe, but an idle recycle should not be a migration event). Worse, a failed
+migration short-circuits the `&&` and the app never boots — an outage rather than
+a degraded state. Move to a release/pre-deploy step.
 
-Two consequences. Every instance races to migrate on boot (Prisma's advisory
-lock makes this mostly safe, but it couples restarts to schema changes — an idle
-recycle should not be a migration event). And a failed migration short-circuits
-the `&&`, so the app does not boot at all: an outage rather than a degraded
-state. Move to a release/pre-deploy step.
+### Schema drift between the live database and `schema.prisma`
+**re-verified against production today — larger than first recorded**
 
-### ⬜ Pre-existing schema drift on `writing_exercises`
-`prisma migrate diff` reports the live database differs from `schema.prisma`:
-`bullet_points` carries a DEFAULT the schema does not declare, and `created_at`
-is `TIMESTAMP(3)`. Unrelated to any recent work, but any future
-`prisma migrate dev` will try to "fix" it, possibly unexpectedly.
+`prisma migrate diff` still reports:
+- `writing_exercises.bullet_points` — a DEFAULT the schema does not declare
+- `writing_exercises.created_at` — `TIMESTAMP(3)`
+- `modelltests.created_at` — `TIMESTAMP(3)` *(not in the original note)*
+
+Because Prisma plans these alterations by dropping and recreating the six
+`modelltest_id` foreign keys, any future `prisma migrate dev` will churn far more
+than the drift itself suggests.
 
 ---
 
-## 4 — Correctness and hardening
+## 5 — Consistency and housekeeping
 
-### ⬜ Add an `emailVerified` claim to the JWT and check it in the guard
-`jwt-auth.guard.ts`, `token-payload.interface.ts`
+### `modelltest` param convention differs across three modules
+**verified**
 
-Guards currently verify the signature, require a `sessionId`, and check
-revocation — there is no `emailVerified` check anywhere, and the payload does
-not carry the claim. Today the invariant holds because of *where* tokens are
-issued, which is correct but implicit. A sixth call site for
-`issueAuthResponse()` could issue a token to an unverified student with nothing
-to stop it. Defence in depth; also unblocks item 1's second bug.
+| Module | Declaration | Missing param | Malformed param |
+|---|---|---|---|
+| Lesen | raw string, explicit parse | defaults to 1 | 400 |
+| Writing | raw string, explicit parse | 400 | 400 |
+| Sprachbausteine | `DefaultValuePipe` + `ParseIntPipe` | defaults to 1 | **200, exam 1** |
 
-### ⬜ Two e2e suites do not install the global pipes
-`test/app.e2e-spec.ts`, `test/speaking-websocket.e2e-spec.ts`
+Pick one and document it before more skills gain the parameter. Fixing the
+Sprachbausteine bug above resolves the malformed column; the missing-param
+column is a genuine product choice.
 
-They build test apps without the global `ValidationPipe` from `main.ts`, so any
-assertion they make about validation or transformation does not represent
-production. This exact gap let `lesen.e2e-spec.ts` assert `400` for
-`?modelltest=abc` while production returned `200` with Modelltest 1. Fixed in
-the Lesen suite; these two are untouched.
-
-### ⬜ `contentRevision` describes only Teil 2
-`lesen.service.ts:44` — audit finding 03 follow-up
-
-The response-level revision is taken from Teil 2, but it is the client's
-staleness key for the whole payload. Edit Modelltest 2's Teil 1 and caches never
-invalidate.
-
-### ⬜ Select content by foreign key, never by `content_revision`
-audit finding 07
-
+### Select content by foreign key, never by `content_revision`
 Every exercise is identified twice — by `modelltest_id` and by a
-`content_revision` string that also encodes the exam. They agree today because
-migration 007 wired the FKs by matching those strings. Nothing keeps them
-agreeing. Convention only, no migration.
+`content_revision` string that also encodes the exam. They agree today only
+because migration 007 wired the FKs by matching those strings. Convention, no
+migration.
 
-### ⬜ `modelltest` param convention is inconsistent
-Sprachbausteine and Lesen default to 1; Writing returns 400 without it. Pick one
-and document it before more skills gain the parameter.
+### Confirm Sprechen intentionally has no per-exam content
+Three examiner prompt files, no Modelltest relation. Probably correct — the
+speaking exam is a live conversation, not a fixed question set. Worth putting on
+record so it is a decision rather than something discovered when a student asks
+why Modelltest 2 has no Sprechen.
 
----
+### `docs/api-contract.md` is gitignored
+`.gitignore:40` — **verified**. The Reading `?modelltest=` documentation written
+there will never reach anyone else through git. Either untrack it or move the
+contract somewhere shared.
 
-## 5 — Housekeeping
+### `submitTeil2` is a stub
+`lesen.service.ts:195` returns `{ score: 0 }` regardless of input.
 
-### ⬜ Confirm Sprechen intentionally has no per-exam content
-audit finding 09. Three examiner prompt files, no Modelltest relation. Probably
-correct — the speaking exam is a live conversation, not a fixed question set.
-A question for whoever owns exam content, so the omission is on record rather
-than discovered when a student asks why Modelltest 2 has no Sprechen.
+### Stale Azure paths in `.claude/settings.json`
+The old `azurewebsites.net` URLs are gone, but ~10 permission entries still carry
+absolute paths from a previous folder location
+(`…\SPRACHPRÜFUNG\SPRACHPRÜFUNG_AZURE\telC_backend_azure`). Dead entries that
+never match. Cosmetic.
 
-### ⬜ Remaining Azure references
+### Azure references in historical docs
 Base-URL examples in `HOREN_API_FRONTEND.md`, `SCHREIBEN_API_FRONTEND.md`,
 `SPRECHEN_ROOM_ICE_SERVERS_API.md`, `listening_horen_rest.md`, `PLAN.md`,
-`ideas/auth-system-overhaul.md`. Cosmetic — the operational ones are done.
+`ideas/auth-system-overhaul.md`. The operational ones are done;
+`SPRECHEN_ROOM_REFERENCE.md`'s remaining mentions are deliberate
+Azure-vs-App-Platform comparisons.
 
-### ⬜ Repo is still named `telC_backend_azure`
-Both the GitHub repo (`NKWILI/telC_backend_azure`) and the local folder.
-Renaming breaks clones and remotes for anyone else, so it needs coordinating.
-
-### ⬜ `docs/api-contract.md` is gitignored
-`.gitignore:40`. The Reading `?modelltest=` documentation was written there but
-will never reach anyone else through git. Either untrack it or move the contract
-somewhere shared.
-
-### ⬜ `submitTeil2` is a stub
-`lesen.service.ts:191-196` returns `{ score: 0 }` regardless of input.
-
----
-
-## Done
-
-- ✅ **Finding 01** — Lesen queries scoped to a Modelltest, `?modelltest=` param
-  added, regression guard mutation-tested (`40e3f4f`)
-- ✅ **Findings 03 + 04** — `NOT NULL` and `UNIQUE` on `modelltest_id` across the
-  six exercise tables; applied and verified in production (`9084c84`)
-- ✅ **Malformed `?modelltest=`** now returns 400 instead of silently serving
-  Modelltest 1; Lesen e2e suite now mirrors `main.ts` global pipes (`2d3f5d0`)
-- ✅ **DigitalOcean deployment docs** — instance-count constraint restated with
-  its failure mode (`7c10a3b`)
-- ✅ **Permission allowlist** repointed to `api.lerniqo.tech` (`5fab83a`)
+### Repo is still named `telC_backend_azure`
+GitHub (`NKWILI/telC_backend_azure`) and the local folder. Renaming breaks clones
+and remotes for anyone else, so it needs coordinating.
