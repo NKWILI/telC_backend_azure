@@ -6,6 +6,9 @@ been removed rather than marked done.
 
 🔵 = blocked on a decision, not on effort.
 
+See `DECISIONS.md` for choices that look like bugs and are not — read it
+before "fixing" anything in auth registration or the Modelltest query params.
+
 ---
 
 ## 1 — User-facing bugs
