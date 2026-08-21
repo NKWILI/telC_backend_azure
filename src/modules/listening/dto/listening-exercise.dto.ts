@@ -24,7 +24,8 @@ export class ListeningExerciseDto {
   issued_at: string;
 
   @ApiProperty({
-    description: 'HTTPS URL of the audio file. Empty string means use bundled asset.',
+    description:
+      'HTTPS URL of the audio file. Empty string means use bundled asset.',
     example: '',
   })
   audio_url: string;

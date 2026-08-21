@@ -20,6 +20,7 @@ describe('SprachbausteineController (e2e)', () => {
   const sprachbausteineService = {
     getExercise: jest.fn().mockResolvedValue(exerciseResponse),
     getSessions: jest.fn().mockResolvedValue([]),
+    submit: jest.fn().mockResolvedValue({ score: 50 }),
   };
 
   beforeEach(async () => {
@@ -32,7 +33,14 @@ describe('SprachbausteineController (e2e)', () => {
       ],
     })
       .overrideGuard(JwtAuthGuard)
-      .useValue({ canActivate: () => true })
+      .useValue({
+        canActivate: (context: any) => {
+          context.switchToHttp().getRequest().student = {
+            studentId: 'student-1',
+          };
+          return true;
+        },
+      })
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -85,5 +93,27 @@ describe('SprachbausteineController (e2e)', () => {
       .expect(400);
 
     expect(sprachbausteineService.getExercise).not.toHaveBeenCalled();
+  });
+
+  it('validates and forwards the server-scored submission contract', async () => {
+    await request(app.getHttpServer())
+      .post('/api/sprachbausteine/submit')
+      .send({
+        modelltestNumber: 1,
+        teil_id: '1',
+        contentRevision: 'modelltest-1-v1',
+        answers: { '21': '21a' },
+      })
+      .expect(201)
+      .expect({ score: 50 });
+
+    expect(sprachbausteineService.submit).toHaveBeenCalledWith(
+      'student-1',
+      expect.objectContaining({
+        modelltestNumber: 1,
+        teil_id: '1',
+        answers: { '21': '21a' },
+      }),
+    );
   });
 });

@@ -14,10 +14,4 @@ export class LesenTeil1Dto {
 
   @ApiProperty({ type: () => LesenTeil1TitleDto, isArray: true })
   titles!: LesenTeil1TitleDto[];
-
-  @ApiProperty({
-    type: 'object',
-    additionalProperties: { type: 'string' },
-  })
-  correctMatches!: Record<string, string>;
 }

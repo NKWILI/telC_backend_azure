@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  INestApplication,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { INestApplication, UnauthorizedException } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { LesenController } from '../src/modules/lesen/lesen.controller';
@@ -34,7 +31,7 @@ describe('LesenController (e2e)', () => {
 
   const lesenService = {
     getExercise: jest.fn().mockResolvedValue(exerciseResponse),
-    submitTeil2: jest.fn().mockResolvedValue(submitResponse),
+    submit: jest.fn().mockResolvedValue(submitResponse),
   };
 
   const guardThatRequiresAuth = {

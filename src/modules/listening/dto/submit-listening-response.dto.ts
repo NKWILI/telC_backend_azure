@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SubmitListeningResponseDto {
+  @ApiProperty({ description: 'Server-computed percentage score', example: 80 })
+  score: number;
+
   @ApiProperty({
     description:
       'Correct answer per question. "+" = richtig, "−" = falsch. ' +

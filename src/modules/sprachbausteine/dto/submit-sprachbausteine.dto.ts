@@ -1,4 +1,12 @@
-import { IsInt, Min, IsIn, Max, IsOptional } from 'class-validator';
+import {
+  IsInt,
+  Min,
+  IsIn,
+  Max,
+  IsOptional,
+  IsObject,
+  IsString,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SubmitSprachbausteineDto {
@@ -11,11 +19,26 @@ export class SubmitSprachbausteineDto {
   @IsIn(['1', '2'])
   teil_id!: '1' | '2';
 
-  @ApiProperty({ example: 73, minimum: 0, maximum: 100 })
+  @ApiPropertyOptional({
+    example: 73,
+    minimum: 0,
+    maximum: 100,
+    deprecated: true,
+    description: 'Ignored; score is calculated by the backend',
+  })
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(100)
-  score!: number;
+  score?: number;
+
+  @ApiProperty({ additionalProperties: { type: 'string' } })
+  @IsObject()
+  answers!: Record<string, string>;
+
+  @ApiProperty()
+  @IsString()
+  contentRevision!: string;
 
   @ApiPropertyOptional({ example: 540 })
   @IsOptional()

@@ -44,7 +44,10 @@ describe('ListeningController', () => {
 
       const result = await controller.getTeils(MOCK_STUDENT as any);
 
-      expect(mockListeningService.getTeils).toHaveBeenCalledWith('student-abc');
+      expect(mockListeningService.getTeils).toHaveBeenCalledWith(
+        'student-abc',
+        1,
+      );
       expect(result).toBe(teils);
     });
 
@@ -102,7 +105,7 @@ describe('ListeningController', () => {
 
       const result = await controller.getExercise('1');
 
-      expect(mockListeningService.getExercise).toHaveBeenCalledWith('1');
+      expect(mockListeningService.getExercise).toHaveBeenCalledWith('1', 1);
       expect(result).toBe(payload);
     });
   });

@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -52,29 +53,47 @@ export class ListeningController {
       items: {
         type: 'object',
         properties: {
-          id:              { type: 'string', example: '1' },
-          title:           { type: 'string', example: 'Teil 1' },
-          subtitle:        { type: 'string', example: 'Hörverstehen, Teil 1' },
-          prompt:          { type: 'string', example: 'Sie hören die Aussagen von fünf Personen...' },
-          imagePath:       { type: 'string', example: 'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil1.png' },
-          progress:        { type: 'number', example: 0 },
-          part:            { type: 'number', example: 1 },
+          id: { type: 'string', example: '1' },
+          title: { type: 'string', example: 'Teil 1' },
+          subtitle: { type: 'string', example: 'Hörverstehen, Teil 1' },
+          prompt: {
+            type: 'string',
+            example: 'Sie hören die Aussagen von fünf Personen...',
+          },
+          imagePath: {
+            type: 'string',
+            example:
+              'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/hoerverstehen_teil1.png',
+          },
+          progress: { type: 'number', example: 0 },
+          part: { type: 'number', example: 1 },
           durationMinutes: { type: 'number', example: 10 },
         },
       },
     },
   })
+  @ApiQuery({
+    name: 'modelltest',
+    required: false,
+    schema: { type: 'integer', default: 1, minimum: 1 },
+    description: 'Modelltest number. Defaults to 1.',
+  })
   async getTeils(
     @CurrentStudent() student: AccessTokenPayload | null,
+    @Query('modelltest') modelltest?: string,
   ): Promise<ExerciseTypeDto[]> {
     if (!student?.studentId) return [];
-    return this.listeningService.getTeils(student.studentId);
+    return this.listeningService.getTeils(
+      student.studentId,
+      this.parseModelltest(modelltest),
+    );
   }
 
   @Get('sessions')
   @ApiOperation({
     summary: 'List past Hören attempts',
-    description: 'Returns up to 50 attempts, newest first. Optionally filter by Teil number.',
+    description:
+      'Returns up to 50 attempts, newest first. Optionally filter by Teil number.',
   })
   @ApiQuery({
     name: 'teilNumber',
@@ -82,7 +101,10 @@ export class ListeningController {
     description: 'Filter by Teil (1, 2, or 3)',
     example: 1,
   })
-  @ApiOkResponse({ description: 'Array of past attempts', type: [ExerciseAttemptDto] })
+  @ApiOkResponse({
+    description: 'Array of past attempts',
+    type: [ExerciseAttemptDto],
+  })
   async getSessions(
     @CurrentStudent() student: AccessTokenPayload | null,
     @Query('teilNumber') teilNumber?: string,
@@ -102,17 +124,44 @@ export class ListeningController {
   })
   @ApiQuery({
     name: 'type',
-    required: true,
-    description: 'Teil id',
+    required: false,
+    description: 'Deprecated alias for teil',
     example: '1',
     enum: ['1', '2', '3'],
   })
+  @ApiQuery({
+    name: 'teil',
+    required: false,
+    description: 'Teil number (preferred over the deprecated type alias)',
+    example: '1',
+    enum: ['1', '2', '3'],
+  })
+  @ApiQuery({
+    name: 'modelltest',
+    required: false,
+    schema: { type: 'integer', default: 1, minimum: 1 },
+    description: 'Modelltest number. Defaults to 1.',
+  })
   @ApiOkResponse({ type: ListeningExerciseDto })
-  @ApiNotFoundResponse({ description: 'Unknown type — not "1", "2", or "3"' })
+  @ApiNotFoundResponse({
+    description: 'Requested Teil or Modelltest exercise was not found',
+  })
   async getExercise(
-    @Query('type') type: string,
+    @Query('type') type?: string,
+    @Query('teil') teil?: string,
+    @Query('modelltest') modelltest?: string,
   ): Promise<ListeningExerciseDto> {
-    return this.listeningService.getExercise(type);
+    if (type && teil && type !== teil) {
+      throw new BadRequestException(
+        'type and teil must match when both are provided',
+      );
+    }
+    const selectedTeil = teil ?? type;
+    if (!selectedTeil) throw new BadRequestException('teil is required');
+    return this.listeningService.getExercise(
+      selectedTeil,
+      this.parseModelltest(modelltest),
+    );
   }
 
   @Post('submit')
@@ -120,9 +169,7 @@ export class ListeningController {
   @ApiOperation({
     summary: 'Submit Hören answers and receive the answer key',
     description:
-      'Stores the attempt and returns the correct answer key. ' +
-      'The frontend compares the student\'s submitted answers against answerKey to compute per-question verdicts and the score locally. ' +
-      'Score is computed server-side and stored in history but is NOT returned in this response.',
+      'Validates and scores the answers on the server, stores the attempt, and returns both the server-computed score and correct answer key.',
   })
   @ApiCreatedResponse({
     description: 'Answers accepted — answer key returned',
@@ -142,5 +189,15 @@ export class ListeningController {
       throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
     }
     return this.listeningService.submit(student.studentId, dto);
+  }
+
+  private parseModelltest(value?: string): number {
+    if (value === undefined || value === '') return 1;
+    if (!/^\d+$/.test(value) || Number(value) < 1) {
+      throw new BadRequestException(
+        'modelltest query param must be a positive integer',
+      );
+    }
+    return Number(value);
   }
 }

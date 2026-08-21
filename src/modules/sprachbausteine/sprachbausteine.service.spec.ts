@@ -1,514 +1,164 @@
-import { NotFoundException } from '@nestjs/common';
+import { UnprocessableEntityException } from '@nestjs/common';
 import { SprachbausteineService } from './sprachbausteine.service';
 
-const mockTeil1Exercise = {
-  id: 'aaaaaaaa-0001-0001-0001-000000000001',
-  teil_number: 1,
-  content_revision: 'modelltest-1-v1',
-  label: 'Sprachbausteine, Teil 1',
-  instruction: 'Lesen Sie den Text…',
-  duration_minutes: 18,
-  image_url:
-    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
-  body: 'Text with -21- and -22-',
-  created_at: new Date(),
-  gaps: Array.from({ length: 10 }, (_, i) => ({
-    id: `gap-${i}`,
-    exercise_id: 'aaaaaaaa-0001-0001-0001-000000000001',
-    gap_key: String(21 + i),
-    gap_number: 21 + i,
-    sort_order: i,
-    options: [
+describe('SprachbausteineService answer security', () => {
+  const teil1 = {
+    content_revision: 'sb-1-v1',
+    image_url: 'image',
+    label: 'T1',
+    instruction: 'I',
+    duration_minutes: 18,
+    body: 'Body',
+    gaps: [
       {
-        id: `opt-${i}-0`,
-        gap_id: `gap-${i}`,
-        content: 'a-word',
-        is_correct: false,
-        sort_order: 0,
-      },
-      {
-        id: `opt-${i}-1`,
-        gap_id: `gap-${i}`,
-        content: 'b-word',
-        is_correct: true,
-        sort_order: 1,
-      },
-      {
-        id: `opt-${i}-2`,
-        gap_id: `gap-${i}`,
-        content: 'c-word',
-        is_correct: false,
-        sort_order: 2,
+        gap_key: '21',
+        options: [
+          { content: 'A', is_correct: false, sort_order: 0 },
+          { content: 'B', is_correct: true, sort_order: 1 },
+        ],
       },
     ],
-  })),
-};
-
-const mockTeil2Exercise = {
-  id: 'cccccccc-0001-0001-0002-000000000001',
-  contentRevision: 'modelltest-1-sprachbausteine-teil2-v1',
-  label: '',
-  instruction: 'Lesen Sie den Text...',
-  durationMinutes: 18,
-  imageUrl:
-    'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
-  body: 'Text with -31- through -40-',
-  createdAt: new Date(),
-  words: Array.from({ length: 15 }, (_, i) => ({
-    id: `dddddddd-${String(i + 1).padStart(4, '0')}-0001-0002-000000000001`,
-    exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-    letter: String.fromCharCode(97 + i),
-    content: [
-      'ANZEIGE',
-      'ARBEIT',
-      'AUSBILDUNG',
-      'BEWERBE',
-      'BERUFLICHEN',
-      'BESONDEREN',
-      'CHANCE',
-      'ENTNEHMEN',
-      'KARRIERE',
-      'LESEN',
-      'NAHM',
-      'PERSÖNLICHEN',
-      'STELLE',
-      'ÜBERNAHM',
-      'VERBESSERT',
-    ][i],
-    sortOrder: i,
-  })),
-  gaps: [
-    // 31 → a (ANZEIGE, sortOrder 0)
-    {
-      id: 'eeeeeeee-0031-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '31',
-      gapNumber: 31,
-      correctWordId: 'dddddddd-0001-0001-0002-000000000001',
-      sortOrder: 0,
+  };
+  const teil2 = {
+    contentRevision: 'sb-2-v1',
+    imageUrl: 'image2',
+    label: 'T2',
+    instruction: 'I',
+    durationMinutes: 18,
+    body: 'Body',
+    words: [{ id: 'word-a', letter: 'a', content: 'Word', sortOrder: 0 }],
+    gaps: [{ gapKey: '31', correctWordId: 'word-a', sortOrder: 0 }],
+  };
+  const prisma = {
+    modelltest: { findUnique: jest.fn() },
+    sprachbausteineExercise: { findFirst: jest.fn(), findUnique: jest.fn() },
+    sprachbausteineTeil2Exercise: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
     },
-    // 32 → m (STELLE, sortOrder 12)
-    {
-      id: 'eeeeeeee-0032-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '32',
-      gapNumber: 32,
-      correctWordId: 'dddddddd-0013-0001-0002-000000000001',
-      sortOrder: 1,
-    },
-    // 33 → d (BEWERBE, sortOrder 3)
-    {
-      id: 'eeeeeeee-0033-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '33',
-      gapNumber: 33,
-      correctWordId: 'dddddddd-0004-0001-0002-000000000001',
-      sortOrder: 2,
-    },
-    // 34 → c (AUSBILDUNG, sortOrder 2)
-    {
-      id: 'eeeeeeee-0034-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '34',
-      gapNumber: 34,
-      correctWordId: 'dddddddd-0003-0001-0002-000000000001',
-      sortOrder: 3,
-    },
-    // 35 → o (VERBESSERT, sortOrder 14)
-    {
-      id: 'eeeeeeee-0035-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '35',
-      gapNumber: 35,
-      correctWordId: 'dddddddd-0015-0001-0002-000000000001',
-      sortOrder: 4,
-    },
-    // 36 → n (ÜBERNAHM, sortOrder 13)
-    {
-      id: 'eeeeeeee-0036-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '36',
-      gapNumber: 36,
-      correctWordId: 'dddddddd-0014-0001-0002-000000000001',
-      sortOrder: 5,
-    },
-    // 37 → g (CHANCE, sortOrder 6)
-    {
-      id: 'eeeeeeee-0037-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '37',
-      gapNumber: 37,
-      correctWordId: 'dddddddd-0007-0001-0002-000000000001',
-      sortOrder: 6,
-    },
-    // 38 → e (BERUFLICHEN, sortOrder 4)
-    {
-      id: 'eeeeeeee-0038-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '38',
-      gapNumber: 38,
-      correctWordId: 'dddddddd-0005-0001-0002-000000000001',
-      sortOrder: 7,
-    },
-    // 39 → h (ENTNEHMEN, sortOrder 7)
-    {
-      id: 'eeeeeeee-0039-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '39',
-      gapNumber: 39,
-      correctWordId: 'dddddddd-0008-0001-0002-000000000001',
-      sortOrder: 8,
-    },
-    // 40 → l (PERSÖNLICHEN, sortOrder 11)
-    {
-      id: 'eeeeeeee-0040-0001-0002-000000000001',
-      exerciseId: 'cccccccc-0001-0001-0002-000000000001',
-      gapKey: '40',
-      gapNumber: 40,
-      correctWordId: 'dddddddd-0012-0001-0002-000000000001',
-      sortOrder: 9,
-    },
-  ],
-};
-
-const mockModelltest = {
-  id: 'ffffffff-0001-0001-0001-000000000001',
-  number: 1,
-  title: 'Modelltest 1',
-  created_at: new Date(),
-};
-
-const mockPrisma = {
-  modelltest: {
-    findUnique: jest.fn(),
-  },
-  sprachbausteineExercise: {
-    findFirst: jest.fn(),
-  },
-  sprachbausteineTeil2Exercise: {
-    findFirst: jest.fn(),
-  },
-  sprachbausteineAttempt: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-  },
-};
-
-describe('SprachbausteineService', () => {
+    sprachbausteineAttempt: { create: jest.fn(), findMany: jest.fn() },
+  };
   let service: SprachbausteineService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new SprachbausteineService(mockPrisma as any);
+    service = new SprachbausteineService(prisma as any);
+    prisma.modelltest.findUnique.mockResolvedValue({ id: 'mt-1' });
+    prisma.sprachbausteineExercise.findFirst.mockResolvedValue(teil1);
+    prisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(teil2);
+    prisma.sprachbausteineAttempt.create.mockResolvedValue({});
+    prisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
   });
 
-  describe('getExercise', () => {
-    it('returns correct DTO shape with 10 teil1 gaps and real teil2 data', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(
-        mockTeil1Exercise,
-      );
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
-        mockTeil2Exercise,
-      );
-
-      const result = await service.getExercise(1);
-
-      expect(result.contentRevision).toBe('modelltest-1-v1');
-      expect(typeof result.issuedAt).toBe('string');
-      expect(result.teil1.gaps).toHaveLength(10);
-      result.teil1.gaps.forEach((gap, i) => {
-        const gapKey = String(21 + i);
-        expect(gap.id).toBe(gapKey);
-        expect(gap.options).toHaveLength(3);
-        expect(gap.options.map((o) => o.id)).toEqual([
-          `${gapKey}a`,
-          `${gapKey}b`,
-          `${gapKey}c`,
-        ]);
-        expect(gap.correctOptionId).toBe(`${gapKey}b`);
-      });
-      expect(result.teil2.wordBank).toHaveLength(15);
-      expect(result.teil2.gaps).toHaveLength(10);
-      expect(result.teil1.imageUrl).toBe(
-        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-1.png',
-      );
-      expect(result.teil2.imageUrl).toBe(
-        'https://pub-9c97adaccfb94d4bb515056232bed4f8.r2.dev/sprachbausteine-teil-2.png',
-      );
-    });
-
-    it('throws NotFoundException when no Teil 1 exercise exists', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineExercise.findFirst.mockResolvedValue(null);
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
-        mockTeil2Exercise,
-      );
-
-      await expect(service.getExercise(1)).rejects.toThrow(NotFoundException);
-    });
-
-    it('throws NotFoundException when modelltest number does not exist', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
-      await expect(service.getExercise(99)).rejects.toThrow(
-        'Modelltest 99 not found',
-      );
-    });
+  it('does not expose correct option or word IDs', async () => {
+    const result = await service.getExercise(1);
+    expect(JSON.stringify(result)).not.toContain('correctOptionId');
+    expect(JSON.stringify(result)).not.toContain('correctWordId');
+    expect(JSON.stringify(result)).not.toContain('is_correct');
   });
 
-  describe('getTeil2Exercise', () => {
-    it('returns correct shape — 15 words in wordBank, 10 gaps, no UUIDs in ids', async () => {
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
-        mockTeil2Exercise,
-      );
-      const result = await (service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001');
-
-      expect(result.wordBank).toHaveLength(15);
-      expect(result.gaps).toHaveLength(10);
-      expect(result.wordBank[0].id).toBe('wa');
-      expect(result.wordBank[0].letter).toBe('a');
-      expect(result.wordBank[14].id).toBe('wo');
-      expect(result.wordBank[14].letter).toBe('o');
-      expect(result.gaps[0].id).toBe('31');
-      expect(result.gaps[9].id).toBe('40');
-
-      const json = JSON.stringify(result);
-      expect(json).not.toMatch(/"id":"[0-9a-f]{8}-/);
+  it('scores and persists Teil 1 answers server-side, ignoring client score', async () => {
+    prisma.sprachbausteineExercise.findUnique.mockResolvedValue(teil1);
+    const result = await service.submit('student-1', {
+      modelltestNumber: 1,
+      teil_id: '1',
+      score: 100,
+      contentRevision: 'sb-1-v1',
+      answers: { '21': '21a' },
     });
-
-    it('derives correctWordId from word sortOrder and maps all 10 gaps correctly', async () => {
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(
-        mockTeil2Exercise,
-      );
-      const result = await (service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001');
-
-      const answers: Record<string, string> = {};
-      result.gaps.forEach((g: any) => {
-        answers[g.id] = g.correctWordId;
-      });
-
-      expect(answers['31']).toBe('wa'); // ANZEIGE
-      expect(answers['32']).toBe('wm'); // STELLE
-      expect(answers['33']).toBe('wd'); // BEWERBE
-      expect(answers['34']).toBe('wc'); // AUSBILDUNG
-      expect(answers['35']).toBe('wo'); // VERBESSERT
-      expect(answers['36']).toBe('wn'); // ÜBERNAHM
-      expect(answers['37']).toBe('wg'); // CHANCE
-      expect(answers['38']).toBe('we'); // BERUFLICHEN
-      expect(answers['39']).toBe('wh'); // ENTNEHMEN
-      expect(answers['40']).toBe('wl'); // PERSÖNLICHEN
-    });
-
-    it('throws NotFoundException when no Teil 2 exercise exists', async () => {
-      mockPrisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(null);
-      await expect((service as any).getTeil2Exercise('ffffffff-0001-0001-0001-000000000001')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
-  describe('submit', () => {
-    it('returns score from dto for Teil 1', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-
-      const result = await service.submit('student-1', {
-        modelltestNumber: 1,
-        teil_id: '1',
-        score: 73,
-      } as any);
-
-      expect(result).toEqual({ score: 73 });
-    });
-
-    it('returns score from dto for Teil 2', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-
-      const result = await service.submit('student-1', {
-        modelltestNumber: 1,
-        teil_id: '2',
+    expect(result).toEqual({ score: 0 });
+    expect(prisma.sprachbausteineAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         score: 0,
-      } as any);
-
-      expect(result).toEqual({ score: 0 });
+        answers: { '21': '21a' },
+        content_revision: 'sb-1-v1',
+      }),
     });
+  });
 
-    it('throws NotFoundException when modelltest number does not exist', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.submit('student-1', { modelltestNumber: 99, teil_id: '1', score: 50 } as any),
-      ).rejects.toThrow('Modelltest 99 not found');
+  it('scores Teil 2 answers server-side', async () => {
+    prisma.sprachbausteineTeil2Exercise.findUnique.mockResolvedValue(teil2);
+    const result = await service.submit('student-1', {
+      modelltestNumber: 1,
+      teil_id: '2',
+      contentRevision: 'sb-2-v1',
+      answers: { '31': 'wa' },
     });
+    expect(result).toEqual({ score: 100 });
+  });
 
-    it('persists an attempt row with student_id, teil_id, score, modelltest_id (no answers)', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
+  it('rejects unknown gap IDs and answer values outside the exercise options', async () => {
+    prisma.sprachbausteineExercise.findUnique.mockResolvedValue(teil1);
+    const base = {
+      modelltestNumber: 1,
+      teil_id: '1' as const,
+      contentRevision: 'sb-1-v1',
+    };
 
-      await service.submit('student-7', {
+    await expect(
+      service.submit('student-1', { ...base, answers: { '99': '99a' } }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    await expect(
+      service.submit('student-1', { ...base, answers: { '21': '21z' } }),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  it('rejects the submission when attempt persistence fails', async () => {
+    prisma.sprachbausteineExercise.findUnique.mockResolvedValue(teil1);
+    prisma.sprachbausteineAttempt.create.mockRejectedValue(
+      new Error('database unavailable'),
+    );
+
+    await expect(
+      service.submit('student-1', {
         modelltestNumber: 1,
         teil_id: '1',
-        score: 73,
-      } as any);
+        contentRevision: 'sb-1-v1',
+        answers: { '21': '21b' },
+      }),
+    ).rejects.toThrow('database unavailable');
+  });
 
-      expect(mockPrisma.sprachbausteineAttempt.create).toHaveBeenCalled();
-      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
-      expect(callArg.data).toEqual(expect.objectContaining({
-        student_id: 'student-7',
-        teil_id: '1',
-        modelltest_id: mockModelltest.id,
-        status: 'completed',
-        score: 73,
-      }));
-      expect(callArg.data).not.toHaveProperty('answers');
-    });
-
-    it('does not throw when DB insert fails — logs and returns score anyway', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineAttempt.create.mockRejectedValue(new Error('DB down'));
-
-      await expect(
-        service.submit('student-1', { modelltestNumber: 1, teil_id: '1', score: 50 } as any),
-      ).resolves.toEqual({ score: 50 });
-    });
-
-    it('persists duration_seconds when provided', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
-
-      await service.submit('student-9', {
-        modelltestNumber: 1,
-        teil_id: '1',
-        score: 80,
-        durationSeconds: 540,
-      } as any);
-
-      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
-      expect(callArg.data.duration_seconds).toBe(540);
-    });
-
-    it('persists duration_seconds as null when omitted', async () => {
-      mockPrisma.modelltest.findUnique.mockResolvedValue(mockModelltest);
-      mockPrisma.sprachbausteineAttempt.create.mockResolvedValue({});
-
-      await service.submit('student-10', {
-        modelltestNumber: 1,
-        teil_id: '1',
+  it('maps history rows and filters them by Teil', async () => {
+    prisma.sprachbausteineAttempt.findMany.mockResolvedValue([
+      {
+        attempt_id: 'attempt-1',
+        created_at: new Date('2026-08-20T10:00:00.000Z'),
+        completed_at: null,
         score: 60,
-      } as any);
+        feedback: null,
+        duration_seconds: 120,
+      },
+    ]);
 
-      const callArg = mockPrisma.sprachbausteineAttempt.create.mock.calls[0][0];
-      expect(callArg.data.duration_seconds).toBeNull();
+    const result = await service.getSessions('student-1', 1);
+
+    expect(result[0]).toMatchObject({
+      id: 'attempt-1',
+      date: '2026-08-20T10:00:00.000Z',
+      score: 60,
+      durationSeconds: 120,
     });
+    expect(prisma.sprachbausteineAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { student_id: 'student-1', teil_id: '1' },
+      }),
+    );
   });
 
-  describe('getSessions', () => {
-    it('returns empty array when there are no attempts', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+  it('derives per-Teil progress and degrades to zero on history failure', async () => {
+    prisma.sprachbausteineAttempt.findMany.mockResolvedValue([
+      { teil_id: '2' },
+    ]);
+    await expect(service.getTeils('student-1')).resolves.toEqual([
+      expect.objectContaining({ id: '1', progress: 0 }),
+      expect.objectContaining({ id: '2', progress: 100 }),
+    ]);
 
-      const result = await service.getSessions('student-1');
-
-      expect(result).toEqual([]);
-    });
-
-    it('maps DB rows to ExerciseAttemptDto (camelCase)', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([
-        {
-          attempt_id: 'uuid-sb-1',
-          created_at: new Date('2026-04-20T14:32:01.234Z'),
-          completed_at: new Date('2026-04-20T14:40:00.000Z'),
-          score: 72,
-          feedback: 'Bon progrès',
-          duration_seconds: 540,
-        },
-      ]);
-
-      const result = await service.getSessions('student-1');
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 'uuid-sb-1',
-        score: 72,
-        feedback: 'Bon progrès',
-        durationSeconds: 540,
-      });
-      expect(result[0].dateLabel).toBeDefined();
-    });
-
-    it('filters by teil_id when teilNumber is provided', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
-
-      await service.getSessions('student-1', 2);
-
-      expect(mockPrisma.sprachbausteineAttempt.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            student_id: 'student-1',
-            teil_id: '2',
-          }),
-        }),
-      );
-    });
-
-    it('does not apply teil_id filter when teilNumber is omitted', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
-
-      await service.getSessions('student-1');
-
-      const callArg = mockPrisma.sprachbausteineAttempt.findMany.mock.calls[0][0];
-      expect(callArg.where).not.toHaveProperty('teil_id');
-    });
-
-    it('returns empty array gracefully when DB throws', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockRejectedValue(new Error('boom'));
-
-      const result = await service.getSessions('student-1');
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('getTeils', () => {
-    it('returns 2 items with progress 0 when DB has no completed attempts', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
-
-      const result = await service.getTeils('student-1');
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toMatchObject({ id: '1', progress: 0 });
-      expect(result[1]).toMatchObject({ id: '2', progress: 0 });
-    });
-
-    it('returns progress 100 for a Teil with completed attempts, 0 for others', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([
-        { teil_id: '2' },
-      ]);
-
-      const result = await service.getTeils('student-1');
-
-      expect(result.find((t) => t.id === '1')?.progress).toBe(0);
-      expect(result.find((t) => t.id === '2')?.progress).toBe(100);
-    });
-
-    it('returns required fields on every item', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
-
-      const result = await service.getTeils('student-1');
-
-      for (const teil of result) {
-        expect(teil.id).toBeDefined();
-        expect(teil.title).toBeDefined();
-        expect(teil.durationMinutes).toBeDefined();
-        expect(typeof teil.progress).toBe('number');
-      }
-    });
-
-    it('returns progress 0 gracefully when DB throws', async () => {
-      mockPrisma.sprachbausteineAttempt.findMany.mockRejectedValue(new Error('boom'));
-
-      const result = await service.getTeils('student-1');
-
-      expect(result).toHaveLength(2);
-      expect(result.every((t) => t.progress === 0)).toBe(true);
-    });
+    prisma.sprachbausteineAttempt.findMany.mockRejectedValue(
+      new Error('offline'),
+    );
+    const fallback = await service.getTeils('student-1');
+    expect(fallback.map((teil) => teil.progress)).toEqual([0, 0]);
   });
 });

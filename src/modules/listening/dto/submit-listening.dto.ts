@@ -1,7 +1,21 @@
-import { IsBoolean, IsNotEmpty, IsObject, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SubmitListeningDto {
+  @ApiPropertyOptional({ example: 1, default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  modelltestNumber?: number;
+
   @ApiProperty({
     description: 'Teil id — must match the type used in GET /exercise',
     example: '1',
@@ -27,7 +41,8 @@ export class SubmitListeningDto {
   content_revision: string;
 
   @ApiProperty({
-    description: 'Map of question id → "+" (richtig) or "−" (falsch). At least one entry required.',
+    description:
+      'Map of question id → "+" (richtig) or "−" (falsch). At least one entry required.',
     example: { q41: '+', q42: '+', q43: '-', q44: '+', q45: '-' },
     additionalProperties: { type: 'string', enum: ['+', '-'] },
   })

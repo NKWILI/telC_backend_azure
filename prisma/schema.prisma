@@ -16,12 +16,12 @@ model Student {
   updated_at   DateTime @default(now()) @updatedAt
   last_seen_at DateTime @default(now())
 
-  password_hash                String?
-  email_verified               Boolean   @default(false)
-  email_verification_token     String?
-  email_verification_expires   DateTime?
-  password_reset_token         String?
-  password_reset_expires       DateTime?
+  password_hash              String?
+  email_verified             Boolean   @default(false)
+  email_verification_token   String?
+  email_verification_expires DateTime?
+  password_reset_token       String?
+  password_reset_expires     DateTime?
 
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
@@ -172,8 +172,11 @@ model ListeningAttempt {
   // Nullable on purpose: Hoeren content is not yet in the database, so an
   // attempt whose content_revision names no Modelltest (e.g. the historic
   // mock-horen-* rows) genuinely belongs to no exam.
-  modelltest_id String? @db.Uuid
+  modelltest_id         String?            @db.Uuid
+  listening_exercise_id String?            @db.Uuid
+  listening_exercise    ListeningExercise? @relation(fields: [listening_exercise_id], references: [id], onDelete: Restrict)
 
+  @@index([listening_exercise_id])
   @@map("listening_attempts")
 }
 
@@ -246,8 +249,8 @@ model LesenSession {
   started_at   DateTime? @default(now())
   completed_at DateTime?
 
-  student  Student?       @relation(fields: [student_id], references: [id])
-  results  LesenResult[]
+  student Student?      @relation(fields: [student_id], references: [id])
+  results LesenResult[]
 
   @@map("lesen_sessions")
 }
@@ -364,7 +367,7 @@ model SprachbausteineTeil2Exercise {
   label           String
   instruction     String
   durationMinutes Int
-  imageUrl         String   @map("image_url")
+  imageUrl        String   @map("image_url")
   body            String
   createdAt       DateTime @default(now())
 
@@ -482,16 +485,16 @@ model LesenTeil3Announcement {
 }
 
 model LesenTeil3Situation {
-  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  exerciseId            String   @db.Uuid
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exerciseId            String  @db.Uuid
   situationNumber       Int
   content               String
-  noMatch               Boolean  @default(false)
-  correctAnnouncementId String?  @db.Uuid
+  noMatch               Boolean @default(false)
+  correctAnnouncementId String? @db.Uuid
   sortOrder             Int
 
-  exercise            LesenTeil3Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  correctAnnouncement LesenTeil3Announcement?  @relation(fields: [correctAnnouncementId], references: [id], onDelete: Restrict)
+  exercise            LesenTeil3Exercise      @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  correctAnnouncement LesenTeil3Announcement? @relation(fields: [correctAnnouncementId], references: [id], onDelete: Restrict)
 
   @@map("lesen_teil3_situations")
 }
@@ -512,12 +515,78 @@ model Modelltest {
   lesenTeil2Exercises           LesenTeil2Exercise[]
   lesenTeil3Exercises           LesenTeil3Exercise[]
   writingExercises              WritingExercise[]
+  listeningExercises            ListeningExercise[]
+  speakingExercises             SpeakingExercise[]
 
   @@map("modelltests")
 }
 
+model ListeningExercise {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelltest_id       String   @db.Uuid
+  part                Int
+  title               String
+  subtitle            String?
+  instruction         String
+  content_revision    String   @unique
+  duration_minutes    Int
+  audio_url           String   @default("")
+  bundled_audio_asset String   @default("")
+  image_url           String
+  transcript          String?
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  modelltest Modelltest          @relation(fields: [modelltest_id], references: [id], onDelete: Restrict)
+  questions  ListeningQuestion[]
+  attempts   ListeningAttempt[]
+
+  @@unique([modelltest_id, part])
+  @@index([modelltest_id])
+  @@map("listening_exercises")
+}
+
+model ListeningQuestion {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  exercise_id     String @db.Uuid
+  question_number Int
+  prompt          String
+  correct_answer  String
+  sort_order      Int
+
+  exercise ListeningExercise @relation(fields: [exercise_id], references: [id], onDelete: Cascade)
+
+  @@unique([exercise_id, question_number])
+  @@unique([exercise_id, sort_order])
+  @@index([exercise_id])
+  @@map("listening_questions")
+}
+
+model SpeakingExercise {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelltest_id         String   @db.Uuid
+  part                  Int
+  title                 String
+  subtitle              String?
+  topic_title           String
+  topic_description     String
+  topic_points          Json
+  instructions          String
+  duration_minutes      Int
+  prep_duration_seconds Int
+  image_url             String
+  exam_image_url        String?
+  content_revision      String   @unique
+  created_at            DateTime @default(now()) @db.Timestamptz(6)
+
+  modelltest Modelltest @relation(fields: [modelltest_id], references: [id], onDelete: Restrict)
+
+  @@unique([modelltest_id, part])
+  @@index([modelltest_id])
+  @@map("speaking_exercises")
+}
+
 model WritingExercise {
-  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   content_revision  String
   title             String
   subtitle          String?
@@ -525,10 +594,10 @@ model WritingExercise {
   intro             String?
   stimulus          Json?
   task_instructions String
-  bullet_points     String[]    @default([])
+  bullet_points     String[] @default([])
   closing_reminder  String?
   // See Modelltest.created_at — same hand-written-migration origin.
-  created_at        DateTime    @default(now()) @db.Timestamptz(6)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
 
   modelltest_id String     @db.Uuid
   modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])

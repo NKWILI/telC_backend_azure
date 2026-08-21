@@ -1,4 +1,11 @@
-import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { SpeakingService } from './services/speaking.service';
@@ -18,8 +25,10 @@ export class SpeakingCatalogController {
    * Returns the list of 3 Teils (metadata for list/detail screens).
    */
   @Get('teils')
-  getTeils(): TeilListItemDto[] {
-    return this.speakingService.getTeils();
+  getTeils(
+    @Query('modelltest') modelltest?: string,
+  ): Promise<TeilListItemDto[]> {
+    return this.speakingService.getTeils(this.parseModelltest(modelltest));
   }
 
   /**
@@ -40,5 +49,15 @@ export class SpeakingCatalogController {
     const teil = teilNumber ? parseInt(teilNumber, 10) : undefined;
     const limit = limitStr ? parseInt(limitStr, 10) : 50;
     return this.speakingService.getSessions(studentId, teil, limit);
+  }
+
+  private parseModelltest(value?: string): number {
+    if (value === undefined || value === '') return 1;
+    if (!/^\d+$/.test(value) || Number(value) < 1) {
+      throw new BadRequestException(
+        'modelltest query param must be a positive integer',
+      );
+    }
+    return Number(value);
   }
 }

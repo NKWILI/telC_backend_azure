@@ -7,7 +7,4 @@ export class SprachbausteineGapDto {
 
   @ApiProperty({ type: () => SprachbausteineOptionDto, isArray: true })
   options!: SprachbausteineOptionDto[];
-
-  @ApiProperty()
-  correctOptionId!: string;
 }

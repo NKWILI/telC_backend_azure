@@ -14,10 +14,4 @@ export class LesenTeil3Dto {
 
   @ApiProperty({ type: () => LesenTeil3AnnouncementDto, isArray: true })
   announcements!: LesenTeil3AnnouncementDto[];
-
-  @ApiProperty({
-    type: 'object',
-    additionalProperties: { type: 'string' },
-  })
-  correctMatches!: Record<string, string>;
 }

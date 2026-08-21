@@ -9,6 +9,12 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class LesenSubmitRequestDto {
+  @ApiPropertyOptional({ default: 1 })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  modelltestNumber?: number;
+
   @ApiProperty()
   @IsString()
   id!: string;
@@ -21,11 +27,17 @@ export class LesenSubmitRequestDto {
   @IsString()
   teil_id!: string;
 
-  @ApiProperty({ minimum: 0, maximum: 100 })
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 100,
+    deprecated: true,
+    description: 'Ignored; score is calculated by the backend',
+  })
   @IsInt()
   @Min(0)
   @Max(100)
-  score_percent!: number;
+  @IsOptional()
+  score_percent?: number;
 
   @ApiPropertyOptional()
   @IsString()

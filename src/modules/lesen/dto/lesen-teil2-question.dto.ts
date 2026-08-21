@@ -10,7 +10,4 @@ export class LesenTeil2QuestionDto {
 
   @ApiProperty({ type: () => LesenTeil2OptionDto, isArray: true })
   options!: LesenTeil2OptionDto[];
-
-  @ApiProperty()
-  correctOptionId!: string;
 }

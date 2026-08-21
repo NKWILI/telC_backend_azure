@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
 import type {
   SprachbausteineExerciseResponseDto,
@@ -37,7 +42,9 @@ export class SprachbausteineService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getExercise(modelltestNumber = 1): Promise<SprachbausteineExerciseResponseDto> {
+  async getExercise(
+    modelltestNumber = 1,
+  ): Promise<SprachbausteineExerciseResponseDto> {
     const modelltest = await this.prisma.modelltest.findUnique({
       where: { number: modelltestNumber },
     });
@@ -72,11 +79,7 @@ export class SprachbausteineService {
         id: `${gap.gap_key}${letters[o.sort_order]}`,
         content: o.content,
       }));
-      const correctOption = gap.options.find((o) => o.is_correct);
-      const correctOptionId = correctOption
-        ? `${gap.gap_key}${letters[correctOption.sort_order]}`
-        : '';
-      return { id: gap.gap_key, options, correctOptionId };
+      return { id: gap.gap_key, options };
     });
 
     return {
@@ -94,7 +97,9 @@ export class SprachbausteineService {
     };
   }
 
-  private async getTeil2Exercise(modelltestId: string): Promise<SprachbausteineTeil2Dto> {
+  private async getTeil2Exercise(
+    modelltestId: string,
+  ): Promise<SprachbausteineTeil2Dto> {
     const exercise = await this.prisma.sprachbausteineTeil2Exercise.findFirst({
       where: { modelltest_id: modelltestId },
       include: {
@@ -109,10 +114,8 @@ export class SprachbausteineService {
       );
     }
 
-    const wordIdMap = new Map<string, string>();
     const wordBank = exercise.words.map((w) => {
       const wordId = 'w' + String.fromCharCode(97 + w.sortOrder);
-      wordIdMap.set(w.id, wordId);
       return {
         id: wordId,
         letter: String.fromCharCode(97 + w.sortOrder),
@@ -120,10 +123,7 @@ export class SprachbausteineService {
       };
     });
 
-    const gaps = exercise.gaps.map((g) => ({
-      id: g.gapKey,
-      correctWordId: wordIdMap.get(g.correctWordId) ?? '',
-    }));
+    const gaps = exercise.gaps.map((g) => ({ id: g.gapKey }));
 
     return {
       imageUrl: exercise.imageUrl,
@@ -144,31 +144,125 @@ export class SprachbausteineService {
       where: { number: dto.modelltestNumber },
     });
     if (!modelltest) {
-      throw new NotFoundException(`Modelltest ${dto.modelltestNumber} not found`);
+      throw new NotFoundException(
+        `Modelltest ${dto.modelltestNumber} not found`,
+      );
     }
 
-    const score = dto.score;
-
-    try {
-      await this.prisma.sprachbausteineAttempt.create({
-        data: {
-          student_id: studentId,
-          teil_id: dto.teil_id,
-          modelltest_id: modelltest.id,
-          status: 'completed',
-          score: score,
-          duration_seconds: dto.durationSeconds ?? null,
-          completed_at: new Date(),
-        },
-      });
-    } catch (err) {
-      this.logger.error(`DB error on submit: ${(err as Error).message}`);
+    const answerKey = await this.getAnswerKey(modelltest.id, dto.teil_id);
+    const expectedRevision = answerKey.contentRevision;
+    if (dto.contentRevision !== expectedRevision) {
+      throw new NotFoundException('Content revision mismatch');
     }
+    const answers = answerKey.answers;
+    this.validateAnswers(dto.answers, answerKey.allowedAnswers);
+    const correct = Object.entries(answers).filter(
+      ([id, answer]) => dto.answers[id] === answer,
+    ).length;
+    const score = Object.keys(answers).length
+      ? Math.round((correct / Object.keys(answers).length) * 100)
+      : 0;
+
+    await this.prisma.sprachbausteineAttempt.create({
+      data: {
+        student_id: studentId,
+        teil_id: dto.teil_id,
+        modelltest_id: modelltest.id,
+        status: 'completed',
+        score: score,
+        answers: dto.answers,
+        content_revision: dto.contentRevision,
+        duration_seconds: dto.durationSeconds ?? null,
+        completed_at: new Date(),
+      },
+    });
 
     return { score };
   }
 
-  
+  private async getAnswerKey(
+    modelltestId: string,
+    teilId: '1' | '2',
+  ): Promise<{
+    contentRevision: string;
+    answers: Record<string, string>;
+    allowedAnswers: Record<string, string[]>;
+  }> {
+    if (teilId === '1') {
+      const exercise = await this.prisma.sprachbausteineExercise.findUnique({
+        where: { modelltest_id: modelltestId },
+        include: { gaps: { include: { options: true } } },
+      });
+      if (!exercise)
+        throw new NotFoundException('Sprachbausteine Teil 1 not found');
+      const letters = ['a', 'b', 'c'];
+      return {
+        contentRevision: exercise.content_revision,
+        answers: Object.fromEntries(
+          exercise.gaps.map((gap) => {
+            const option = gap.options.find((item) => item.is_correct);
+            return [
+              gap.gap_key,
+              option ? `${gap.gap_key}${letters[option.sort_order]}` : '',
+            ];
+          }),
+        ),
+        allowedAnswers: Object.fromEntries(
+          exercise.gaps.map((gap) => [
+            gap.gap_key,
+            gap.options.map(
+              (option) => `${gap.gap_key}${letters[option.sort_order]}`,
+            ),
+          ]),
+        ),
+      };
+    }
+    const exercise = await this.prisma.sprachbausteineTeil2Exercise.findUnique({
+      where: { modelltest_id: modelltestId },
+      include: { words: true, gaps: true },
+    });
+    if (!exercise)
+      throw new NotFoundException('Sprachbausteine Teil 2 not found');
+    const wordIds = new Map(
+      exercise.words.map((word) => [
+        word.id,
+        `w${String.fromCharCode(97 + word.sortOrder)}`,
+      ]),
+    );
+    return {
+      contentRevision: exercise.contentRevision,
+      answers: Object.fromEntries(
+        exercise.gaps.map((gap) => [
+          gap.gapKey,
+          wordIds.get(gap.correctWordId) ?? '',
+        ]),
+      ),
+      allowedAnswers: Object.fromEntries(
+        exercise.gaps.map((gap) => [gap.gapKey, [...wordIds.values()]]),
+      ),
+    };
+  }
+
+  private validateAnswers(
+    answers: Record<string, string>,
+    allowedAnswers: Record<string, string[]>,
+  ): void {
+    if (Object.keys(answers).length === 0) {
+      throw new UnprocessableEntityException('Answers must not be empty');
+    }
+    for (const [id, answer] of Object.entries(answers)) {
+      if (!allowedAnswers[id]) {
+        throw new UnprocessableEntityException(
+          `Unknown Sprachbausteine gap: ${id}`,
+        );
+      }
+      if (!allowedAnswers[id].includes(answer)) {
+        throw new UnprocessableEntityException(
+          `Invalid answer for Sprachbausteine gap: ${id}`,
+        );
+      }
+    }
+  }
 
   async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
     const progress = await this.getProgressByTeil(studentId);

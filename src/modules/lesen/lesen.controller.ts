@@ -60,9 +60,7 @@ export class LesenController {
   @Post('submit')
   @ApiBody({ type: LesenSubmitRequestDto })
   @ApiOkResponse({ type: LesenSubmitResponseDto })
-  submitTeil2(
-    @Body() dto: LesenSubmitRequestDto,
-  ): Promise<LesenSubmitResponseDto> {
-    return this.lesenService.submitTeil2(dto);
+  submit(@Body() dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
+    return this.lesenService.submit(dto);
   }
 }

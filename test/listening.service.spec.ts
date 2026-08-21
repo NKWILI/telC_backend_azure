@@ -1,429 +1,216 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { ListeningService } from '../src/modules/listening/listening.service';
-import { PrismaService } from '../src/shared/services/prisma.service';
 
-const TEIL1_REVISION = 'modelltest-1-teil-1-v1';
-const TEIL2_REVISION = 'modelltest-1-teil-2-v1';
-const TEIL3_REVISION = 'modelltest-1-teil-3-v1';
-
-const TEIL1_CORRECT_ANSWERS: Record<string, string> = {
-  q41: '-',
-  q42: '+',
-  q43: '-',
-  q44: '+',
-  q45: '+',
+const questions = [
+  {
+    question_number: 41,
+    prompt: 'Statement 41',
+    correct_answer: '-',
+    sort_order: 0,
+  },
+  {
+    question_number: 42,
+    prompt: 'Statement 42',
+    correct_answer: '+',
+    sort_order: 1,
+  },
+];
+const exercise = {
+  id: 'exercise-1',
+  modelltest_id: 'mt-1',
+  part: 1,
+  title: 'Teil 1',
+  subtitle: 'Hörverstehen, Teil 1',
+  instruction: 'Instruction',
+  content_revision: 'modelltest-1-teil-1-v1',
+  duration_minutes: 10,
+  audio_url: '',
+  bundled_audio_asset: '',
+  image_url: 'https://r2.example/1.png',
+  transcript: null,
+  questions,
 };
 
 describe('ListeningService', () => {
+  const prisma = {
+    modelltest: { findUnique: jest.fn() },
+    listeningExercise: { findMany: jest.fn(), findFirst: jest.fn() },
+    listeningAttempt: { findMany: jest.fn(), create: jest.fn() },
+  };
   let service: ListeningService;
 
-  const mockPrismaService = {
-    listeningAttempt: {
-      findMany: jest.fn(),
-      create: jest.fn(),
-    },
-    modelltest: {
-      findUnique: jest.fn(),
-    },
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ListeningService,
-        { provide: PrismaService, useValue: mockPrismaService },
-      ],
-    }).compile();
-
-    service = module.get<ListeningService>(ListeningService);
-  });
-
-  afterEach(() => {
+  beforeEach(() => {
     jest.clearAllMocks();
+    service = new ListeningService(prisma as any);
+    prisma.modelltest.findUnique.mockResolvedValue({ id: 'mt-1' });
+    prisma.listeningAttempt.findMany.mockResolvedValue([]);
+    prisma.listeningAttempt.create.mockResolvedValue({});
   });
 
-  // ---------------------------------------------------------------------------
-  // getTeils
-  // ---------------------------------------------------------------------------
-  describe('getTeils', () => {
-    it('returns 3 items with progress 0 when DB has no completed attempts', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
-
-      const result = await service.getTeils('student-1');
-
-      expect(result).toHaveLength(3);
-      expect(result[0]).toMatchObject({ id: '1', progress: 0 });
-      expect(result[1]).toMatchObject({ id: '2', progress: 0 });
-      expect(result[2]).toMatchObject({ id: '3', progress: 0 });
-    });
-
-    it('returns progress 100 for a Teil that has a completed attempt, 0 for others', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([
-        { exercise_id: '2' },
-      ]);
-
-      const result = await service.getTeils('student-1');
-
-      expect(result.find((t) => t.id === '1')?.progress).toBe(0);
-      expect(result.find((t) => t.id === '2')?.progress).toBe(100);
-      expect(result.find((t) => t.id === '3')?.progress).toBe(0);
-    });
-
-    it('returns all items with required fields', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
-
-      const result = await service.getTeils('student-1');
-
-      for (const teil of result) {
-        expect(teil.id).toBeDefined();
-        expect(teil.title).toBeDefined();
-        expect(teil.durationMinutes).toBeDefined();
-        expect(typeof teil.progress).toBe('number');
-      }
-    });
-
-    it('returns progress 0 gracefully when DB throws', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockRejectedValue(
-        new Error('DB error'),
-      );
-
-      const result = await service.getTeils('student-1');
-
-      expect(result).toHaveLength(3);
-      expect(result.every((t) => t.progress === 0)).toBe(true);
-    });
+  it('retrieves Modelltest 1 Teile 1, 2, and 3 from the database', async () => {
+    prisma.listeningExercise.findFirst.mockImplementation(({ where }) =>
+      Promise.resolve({
+        ...exercise,
+        part: where.part,
+        content_revision: `revision-${where.part}`,
+      }),
+    );
+    for (const part of [1, 2, 3]) {
+      const result = await service.getExercise(String(part), 1);
+      expect(result.content_revision).toBe(`revision-${part}`);
+    }
   });
 
-  // ---------------------------------------------------------------------------
-  // getSessions
-  // ---------------------------------------------------------------------------
-  describe('getSessions', () => {
-    it('returns empty array when there are no attempts', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
+  it('resolves different Modelltests independently', async () => {
+    prisma.listeningExercise.findFirst.mockImplementation(({ where }) =>
+      Promise.resolve({
+        ...exercise,
+        content_revision: `modelltest-${where.modelltest.number}`,
+      }),
+    );
+    expect((await service.getExercise('1', 1)).content_revision).toBe(
+      'modelltest-1',
+    );
+    expect((await service.getExercise('1', 2)).content_revision).toBe(
+      'modelltest-2',
+    );
+  });
 
-      const result = await service.getSessions('student-1');
+  it('returns an answer-safe exercise projection', async () => {
+    prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
+    const result = await service.getExercise('1', 1);
+    expect(result.questions).toEqual([
+      { id: 'q41', prompt: 'Statement 41' },
+      { id: 'q42', prompt: 'Statement 42' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('correct_answer');
+    expect((result as any).answerKey).toBeUndefined();
+  });
 
-      expect(result).toEqual([]);
+  it('returns 404 for an invalid Teil or missing exercise', async () => {
+    await expect(service.getExercise('4', 1)).rejects.toThrow(
+      NotFoundException,
+    );
+    prisma.listeningExercise.findFirst.mockResolvedValue(null);
+    await expect(service.getExercise('1', 99)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('lists Modelltest-specific Teile with Modelltest-specific progress', async () => {
+    prisma.listeningExercise.findMany.mockResolvedValue([exercise]);
+    prisma.listeningAttempt.findMany.mockResolvedValue([{ exercise_id: '1' }]);
+    const result = await service.getTeils('student-1', 1);
+    expect(result[0]).toMatchObject({
+      id: '1',
+      progress: 100,
+      imagePath: exercise.image_url,
     });
+    expect(prisma.listeningAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ modelltest_id: 'mt-1' }),
+      }),
+    );
+  });
 
-    it('maps DB rows to ExerciseAttemptDto (camelCase)', async () => {
-      const rows = [
-        {
-          attempt_id: 'uuid-listen-1',
-          created_at: new Date('2026-03-10T09:00:00.000Z'),
-          completed_at: new Date('2026-03-10T09:08:00.000Z'),
-          score: 80,
-          feedback: null,
-          duration_seconds: 480,
-        },
-      ];
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue(rows);
+  it('returns 404 when the requested Modelltest does not exist', async () => {
+    prisma.modelltest.findUnique.mockResolvedValue(null);
+    await expect(service.getTeils('student-1', 99)).rejects.toThrow(
+      NotFoundException,
+    );
+  });
 
-      const result = await service.getSessions('student-1');
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({
-        id: 'uuid-listen-1',
+  it('maps session rows and filters by Teil', async () => {
+    prisma.listeningAttempt.findMany.mockResolvedValue([
+      {
+        attempt_id: 'attempt-1',
+        created_at: new Date('2026-08-20T10:00:00.000Z'),
+        completed_at: new Date('2026-08-20T10:05:00.000Z'),
         score: 80,
-        durationSeconds: 480,
-      });
-      expect(result[0].dateLabel).toBeDefined();
+        feedback: 'Good',
+        duration_seconds: 300,
+      },
+    ]);
+
+    const result = await service.getSessions('student-1', 2);
+
+    expect(result[0]).toMatchObject({
+      id: 'attempt-1',
+      date: '2026-08-20T10:05:00.000Z',
+      score: 80,
+      feedback: 'Good',
+      durationSeconds: 300,
     });
+    expect(prisma.listeningAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { student_id: 'student-1', exercise_id: '2' },
+      }),
+    );
+  });
 
-    it('returns empty array (no throw) when DB throws', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockRejectedValue(
-        new Error('fail'),
-      );
+  it('returns an empty session list when history lookup fails', async () => {
+    prisma.listeningAttempt.findMany.mockRejectedValue(new Error('offline'));
+    await expect(service.getSessions('student-1')).resolves.toEqual([]);
+  });
 
-      const result = await service.getSessions('student-1');
-
-      expect(result).toEqual([]);
+  it('scores submissions server-side and persists exercise identity', async () => {
+    prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
+    const result = await service.submit('student-1', {
+      type: '1',
+      modelltestNumber: 1,
+      timed: false,
+      content_revision: exercise.content_revision,
+      answers: { q41: '-', q42: '-' },
     });
-
-    it('applies exercise_id filter when teilNumber is provided', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
-
-      await service.getSessions('student-1', 2);
-
-      expect(mockPrismaService.listeningAttempt.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ exercise_id: '2' }),
-        }),
-      );
-    });
-
-    it('does not apply exercise_id filter when teilNumber is omitted', async () => {
-      mockPrismaService.listeningAttempt.findMany.mockResolvedValue([]);
-
-      await service.getSessions('student-1');
-
-      const callArg =
-        mockPrismaService.listeningAttempt.findMany.mock.calls[0][0];
-      expect(callArg.where).not.toHaveProperty('exercise_id');
+    expect(result).toEqual({ score: 50, answerKey: { q41: '-', q42: '+' } });
+    expect(prisma.listeningAttempt.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        score: 50,
+        modelltest_id: 'mt-1',
+        listening_exercise_id: 'exercise-1',
+      }),
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // getExercise
-  // ---------------------------------------------------------------------------
-  describe('getExercise', () => {
-    it('returns exercise payload with required fields for type "1"', async () => {
-      const result = await service.getExercise('1');
+  it('rejects the submission when attempt persistence fails', async () => {
+    prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
+    prisma.listeningAttempt.create.mockRejectedValue(
+      new Error('database unavailable'),
+    );
 
-      expect(result.content_revision).toBe(TEIL1_REVISION);
-      expect(result.issued_at).toBeDefined();
-      expect(typeof result.audio_url).toBe('string');
-      expect(Array.isArray(result.questions)).toBe(true);
-      expect(result.questions.length).toBeGreaterThan(0);
-    });
-
-    it('returns exercise payload for type "2"', async () => {
-      const result = await service.getExercise('2');
-
-      expect(result.content_revision).toBe(TEIL2_REVISION);
-      expect(result.questions.length).toBeGreaterThan(0);
-    });
-
-    it('returns exercise payload for type "3"', async () => {
-      const result = await service.getExercise('3');
-
-      expect(result.content_revision).toBe(TEIL3_REVISION);
-      expect(result.questions.length).toBeGreaterThan(0);
-    });
-
-    it('each question has id and prompt only — no options array', async () => {
-      const result = await service.getExercise('1');
-
-      for (const q of result.questions) {
-        expect(q.id).toBeDefined();
-        expect(q.prompt).toBeDefined();
-        expect((q as any).options).toBeUndefined();
-      }
-    });
-
-    it('returns imagePath string', async () => {
-      const result = await service.getExercise('1');
-
-      expect(typeof result.imagePath).toBe('string');
-    });
-
-    it('Teil 2 has exactly 10 questions', async () => {
-      const result = await service.getExercise('2');
-
-      expect(result.questions).toHaveLength(10);
-    });
-
-    it('does NOT expose the answer key in the response', async () => {
-      const result = await service.getExercise('1');
-
-      expect((result as any).answerKey).toBeUndefined();
-      expect((result as any).answers).toBeUndefined();
-      expect((result as any).correctAnswers).toBeUndefined();
-    });
-
-    it('throws NotFoundException for unknown type', async () => {
-      await expect(service.getExercise('99')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws NotFoundException for empty string type', async () => {
-      await expect(service.getExercise('')).rejects.toThrow(NotFoundException);
-    });
+    await expect(
+      service.submit('student-1', {
+        type: '1',
+        modelltestNumber: 1,
+        timed: false,
+        content_revision: exercise.content_revision,
+        answers: { q41: '-', q42: '+' },
+      }),
+    ).rejects.toThrow('database unavailable');
   });
 
-  // ---------------------------------------------------------------------------
-  // submit
-  // ---------------------------------------------------------------------------
-  describe('submit', () => {
-    it('throws UnprocessableEntityException for unknown type', async () => {
-      await expect(
-        service.submit('student-1', {
-          type: '99',
-          timed: false,
-          content_revision: TEIL1_REVISION,
-          answers: { q11: 'a' },
-        }),
-      ).rejects.toThrow(UnprocessableEntityException);
-    });
-
-    it('throws UnprocessableEntityException for stale content_revision', async () => {
-      await expect(
-        service.submit('student-1', {
-          type: '1',
-          timed: false,
-          content_revision: 'outdated-revision-xyz',
-          answers: { q11: 'a' },
-        }),
-      ).rejects.toThrow(UnprocessableEntityException);
-    });
-
-    it('throws UnprocessableEntityException for empty answers object', async () => {
-      await expect(
-        service.submit('student-1', {
-          type: '1',
-          timed: false,
-          content_revision: TEIL1_REVISION,
-          answers: {},
-        }),
-      ).rejects.toThrow(UnprocessableEntityException);
-    });
-
-    it('returns answerKey when all answers are correct', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      const result = await service.submit('student-1', {
-        type: '1',
-        timed: true,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(result.answerKey).toBeDefined();
-      expect(typeof result.answerKey).toBe('object');
-      expect((result as any).score).toBeUndefined();
-    });
-
-    it('answerKey contains correct +/- values for Teil 1', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      const result = await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(result.answerKey).toEqual(TEIL1_CORRECT_ANSWERS);
-    });
-
-    it('attributes the attempt to the Modelltest named in content_revision', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-      mockPrismaService.modelltest.findUnique.mockResolvedValue({
-        id: 'mt-1-uuid',
-      });
-
-      await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(mockPrismaService.modelltest.findUnique).toHaveBeenCalledWith({
-        where: { number: 1 },
-        select: { id: true },
-      });
-      expect(
-        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
-          .modelltest_id,
-      ).toBe('mt-1-uuid');
-    });
-
-    it('leaves the attempt unattributed when the Modelltest row does not exist', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-      mockPrismaService.modelltest.findUnique.mockResolvedValue(null);
-
-      await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(
-        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
-          .modelltest_id,
-      ).toBeNull();
-    });
-
-    it('still records the attempt when the Modelltest lookup fails', async () => {
-      // Attribution is metadata. Losing a student's result because a lookup
-      // errored would be a far worse failure than an unattributed row.
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-      mockPrismaService.modelltest.findUnique.mockRejectedValue(
-        new Error('db unavailable'),
-      );
-
-      const result = await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(result.answerKey).toBeDefined();
-      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalled();
-      expect(
-        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
-          .modelltest_id,
-      ).toBeNull();
-    });
-
-    it('DB insert receives the computed score even though it is not returned', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      await service.submit('student-1', {
-        type: '1',
-        timed: true,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            student_id: 'student-1',
-            exercise_id: '1',
-            status: 'completed',
-            score: expect.any(Number),
-          }),
-        }),
-      );
-    });
-
-    it('partial answers — DB still receives a numeric score', async () => {
-      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
-
-      const partial: Record<string, string> = {
-        q41: '-',  // correct
-        q42: '+',  // correct
-        q43: '+',  // wrong
-        q44: '-',  // wrong
-        q45: '-',  // wrong
-      };
-
-      await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: partial,
-      });
-
-      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ score: 40 }),
-        }),
-      );
-    });
-
-    it('does not throw when DB insert fails — still returns answerKey', async () => {
-      mockPrismaService.listeningAttempt.create.mockRejectedValue(
-        new Error('DB down'),
-      );
-
-      const result = await service.submit('student-1', {
-        type: '1',
-        timed: false,
-        content_revision: TEIL1_REVISION,
-        answers: TEIL1_CORRECT_ANSWERS,
-      });
-
-      expect(result.answerKey).toBeDefined();
-    });
+  it('rejects stale revisions, unknown questions, and invalid answer values', async () => {
+    prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
+    const base = {
+      type: '1',
+      timed: false,
+      content_revision: exercise.content_revision,
+    };
+    await expect(
+      service.submit('s', {
+        ...base,
+        content_revision: 'old',
+        answers: { q41: '-' },
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    await expect(
+      service.submit('s', { ...base, answers: { q99: '-' } }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    await expect(
+      service.submit('s', { ...base, answers: { q41: 'a' } }),
+    ).rejects.toThrow(UnprocessableEntityException);
   });
 });

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
 import type {
   LesenExerciseResponseDto,
@@ -67,9 +72,7 @@ export class LesenService {
       );
     }
 
-    const correctMatches: Record<string, string> = {};
     const texts = exercise.texts.map((t) => {
-      correctMatches[String(t.textNumber)] = t.correctTitleId;
       return { id: String(t.textNumber), von: t.von, an: t.an, body: t.body };
     });
 
@@ -83,7 +86,6 @@ export class LesenService {
       instruction: exercise.instruction,
       texts,
       titles,
-      correctMatches,
     };
   }
 
@@ -117,15 +119,10 @@ export class LesenService {
         id: `${q.questionNumber}${LETTERS[o.sortOrder]}`,
         content: o.content,
       }));
-      const correct = q.options.find((o) => o.isCorrect);
-      const correctOptionId = correct
-        ? `${q.questionNumber}${LETTERS[correct.sortOrder]}`
-        : '';
       return {
         id: String(q.questionNumber),
         content: q.prompt,
         options,
-        correctOptionId,
       };
     });
 
@@ -171,11 +168,7 @@ export class LesenService {
       return { id: letter, title: a.title, content: a.content };
     });
 
-    const correctMatches: Record<string, string> = {};
     const situations = exercise.situations.map((s) => {
-      correctMatches[String(s.situationNumber)] = s.noMatch
-        ? 'X'
-        : (letterMap.get(s.correctAnnouncementId!) ?? '');
       return { id: String(s.situationNumber), content: s.content };
     });
 
@@ -184,14 +177,137 @@ export class LesenService {
       instruction: exercise.instruction,
       situations,
       announcements,
-      correctMatches,
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-unused-vars
-  async submitTeil2(
-    _dto: LesenSubmitRequestDto,
-  ): Promise<LesenSubmitResponseDto> {
-    return { score: 0 };
+  async submit(dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
+    const modelltest = await this.prisma.modelltest.findUnique({
+      where: { number: dto.modelltestNumber ?? 1 },
+      select: { id: true },
+    });
+    if (!modelltest) throw new NotFoundException('Modelltest not found');
+
+    const submissionRules = await this.getSubmissionRules(
+      modelltest.id,
+      dto.teil_id,
+    );
+    this.validateAnswers(dto.answers, submissionRules.allowedAnswers);
+    const answerKey = submissionRules.answerKey;
+    const correct = Object.entries(answerKey).filter(
+      ([id, answer]) => dto.answers[id] === answer,
+    ).length;
+    return {
+      score:
+        answerKey && Object.keys(answerKey).length
+          ? Math.round((correct / Object.keys(answerKey).length) * 100)
+          : 0,
+    };
+  }
+
+  private async getSubmissionRules(
+    modelltestId: string,
+    teilId: string,
+  ): Promise<{
+    answerKey: Record<string, string>;
+    allowedAnswers: Record<string, string[]>;
+  }> {
+    if (teilId === '1') {
+      const exercise = await this.prisma.lesenTeil1Exercise.findUnique({
+        where: { modelltest_id: modelltestId },
+        select: { texts: true, titles: { select: { id: true } } },
+      });
+      if (!exercise) throw new NotFoundException('Lesen Teil 1 not found');
+      const titleIds = exercise.titles.map((title) => title.id);
+      return {
+        answerKey: Object.fromEntries(
+          exercise.texts.map((text) => [
+            String(text.textNumber),
+            text.correctTitleId,
+          ]),
+        ),
+        allowedAnswers: Object.fromEntries(
+          exercise.texts.map((text) => [String(text.textNumber), titleIds]),
+        ),
+      };
+    }
+    if (teilId === '2') {
+      const exercise = await this.prisma.lesenTeil2Exercise.findUnique({
+        where: { modelltest_id: modelltestId },
+        select: { questions: { include: { options: true } } },
+      });
+      if (!exercise) throw new NotFoundException('Lesen Teil 2 not found');
+      return {
+        answerKey: Object.fromEntries(
+          exercise.questions.map((question) => {
+            const correct = question.options.find((option) => option.isCorrect);
+            return [
+              String(question.questionNumber),
+              correct
+                ? `${question.questionNumber}${LETTERS[correct.sortOrder]}`
+                : '',
+            ];
+          }),
+        ),
+        allowedAnswers: Object.fromEntries(
+          exercise.questions.map((question) => [
+            String(question.questionNumber),
+            question.options.map(
+              (option) =>
+                `${question.questionNumber}${LETTERS[option.sortOrder]}`,
+            ),
+          ]),
+        ),
+      };
+    }
+    if (teilId === '3') {
+      const exercise = await this.prisma.lesenTeil3Exercise.findUnique({
+        where: { modelltest_id: modelltestId },
+        select: { announcements: true, situations: true },
+      });
+      if (!exercise) throw new NotFoundException('Lesen Teil 3 not found');
+      const letters = new Map(
+        exercise.announcements.map((item) => [
+          item.id,
+          String.fromCharCode(97 + item.sortOrder),
+        ]),
+      );
+      const allowed = [...letters.values(), 'X'];
+      return {
+        answerKey: Object.fromEntries(
+          exercise.situations.map((situation) => [
+            String(situation.situationNumber),
+            situation.noMatch
+              ? 'X'
+              : (letters.get(situation.correctAnnouncementId ?? '') ?? ''),
+          ]),
+        ),
+        allowedAnswers: Object.fromEntries(
+          exercise.situations.map((situation) => [
+            String(situation.situationNumber),
+            allowed,
+          ]),
+        ),
+      };
+    }
+    throw new NotFoundException('Lesen Teil not found');
+  }
+
+  private validateAnswers(
+    answers: Record<string, string>,
+    allowedAnswers: Record<string, string[]>,
+  ): void {
+    if (Object.keys(answers).length === 0) {
+      throw new UnprocessableEntityException('Answers must not be empty');
+    }
+    for (const [id, answer] of Object.entries(answers)) {
+      if (!allowedAnswers[id]) {
+        throw new UnprocessableEntityException(`Unknown Lesen question: ${id}`);
+      }
+      if (!allowedAnswers[id].includes(answer)) {
+        throw new UnprocessableEntityException(
+          `Invalid answer for Lesen question: ${id}`,
+        );
+      }
+    }
   }
 }

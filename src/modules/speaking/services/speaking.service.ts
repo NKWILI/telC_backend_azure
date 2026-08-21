@@ -1,85 +1,52 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../shared/services/prisma.service';
-import type { TeilListItemDto, SessionHistoryItemDto } from '../dto';
+import type { SessionHistoryItemDto, TeilListItemDto } from '../dto';
 
 @Injectable()
 export class SpeakingService {
   private readonly logger = new Logger(SpeakingService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * GET /api/speaking/teils
-   * Returns the list of 3 Teils with metadata for the catalog screen.
-   */
-  getTeils(): TeilListItemDto[] {
-    return [
-      {
-        id: 1,
-        part: 1,
-        title: 'Lire à voix haute',
-        subtitle: 'Lisez la phrase affichée à voix haute.',
-        topicTitle: 'Aufgabe: Stellen Sie sich vor',
-        topicDescription:
-          'Sprechen Sie über sich. Gehen Sie auf die folgenden Punkte ein. Bilden Sie vollständige Sätze.',
-        topicPoints: ['Name', 'Alter', 'Land & Wohnort', 'Sprachen', 'Beruf', 'Hobby'],
-        durationMinutes: 10,
-        prepDurationSeconds: 300,
-        imagePath: 'assets/images/modules/sprechen.jpg',
-        examImagePath: null,
-        instructions:
-          'In this Teil, you will introduce yourself. Talk about your name, where you are from, your hobbies, and your work or studies. Speak naturally and clearly.',
+  async getTeils(modelltestNumber = 1): Promise<TeilListItemDto[]> {
+    const modelltest = await this.prisma.modelltest.findUnique({
+      where: { number: modelltestNumber },
+      select: { id: true },
+    });
+    if (!modelltest)
+      throw new NotFoundException(`Modelltest ${modelltestNumber} not found`);
+    const exercises = await this.prisma.speakingExercise.findMany({
+      where: { modelltest_id: modelltest.id },
+      orderBy: { part: 'asc' },
+      select: {
+        part: true,
+        title: true,
+        subtitle: true,
+        topic_title: true,
+        topic_description: true,
+        topic_points: true,
+        instructions: true,
+        duration_minutes: true,
+        prep_duration_seconds: true,
+        image_url: true,
+        exam_image_url: true,
       },
-      {
-        id: 2,
-        part: 2,
-        title: 'Dialogue',
-        subtitle: 'Pratiquez des échanges courts en situation.',
-        topicTitle: 'Aufgabe: Bildbeschreibung',
-        topicDescription:
-          'Beschreiben Sie das Bild genau. Was sehen Sie? Wie ist die Situation?',
-        topicPoints: [
-          'Was sehen Sie auf dem Foto?',
-          'Was machen die Personen?',
-          'Wie ist die Umgebung/Wetter?',
-          'Ihre persönliche Meinung zum Thema.',
-        ],
-        durationMinutes: 15,
-        prepDurationSeconds: 300,
-        imagePath: 'assets/images/modules/sprechen.jpg',
-        examImagePath: 'assets/images/modules/sprechen.jpg',
-        instructions:
-          'In this Teil, you will describe a picture and express your opinion on the topic shown. Give concrete examples and elaborate your thoughts.',
-      },
-      {
-        id: 3,
-        part: 3,
-        title: 'Répétition',
-        subtitle: "Répétez la phrase après l'écoute.",
-        topicTitle: 'Aufgabe: Ein Abschiedsfest planen',
-        topicDescription:
-          'Ihr Kollege Patrick verlässt die Firma. Sie möchten mit Ihrer Partnerin eine Überraschungsparty organisieren.',
-        topicPoints: [
-          'Wann feiern?',
-          'Wo feiern?',
-          'Essen und Trinken?',
-          'Geschenk für Patrick?',
-          'Wer wird eingeladen?',
-        ],
-        durationMinutes: 5,
-        prepDurationSeconds: 300,
-        imagePath: 'assets/images/modules/sprechen.jpg',
-        examImagePath: null,
-        instructions:
-          'In this Teil, you will discuss a task with a partner. Take a position, suggest ideas, and reach an agreement together.',
-      },
-    ];
+    });
+    return exercises.map((exercise) => ({
+      id: exercise.part,
+      part: exercise.part,
+      title: exercise.title,
+      subtitle: exercise.subtitle ?? '',
+      topicTitle: exercise.topic_title,
+      topicDescription: exercise.topic_description,
+      topicPoints: this.toTopicPoints(exercise.topic_points),
+      durationMinutes: exercise.duration_minutes,
+      prepDurationSeconds: exercise.prep_duration_seconds,
+      imagePath: exercise.image_url,
+      examImagePath: exercise.exam_image_url,
+      instructions: exercise.instructions,
+    }));
   }
 
-  /**
-   * GET /api/speaking/sessions
-   * Returns past completed sessions for the student (read-only history).
-   */
   async getSessions(
     studentId: string,
     teilNumber?: number,
@@ -107,21 +74,31 @@ export class SpeakingService {
         orderBy: { completed_at: 'desc' },
         take: limit,
       });
-
       return rows.map((row) => {
-        const evalRow = row.teil_evaluations[0];
+        const evaluation = row.teil_evaluations[0];
         return {
           sessionId: row.session_id,
           teilNumber: row.teil_number,
           completedAt: (row.completed_at as Date)?.toISOString() ?? '',
-          overallScore: evalRow?.overall_score ?? null,
-          strengths: evalRow?.strengths ?? null,
-          areasForImprovement: evalRow?.areas_for_improvement ?? null,
+          overallScore: evaluation?.overall_score ?? null,
+          strengths: evaluation?.strengths ?? null,
+          areasForImprovement: evaluation?.areas_for_improvement ?? null,
         };
       });
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
     }
+  }
+
+  private toTopicPoints(value: unknown): string[] {
+    if (
+      !Array.isArray(value) ||
+      value.some((point) => typeof point !== 'string')
+    ) {
+      this.logger.warn('Speaking exercise has invalid topic_points JSON');
+      return [];
+    }
+    return value.filter((point): point is string => typeof point === 'string');
   }
 }

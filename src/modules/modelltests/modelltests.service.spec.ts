@@ -19,6 +19,8 @@ const MT1_ROW = {
   lesenTeil2Exercises: [{ id: 'l2-uuid' }],
   lesenTeil3Exercises: [{ id: 'l3-uuid' }],
   writingExercises: [{ id: 'we1-uuid' }],
+  listeningExercises: [{ id: 'he1-uuid' }],
+  speakingExercises: [{ id: 'sp1-uuid' }],
 };
 
 describe('ModelltestsService', () => {
@@ -32,15 +34,33 @@ describe('ModelltestsService', () => {
   describe('getAll', () => {
     it('returns mapped list when DB has rows', async () => {
       mockPrisma.modelltest.findMany.mockResolvedValue([
-        { id: 'mt1-uuid', number: 1, title: 'Modelltest 1', created_at: new Date() },
-        { id: 'mt2-uuid', number: 2, title: 'Modelltest 2', created_at: new Date() },
+        {
+          id: 'mt1-uuid',
+          number: 1,
+          title: 'Modelltest 1',
+          created_at: new Date(),
+        },
+        {
+          id: 'mt2-uuid',
+          number: 2,
+          title: 'Modelltest 2',
+          created_at: new Date(),
+        },
       ]);
 
       const result = await service.getAll();
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({ id: 'mt1-uuid', number: 1, title: 'Modelltest 1' });
-      expect(result[1]).toEqual({ id: 'mt2-uuid', number: 2, title: 'Modelltest 2' });
+      expect(result[0]).toEqual({
+        id: 'mt1-uuid',
+        number: 1,
+        title: 'Modelltest 1',
+      });
+      expect(result[1]).toEqual({
+        id: 'mt2-uuid',
+        number: 2,
+        title: 'Modelltest 2',
+      });
       expect(mockPrisma.modelltest.findMany).toHaveBeenCalledWith({
         orderBy: { number: 'asc' },
       });
@@ -71,6 +91,8 @@ describe('ModelltestsService', () => {
         lesenT2: ['l2-uuid'],
         lesenT3: ['l3-uuid'],
         writing: ['we1-uuid'],
+        listening: ['he1-uuid'],
+        speaking: ['sp1-uuid'],
       });
       expect(mockPrisma.modelltest.findUnique).toHaveBeenCalledWith({
         where: { number: 1 },
@@ -81,6 +103,8 @@ describe('ModelltestsService', () => {
           lesenTeil2Exercises: { select: { id: true } },
           lesenTeil3Exercises: { select: { id: true } },
           writingExercises: { select: { id: true } },
+          listeningExercises: { select: { id: true } },
+          speakingExercises: { select: { id: true } },
         },
       });
     });
