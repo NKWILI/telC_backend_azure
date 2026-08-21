@@ -1,5 +1,11 @@
 # Implementation Plan: Speaking Room Feature (Sprechen Video Room)
 
+> **Historical document.** Written while the backend ran on Azure App Service; the
+> platform moved to DigitalOcean App Platform in 2026-08. Azure references below
+> are left as-written for provenance. For anything operational — instance count,
+> WebSockets, restarts, deploys — use the DigitalOcean Deployment Checklist in
+> `SPRECHEN_ROOM_REFERENCE.md`, which is the maintained version.
+
 ## Overview
 
 A real-time peer-to-peer video practice room inside the existing Sprechen module. Two users connect via WebRTC to practice speaking German together. The backend acts as a signaling relay and room manager only — no audio/video passes through it. No AI evaluation, no authentication required for the demo phase. Everything lives in a single in-memory Map, safe on the single Azure B1 instance.

@@ -5,10 +5,12 @@ import {
   Body,
   Query,
   UseGuards,
-  DefaultValuePipe,
-  ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+
+/** Served when the caller omits ?modelltest= — keeps existing clients working. */
+const DEFAULT_MODELLTEST = 1;
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { LesenService } from './lesen.service';
 import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
@@ -31,10 +33,28 @@ export class LesenController {
   })
   @ApiOkResponse({ type: LesenExerciseResponseDto })
   getExercise(
-    @Query('modelltest', new DefaultValuePipe(1), ParseIntPipe)
-    modelltest: number,
+    // Declared as string on purpose. The global ValidationPipe in main.ts runs
+    // with transform: true, so a `number` param would have 'abc' coerced to NaN
+    // before any param pipe sees it — DefaultValuePipe then silently substitutes
+    // 1 and the caller gets Modelltest 1 instead of an error. Parsing the raw
+    // string here keeps malformed input a 400. Same approach as
+    // writing.controller.ts:69.
+    @Query('modelltest') modelltest?: string,
   ): Promise<LesenExerciseResponseDto> {
-    return this.lesenService.getExercise(modelltest);
+    if (modelltest === undefined || modelltest === '') {
+      return this.lesenService.getExercise(DEFAULT_MODELLTEST);
+    }
+
+    if (!/^\d+$/.test(modelltest)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'modelltest query param must be a positive integer',
+        messageKey: 'readingInvalidModelltest',
+      });
+    }
+
+    return this.lesenService.getExercise(Number(modelltest));
   }
 
   @Post('submit')
