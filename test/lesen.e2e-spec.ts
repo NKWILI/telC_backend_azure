@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, UnauthorizedException } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { LesenController } from '../src/modules/lesen/lesen.controller';
@@ -57,6 +61,17 @@ describe('LesenController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+    // Must mirror main.ts. Without the global ValidationPipe these tests do not
+    // represent production: transform: true coerces query params before any
+    // param-level pipe runs, which is exactly how an earlier version of this
+    // suite asserted 400 for ?modelltest=abc while production returned 200.
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     app.useGlobalFilters(new AuthExceptionFilter());
     await app.init();
   });
