@@ -81,6 +81,9 @@ describe('AuthService', () => {
 
     emailServiceMock = {
       sendVerificationEmail: jest.fn().mockResolvedValue(undefined),
+      sendExistingAccountVerificationEmail: jest
+        .fn()
+        .mockResolvedValue(undefined),
       sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -271,7 +274,54 @@ describe('AuthService', () => {
           email_verification_expires: expect.any(Date),
         },
       });
-      expect(emailServiceMock.sendVerificationEmail).toHaveBeenCalledTimes(1);
+      expect(
+        emailServiceMock.sendExistingAccountVerificationEmail,
+      ).toHaveBeenCalledTimes(1);
+      // The first-time email is for first-time signups only.
+      expect(emailServiceMock.sendVerificationEmail).not.toHaveBeenCalled();
+    });
+
+    it('tells a returning unverified registrant that an account already exists', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        email_verified: false,
+        email_verification_expires: oldExpiry,
+      });
+      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await service.register(dto);
+
+      expect(
+        emailServiceMock.sendExistingAccountVerificationEmail,
+      ).toHaveBeenCalledWith(dto.email, 'raw-verification-token');
+    });
+
+    it('never overwrites stored credentials for a returning unverified registrant', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce({
+        id: 'student-1',
+        email_verified: false,
+        email_verification_expires: oldExpiry,
+      });
+      txMock.student.update.mockResolvedValueOnce({ id: 'student-1' });
+
+      await service.register(dto);
+
+      // Security guard, not an oversight. Nobody has proven they own this
+      // address yet, so anyone who knows it can reach this branch. Writing the
+      // caller's password here is the account pre-hijacking pattern: an
+      // attacker re-registers a victim's unverified address, the victim clicks
+      // the verification link in their own inbox, and the attacker's password
+      // is now the account password (USENIX Security '22, Sudhodanan/Paverd;
+      // cf. MantisBT CVE-2024-34077). The returning user is guided to password
+      // reset by email instead.
+      const updateArg = txMock.student.update.mock.calls[0][0];
+      expect(updateArg.data).not.toHaveProperty('password_hash');
+      expect(updateArg.data).not.toHaveProperty('first_name');
+      expect(updateArg.data).not.toHaveProperty('last_name');
+      expect(Object.keys(updateArg.data).sort()).toEqual([
+        'email_verification_expires',
+        'email_verification_token',
+      ]);
     });
 
     it('does not resend within the 2-minute cooldown', async () => {

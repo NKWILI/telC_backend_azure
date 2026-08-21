@@ -98,6 +98,21 @@ export class AuthService {
         return { message: 'verification email sent' };
       }
 
+      // Only the verification token is refreshed. dto.password, dto.firstName
+      // and dto.lastName are deliberately discarded.
+      //
+      // Nobody has proven they own this address yet, so anyone who knows it can
+      // reach this branch. Writing the caller's credentials here is the account
+      // pre-hijacking pattern (USENIX Security '22, Sudhodanan/Paverd; cf.
+      // MantisBT CVE-2024-34077): an attacker re-registers a victim's
+      // unverified address, the victim clicks the verification link that lands
+      // in their own inbox, and the attacker's password is now the account
+      // password. The published mitigation is to allow no action on an
+      // unverified identifier, which is what this does.
+      //
+      // The cost is that a genuine returning user does not get the new password
+      // they just typed — so the email below explains that and points them at
+      // password reset. Enforced by a test in auth.service.spec.ts.
       await this.prisma.$transaction(async (tx) => {
         await tx.student.update({
           where: { id: existingStudent.id },
@@ -108,7 +123,10 @@ export class AuthService {
         });
 
         try {
-          await this.emailService.sendVerificationEmail(dto.email, rawToken);
+          await this.emailService.sendExistingAccountVerificationEmail(
+            dto.email,
+            rawToken,
+          );
         } catch {
           throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
         }
