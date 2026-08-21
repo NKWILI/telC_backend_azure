@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
-  ValidationPipe,
   HttpException,
   HttpStatus,
   NotFoundException,
@@ -15,6 +14,7 @@ import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
+import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 const defaultPayload: AccessTokenPayload = {
   type: 'access',
@@ -91,13 +91,7 @@ describe('WritingController (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    app.useGlobalPipes(createGlobalValidationPipe());
     app.useGlobalFilters(new AuthExceptionFilter());
     await app.init();
   });
