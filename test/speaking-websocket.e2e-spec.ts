@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
+import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 const runSpeakingE2E = process.env.RUN_SPEAKING_E2E === '1';
 
@@ -24,6 +25,8 @@ const runSpeakingE2E = process.env.RUN_SPEAKING_E2E === '1';
       }).compile();
 
       app = moduleFixture.createNestApplication();
+
+      app.useGlobalPipes(createGlobalValidationPipe());
       await app.init();
       await app.listen(3000);
 

@@ -14,7 +14,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { io, Socket } from 'socket.io-client';
@@ -22,6 +22,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
+import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 const runFlowE2E = process.env.RUN_WRITING_FLOW_E2E === '1';
 const expectGemini = process.env.WRITING_E2E_EXPECT_GEMINI === '1';
@@ -49,13 +50,7 @@ const FLAWED_GERMAN =
       }).compile();
 
       app = moduleFixture.createNestApplication();
-      app.useGlobalPipes(
-        new ValidationPipe({
-          whitelist: true,
-          forbidNonWhitelisted: true,
-          transform: true,
-        }),
-      );
+      app.useGlobalPipes(createGlobalValidationPipe());
       app.useGlobalFilters(new AuthExceptionFilter());
       await app.init();
       await app.listen(0);

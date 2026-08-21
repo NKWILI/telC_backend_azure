@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AuthExceptionFilter } from './shared/filters/auth-exception.filter';
+import { createGlobalValidationPipe } from './shared/pipes/global-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -18,13 +18,7 @@ async function bootstrap() {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/static' });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  app.useGlobalPipes(createGlobalValidationPipe());
   app.useGlobalFilters(new AuthExceptionFilter());
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS

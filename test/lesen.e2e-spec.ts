@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import {
   INestApplication,
   UnauthorizedException,
-  ValidationPipe,
 } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -11,6 +10,7 @@ import { LesenService } from '../src/modules/lesen/lesen.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
+import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 const defaultPayload: AccessTokenPayload = {
   type: 'access',
@@ -65,13 +65,7 @@ describe('LesenController (e2e)', () => {
     // represent production: transform: true coerces query params before any
     // param-level pipe runs, which is exactly how an earlier version of this
     // suite asserted 400 for ?modelltest=abc while production returned 200.
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+    app.useGlobalPipes(createGlobalValidationPipe());
     app.useGlobalFilters(new AuthExceptionFilter());
     await app.init();
   });

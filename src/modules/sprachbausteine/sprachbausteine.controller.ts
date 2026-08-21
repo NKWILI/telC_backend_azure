@@ -4,10 +4,9 @@ import {
   Post,
   Body,
   Query,
-  ParseIntPipe,
-  DefaultValuePipe,
   UseGuards,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
@@ -22,6 +21,9 @@ import { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
 import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
 import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
+/** Served when the caller omits ?modelltest= — keeps existing clients working. */
+const DEFAULT_MODELLTEST = 1;
+
 @UseGuards(JwtAuthGuard)
 @ApiTags('Sprachbausteine')
 @Controller('api/sprachbausteine')
@@ -34,9 +36,28 @@ export class SprachbausteineController {
   @ApiQuery({ name: 'modelltest', required: false, schema: { type: 'integer', default: 1 }, example: 1 })
   @ApiOkResponse({ type: SprachbausteineExerciseResponseDto })
   getExercise(
-    @Query('modelltest', new DefaultValuePipe(1), ParseIntPipe) modelltest: number,
+    // Declared as string on purpose. The global ValidationPipe in main.ts runs
+    // with transform: true, so a `number` param has 'abc' coerced to NaN before
+    // any parameter pipe sees it — DefaultValuePipe then substitutes 1 and the
+    // caller silently receives Modelltest 1 instead of an error. Parsing the
+    // raw string here keeps malformed input a 400. Same approach as
+    // lesen.controller.ts and writing.controller.ts:69.
+    @Query('modelltest') modelltest?: string,
   ): Promise<SprachbausteineExerciseResponseDto> {
-    return this.sprachbausteineService.getExercise(modelltest);
+    if (modelltest === undefined || modelltest === '') {
+      return this.sprachbausteineService.getExercise(DEFAULT_MODELLTEST);
+    }
+
+    if (!/^\d+$/.test(modelltest)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'modelltest query param must be a positive integer',
+        messageKey: 'sprachbausteineInvalidModelltest',
+      });
+    }
+
+    return this.sprachbausteineService.getExercise(Number(modelltest));
   }
 
   @Get('sessions')
