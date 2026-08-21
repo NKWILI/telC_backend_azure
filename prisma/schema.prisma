@@ -168,6 +168,12 @@ model ListeningAttempt {
   created_at       DateTime  @default(now())
   completed_at     DateTime?
 
+  // Column only, no relation — matches WritingAttempt and SprachbausteineAttempt.
+  // Nullable on purpose: Hoeren content is not yet in the database, so an
+  // attempt whose content_revision names no Modelltest (e.g. the historic
+  // mock-horen-* rows) genuinely belongs to no exam.
+  modelltest_id String? @db.Uuid
+
   @@map("listening_attempts")
 }
 
@@ -491,10 +497,14 @@ model LesenTeil3Situation {
 }
 
 model Modelltest {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  number     Int      @unique
-  title      String
-  created_at DateTime @default(now())
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  number Int    @unique
+  title  String
+
+  // timestamptz(6), not Prisma's default timestamp(3): this table was created
+  // by a hand-written SQL migration (007) that used TIMESTAMPTZ. Declared here
+  // so the schema describes the database rather than drifting from it.
+  created_at DateTime @default(now()) @db.Timestamptz(6)
 
   sprachbausteineExercises      SprachbausteineExercise[]
   sprachbausteineTeil2Exercises SprachbausteineTeil2Exercise[]
@@ -515,9 +525,10 @@ model WritingExercise {
   intro             String?
   stimulus          Json?
   task_instructions String
-  bullet_points     String[]
+  bullet_points     String[]    @default([])
   closing_reminder  String?
-  created_at        DateTime    @default(now())
+  // See Modelltest.created_at — same hand-written-migration origin.
+  created_at        DateTime    @default(now()) @db.Timestamptz(6)
 
   modelltest_id String     @db.Uuid
   modelltest    Modelltest @relation(fields: [modelltest_id], references: [id])

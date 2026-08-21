@@ -26,6 +26,9 @@ describe('ListeningService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
     },
+    modelltest: {
+      findUnique: jest.fn(),
+    },
   };
 
   beforeEach(async () => {
@@ -296,6 +299,69 @@ describe('ListeningService', () => {
       });
 
       expect(result.answerKey).toEqual(TEIL1_CORRECT_ANSWERS);
+    });
+
+    it('attributes the attempt to the Modelltest named in content_revision', async () => {
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
+      mockPrismaService.modelltest.findUnique.mockResolvedValue({
+        id: 'mt-1-uuid',
+      });
+
+      await service.submit('student-1', {
+        type: '1',
+        timed: false,
+        content_revision: TEIL1_REVISION,
+        answers: TEIL1_CORRECT_ANSWERS,
+      });
+
+      expect(mockPrismaService.modelltest.findUnique).toHaveBeenCalledWith({
+        where: { number: 1 },
+        select: { id: true },
+      });
+      expect(
+        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
+          .modelltest_id,
+      ).toBe('mt-1-uuid');
+    });
+
+    it('leaves the attempt unattributed when the Modelltest row does not exist', async () => {
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
+      mockPrismaService.modelltest.findUnique.mockResolvedValue(null);
+
+      await service.submit('student-1', {
+        type: '1',
+        timed: false,
+        content_revision: TEIL1_REVISION,
+        answers: TEIL1_CORRECT_ANSWERS,
+      });
+
+      expect(
+        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
+          .modelltest_id,
+      ).toBeNull();
+    });
+
+    it('still records the attempt when the Modelltest lookup fails', async () => {
+      // Attribution is metadata. Losing a student's result because a lookup
+      // errored would be a far worse failure than an unattributed row.
+      mockPrismaService.listeningAttempt.create.mockResolvedValue({});
+      mockPrismaService.modelltest.findUnique.mockRejectedValue(
+        new Error('db unavailable'),
+      );
+
+      const result = await service.submit('student-1', {
+        type: '1',
+        timed: false,
+        content_revision: TEIL1_REVISION,
+        answers: TEIL1_CORRECT_ANSWERS,
+      });
+
+      expect(result.answerKey).toBeDefined();
+      expect(mockPrismaService.listeningAttempt.create).toHaveBeenCalled();
+      expect(
+        mockPrismaService.listeningAttempt.create.mock.calls[0][0].data
+          .modelltest_id,
+      ).toBeNull();
     });
 
     it('DB insert receives the computed score even though it is not returned', async () => {
