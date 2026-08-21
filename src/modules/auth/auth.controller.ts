@@ -97,9 +97,20 @@ export class AuthController {
     type: AuthErrorResponseDto,
     description: 'Invalid request body.',
   })
+  @ApiTooManyRequestsResponse({
+    description:
+      'Too many registration attempts for this address or from this IP (RATE_LIMIT_EXCEEDED). ' +
+      'Default: 5 per address per hour, 20 per IP per hour.',
+  })
   async register(
+    @Ip() ip: string,
     @Body() dto: RegisterRequestDto,
   ): Promise<{ message: string }> {
+    // Before the service, not after. Registering an address that already has an
+    // unverified account rotates its verification token, killing the link
+    // already sitting in the real owner's inbox — so the write is the thing
+    // being abused and must not happen on a rejected request.
+    await this.rateLimitService.checkRegisterLimit(ip || 'unknown', dto.email);
     return this.authService.register(dto);
   }
 

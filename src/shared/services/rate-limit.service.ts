@@ -30,6 +30,10 @@ export class RateLimitService {
   private readonly guestSessionWindowSeconds: number;
   private readonly writingGuestSubmitMaxAttempts: number;
   private readonly writingGuestSubmitWindowSeconds: number;
+  private readonly registerIpMaxAttempts: number;
+  private readonly registerIpWindowSeconds: number;
+  private readonly registerEmailMaxAttempts: number;
+  private readonly registerEmailWindowSeconds: number;
 
   constructor(@Optional() private readonly valkeyService?: ValkeyService) {
     this.cache = new NodeCache();
@@ -123,6 +127,29 @@ export class RateLimitService {
       10,
     );
     this.writingGuestSubmitWindowSeconds = writingGuestSubmitWindowMinutes * 60;
+
+    // Deliberately looser than the per-email cap. A class of students signing
+    // up together share one NAT address, so a tight IP cap would lock out
+    // legitimate users. The per-email bucket does the security work.
+    this.registerIpMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_REGISTER_IP_MAX_ATTEMPTS || '20',
+      10,
+    );
+    const registerIpWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_REGISTER_IP_WINDOW_MINUTES || '60',
+      10,
+    );
+    this.registerIpWindowSeconds = registerIpWindowMinutes * 60;
+
+    this.registerEmailMaxAttempts = parseInt(
+      process.env.RATE_LIMIT_REGISTER_EMAIL_MAX_ATTEMPTS || '5',
+      10,
+    );
+    const registerEmailWindowMinutes = parseInt(
+      process.env.RATE_LIMIT_REGISTER_EMAIL_WINDOW_MINUTES || '60',
+      10,
+    );
+    this.registerEmailWindowSeconds = registerEmailWindowMinutes * 60;
   }
 
   /**
@@ -289,6 +316,38 @@ export class RateLimitService {
         key: `ratelimit:guest:session:${ip}`,
         max: this.guestSessionMaxAttempts,
         ttlSeconds: this.guestSessionWindowSeconds,
+      },
+    ]);
+  }
+
+  /**
+   * Rate limit for POST /api/auth/register. Throws 429 when exceeded.
+   *
+   * The per-email cap is the one that matters. Registering an address that
+   * already has an unverified account overwrites its verification token, so
+   * without a cap anyone who knows the address can loop on it: the real
+   * owner's link dies before they can click it and they can never finish
+   * signing up. The 2-minute resend cooldown throttles the rate but places no
+   * ceiling on the total, so the loop can run indefinitely.
+   *
+   * Per-IP is the looser anti-bulk cap. Both buckets are asserted before
+   * either is incremented, so a rejected request costs nothing on the other.
+   *
+   * Neither bucket depends on whether an account exists, so a 429 reveals
+   * nothing an attacker could use to enumerate accounts — the endpoint's
+   * generic response stays generic.
+   */
+  checkRegisterLimit(ipKey: string, emailKey: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:auth:register:email:${emailKey.trim().toLowerCase()}`,
+        max: this.registerEmailMaxAttempts,
+        ttlSeconds: this.registerEmailWindowSeconds,
+      },
+      {
+        key: `ratelimit:auth:register:ip:${ipKey}`,
+        max: this.registerIpMaxAttempts,
+        ttlSeconds: this.registerIpWindowSeconds,
       },
     ]);
   }

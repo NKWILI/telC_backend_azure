@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   BadRequestException,
   UnauthorizedException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -104,6 +106,7 @@ describe('AuthController (e2e)', () => {
     checkResetPasswordLimit: jest.fn().mockResolvedValue(undefined),
     checkVerifyEmailPublicLimit: jest.fn().mockResolvedValue(undefined),
     checkGuestSessionLimit: jest.fn().mockResolvedValue(undefined),
+    checkRegisterLimit: jest.fn().mockResolvedValue(undefined),
   };
 
   const guard = {
@@ -177,6 +180,26 @@ describe('AuthController (e2e)', () => {
     );
     app.useGlobalFilters(new AuthExceptionFilter());
     await app.init();
+  });
+
+  it('POST /api/auth/register surfaces the rate limit as HTTP 429', async () => {
+    rateLimitService.checkRegisterLimit.mockRejectedValueOnce(
+      new HttpException('RATE_LIMIT_EXCEEDED', HttpStatus.TOO_MANY_REQUESTS),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/register')
+      .send({
+        firstName: 'Anna',
+        lastName: 'Beck',
+        email: 'anna@example.com',
+        password: 'password123',
+      })
+      .expect(429);
+
+    // The write must not happen on a rejected request — rotating the
+    // verification token is the abuse this limit exists to stop.
+    expect(authService.register).not.toHaveBeenCalled();
   });
 
   it('POST /api/auth/register returns generic success for a new email', async () => {
