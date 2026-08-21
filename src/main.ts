@@ -9,8 +9,8 @@ import { AuthExceptionFilter } from './shared/filters/auth-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // Azure App Service (and most PaaS) puts this container behind a single
-  // reverse proxy. Without this, Express req.ip — and therefore every @Ip()
+  // DigitalOcean App Platform (like most PaaS) puts this container behind a
+  // single reverse proxy. Without this, Express req.ip — and every @Ip()
   // rate limiter — resolves to the proxy's address, identical for all clients,
   // collapsing per-IP limits into one shared global bucket. Trust exactly one
   // hop so req.ip reads the real client from X-Forwarded-For. Use 1 (not true)
