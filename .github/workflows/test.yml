@@ -1,0 +1,69 @@
+# Test gate only. This workflow does NOT deploy.
+#
+# DigitalOcean App Platform deploys on its own when main changes; the previous
+# workflow was deleted deliberately along with that responsibility. What went
+# with it, unintentionally, was the build-and-test gate — so a commit that does
+# not compile can reach production with nothing objecting.
+#
+# This restores only the gate. It holds no cloud credentials and cannot deploy.
+#
+# Note it cannot *block* the DigitalOcean deploy: both react to the same push
+# independently. A red run here is a signal to revert, not a barrier. Making it
+# a real barrier means moving deploys behind this workflow, which is a larger
+# decision than restoring the gate.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    env:
+      # Dummy values only. Several providers call ConfigService.getOrThrow in
+      # their constructors, so AppModule cannot instantiate without them — and
+      # test/app.e2e-spec.ts imports the whole module. Nothing here reaches a
+      # real service: no test makes an outbound call, and the Prisma pool is
+      # constructed lazily so no database connection is opened.
+      RESEND_API_KEY: ci-dummy-resend-key
+      GOOGLE_CLIENT_ID: ci-dummy-google-client-id
+      EMAIL_FROM: ci@example.invalid
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      # GeminiService throws from onModuleInit without this, which fails
+      # app.e2e-spec.ts at module boot. Verified by running the suites
+      # locally with .env removed and only these variables set.
+      GEMINI_API_KEY: ci-dummy-gemini-key
+      # JWT secrets are supplied by test/jest-e2e-setup.ts, which pads them to
+      # the length AppModule's validation requires. Left unset on purpose so
+      # that fallback stays exercised.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        # Required before both build and tests — ts-jest type-checks against the
+        # generated client, so this cannot be folded into the build step alone.
+        run: npx prisma generate
+
+      - name: Build
+        run: npx nest build
+
+      - name: Unit tests
+        run: npx jest --ci
+
+      - name: End-to-end tests
+        run: npx jest --ci --config ./test/jest-e2e.json
