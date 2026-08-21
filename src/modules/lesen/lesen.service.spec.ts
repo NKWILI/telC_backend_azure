@@ -319,7 +319,11 @@ const mockTeil3Exercise = {
   ],
 };
 
+const MODELLTEST_1_ID = '11111111-1111-1111-1111-111111111111';
+const MODELLTEST_2_ID = '22222222-2222-2222-2222-222222222222';
+
 const mockPrisma = {
+  modelltest: { findUnique: jest.fn() },
   lesenTeil1Exercise: { findFirst: jest.fn() },
   lesenTeil2Exercise: { findFirst: jest.fn() },
   lesenTeil3Exercise: { findFirst: jest.fn() },
@@ -333,13 +337,104 @@ describe('LesenService', () => {
     service = new LesenService(mockPrisma as any);
   });
 
+  describe('getExercise', () => {
+    it('scopes every Teil query to the requested Modelltest', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue({
+        id: MODELLTEST_2_ID,
+        number: 2,
+        title: 'Modelltest 2',
+      });
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(
+        mockTeil1Exercise,
+      );
+      mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(mockExercise);
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(
+        mockTeil3Exercise,
+      );
+
+      await service.getExercise(2);
+
+      expect(mockPrisma.modelltest.findUnique).toHaveBeenCalledWith({
+        where: { number: 2 },
+      });
+
+      // The regression guard: without a where clause on modelltest_id, a
+      // second Modelltest's rows can be served in place of the requested one.
+      // The orderBy matters too — it keeps the pick deterministic if one
+      // Modelltest ever has two rows for the same Teil.
+      for (const table of [
+        mockPrisma.lesenTeil1Exercise,
+        mockPrisma.lesenTeil2Exercise,
+        mockPrisma.lesenTeil3Exercise,
+      ]) {
+        expect(table.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { modelltest_id: MODELLTEST_2_ID },
+            orderBy: { createdAt: 'asc' },
+          }),
+        );
+      }
+    });
+
+    it('defaults to Modelltest 1 when no number is given', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue({
+        id: MODELLTEST_1_ID,
+        number: 1,
+        title: 'Modelltest 1',
+      });
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(
+        mockTeil1Exercise,
+      );
+      mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(mockExercise);
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(
+        mockTeil3Exercise,
+      );
+
+      await service.getExercise();
+
+      expect(mockPrisma.modelltest.findUnique).toHaveBeenCalledWith({
+        where: { number: 1 },
+      });
+    });
+
+    it('assembles the full response from all three Teils', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue({
+        id: MODELLTEST_1_ID,
+        number: 1,
+        title: 'Modelltest 1',
+      });
+      mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(
+        mockTeil1Exercise,
+      );
+      mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(mockExercise);
+      mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(
+        mockTeil3Exercise,
+      );
+
+      const result = await service.getExercise(1);
+
+      expect(result.contentRevision).toBe('modelltest-1-lesen-teil2-v1');
+      expect(typeof result.issuedAt).toBe('string');
+      expect(result.teil1.texts).toHaveLength(5);
+      expect(result.teil2.questions).toHaveLength(5);
+      expect(result.teil3.situations).toHaveLength(10);
+    });
+
+    it('throws NotFoundException when the Modelltest does not exist', async () => {
+      mockPrisma.modelltest.findUnique.mockResolvedValue(null);
+
+      await expect(service.getExercise(99)).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.lesenTeil1Exercise.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getTeil1Exercise', () => {
     it('returns correct shape — 5 texts, 10 titles, correctMatches map, no correctTitleId on texts', async () => {
       mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(
         mockTeil1Exercise,
       );
 
-      const result = await (service as any).getTeil1Exercise();
+      const result = await service.getTeil1Exercise(MODELLTEST_1_ID);
 
       expect(result.texts).toHaveLength(5);
       expect(result.titles).toHaveLength(10);
@@ -363,7 +458,7 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil1Exercise.findFirst.mockResolvedValue(null);
 
-      await expect((service as any).getTeil1Exercise()).rejects.toThrow(
+      await expect(service.getTeil1Exercise(MODELLTEST_1_ID)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -373,7 +468,7 @@ describe('LesenService', () => {
     it('returns correct DTO shape — 5 questions, derived IDs, correctOptionId', async () => {
       mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(mockExercise);
 
-      const result = await service.getTeil2Exercise();
+      const result = await service.getTeil2Exercise(MODELLTEST_1_ID);
 
       expect(result.contentRevision).toBe('modelltest-1-lesen-teil2-v1');
       expect(typeof result.issuedAt).toBe('string');
@@ -400,7 +495,7 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil2Exercise.findFirst.mockResolvedValue(null);
 
-      await expect(service.getTeil2Exercise()).rejects.toThrow(
+      await expect(service.getTeil2Exercise(MODELLTEST_1_ID)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -427,7 +522,7 @@ describe('LesenService', () => {
         mockTeil3Exercise,
       );
 
-      const result = await (service as any).getTeil3Exercise();
+      const result = await service.getTeil3Exercise(MODELLTEST_1_ID);
 
       expect(result.situations).toHaveLength(10);
       expect(result.announcements).toHaveLength(12);
@@ -446,7 +541,7 @@ describe('LesenService', () => {
         mockTeil3Exercise,
       );
 
-      const result = await (service as any).getTeil3Exercise();
+      const result = await service.getTeil3Exercise(MODELLTEST_1_ID);
 
       expect(result.correctMatches['15']).toBe('X');
       expect(result.correctMatches['11']).toBe('j');
@@ -463,7 +558,7 @@ describe('LesenService', () => {
     it('throws NotFoundException when no exercise exists', async () => {
       mockPrisma.lesenTeil3Exercise.findFirst.mockResolvedValue(null);
 
-      await expect((service as any).getTeil3Exercise()).rejects.toThrow(
+      await expect(service.getTeil3Exercise(MODELLTEST_1_ID)).rejects.toThrow(
         NotFoundException,
       );
     });
