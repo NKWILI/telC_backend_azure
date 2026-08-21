@@ -19,7 +19,90 @@ describe('RateLimitService', () => {
     delete process.env.RATE_LIMIT_GUEST_SESSION_WINDOW_MINUTES;
     delete process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_MAX_ATTEMPTS;
     delete process.env.RATE_LIMIT_WRITING_GUEST_SUBMIT_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_REGISTER_IP_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_REGISTER_IP_WINDOW_MINUTES;
+    delete process.env.RATE_LIMIT_REGISTER_EMAIL_MAX_ATTEMPTS;
+    delete process.env.RATE_LIMIT_REGISTER_EMAIL_WINDOW_MINUTES;
     service = new RateLimitService();
+  });
+
+  describe('checkRegisterLimit', () => {
+    // The per-email bucket is the security-critical one. Without it, anyone who
+    // knows an address with an unverified account can re-register it on a loop:
+    // each attempt overwrites the verification token, so the real owner's link
+    // in their inbox dies before they can click it and they can never complete
+    // signup. The per-IP bucket is the looser anti-bulk-abuse cap.
+
+    it('allows 5 attempts for the same email (per-email cap)', () => {
+      for (let i = 0; i < 5; i++) {
+        expect(() =>
+          service.checkRegisterLimit('1.2.3.4', 'anna@example.com'),
+        ).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 6th attempt for the same email', () => {
+      for (let i = 0; i < 5; i++) {
+        service.checkRegisterLimit('1.2.3.4', 'anna@example.com');
+      }
+
+      try {
+        service.checkRegisterLimit('1.2.3.4', 'anna@example.com');
+        fail('expected HttpException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+        expect((err as HttpException).message).toBe('RATE_LIMIT_EXCEEDED');
+      }
+    });
+
+    it('caps a single email even when the attacker rotates IP addresses', () => {
+      for (let i = 0; i < 5; i++) {
+        service.checkRegisterLimit(`10.0.0.${i}`, 'anna@example.com');
+      }
+
+      expect(() =>
+        service.checkRegisterLimit('10.0.0.99', 'anna@example.com'),
+      ).toThrow(HttpException);
+    });
+
+    it('allows 20 attempts from one IP with different emails (classroom signup)', () => {
+      for (let i = 0; i < 20; i++) {
+        expect(() =>
+          service.checkRegisterLimit('1.2.3.4', `student${i}@example.com`),
+        ).not.toThrow();
+      }
+    });
+
+    it('throws 429 on the 21st attempt from one IP even with a fresh email', () => {
+      for (let i = 0; i < 20; i++) {
+        service.checkRegisterLimit('1.2.3.4', `student${i}@example.com`);
+      }
+
+      expect(() =>
+        service.checkRegisterLimit('1.2.3.4', 'fresh@example.com'),
+      ).toThrow(HttpException);
+    });
+
+    it('does not leak account existence — the email bucket is per-address, not per-account', () => {
+      // Both addresses are unknown to this service; limits behave identically,
+      // so a 429 says nothing about whether an account exists.
+      for (let i = 0; i < 5; i++) {
+        service.checkRegisterLimit('1.2.3.4', 'exists@example.com');
+      }
+      for (let i = 0; i < 5; i++) {
+        service.checkRegisterLimit('5.6.7.8', 'nobody@example.com');
+      }
+
+      expect(() =>
+        service.checkRegisterLimit('1.2.3.4', 'exists@example.com'),
+      ).toThrow(HttpException);
+      expect(() =>
+        service.checkRegisterLimit('5.6.7.8', 'nobody@example.com'),
+      ).toThrow(HttpException);
+    });
   });
 
   describe('checkGuestSessionLimit', () => {

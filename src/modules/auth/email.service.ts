@@ -27,6 +27,47 @@ export class EmailService {
     });
   }
 
+  /**
+   * Sent when someone registers with an address that already has an
+   * unverified account.
+   *
+   * The HTTP response to `POST /auth/register` is deliberately identical for
+   * new and existing addresses so it cannot be used to enumerate accounts.
+   * That leaves a returning user with no explanation, which is what this email
+   * is for — only the inbox owner sees it, so it can say more than the API can.
+   *
+   * It must not imply the password was changed. The stored credentials are
+   * deliberately left untouched on this path (see `AuthService.register`), so
+   * a user who no longer remembers their password is pointed at password reset
+   * rather than being silently locked out.
+   */
+  async sendExistingAccountVerificationEmail(
+    to: string,
+    rawToken: string,
+  ): Promise<void> {
+    const vitrineUrl =
+      this.config.get<string>('VITRINE_URL') ||
+      this.config.getOrThrow<string>('FRONTEND_URL');
+    const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
+    const verificationLink = `${vitrineUrl}/verify-email?token=${rawToken}`;
+
+    await this.resend.emails.send({
+      from: emailFrom,
+      to,
+      subject: 'Finish setting up your account',
+      html:
+        `<p>You already started creating an account with this email address, ` +
+        `but it has not been verified yet.</p>` +
+        `<p>Verify it here:</p>` +
+        `<p><a href="${verificationLink}">${verificationLink}</a></p>` +
+        `<p>Your password has not been changed. If you no longer remember the ` +
+        `password you chose, verify your address first, then use ` +
+        `&quot;Forgot password&quot; in the app to set a new one.</p>` +
+        `<p>If you did not try to create an account, you can ignore this email. ` +
+        `Nothing has changed.</p>`,
+    });
+  }
+
   async sendPasswordResetEmail(to: string, rawCode: string): Promise<void> {
     const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
     const logo = readFileSync(
