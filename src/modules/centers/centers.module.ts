@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { CenterAuthController } from './center-auth.controller';
 import { CenterAuthService } from './center-auth.service';
 import { CenterExceptionFilter } from './center-exception.filter';
 import { CentersController } from './centers.controller';
@@ -7,7 +8,7 @@ import { CentersService } from './centers.service';
 
 @Module({
   imports: [AuthModule],
-  controllers: [CentersController],
+  controllers: [CentersController, CenterAuthController],
   providers: [CentersService, CenterAuthService, CenterExceptionFilter],
   exports: [CentersService],
 })

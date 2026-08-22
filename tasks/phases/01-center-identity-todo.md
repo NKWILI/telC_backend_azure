@@ -61,11 +61,11 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 7: Verify and login endpoints
 
-- [ ] Write controller contract tests first
-- [ ] Add typed DTOs and endpoints
-- [ ] Add rate limiting and Swagger responses
-- [ ] Verify generic credential and unverified-email behavior
-- [ ] Commit the green increment
+- [x] Write controller contract tests first
+- [x] Add typed DTOs and endpoints
+- [x] Add rate limiting and Swagger responses
+- [x] Verify generic credential and unverified-email behavior
+- [x] Commit the green increment
 
 ## Task 8: Refresh and logout
 
