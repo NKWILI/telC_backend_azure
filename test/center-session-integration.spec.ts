@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 /**
  * Everything the center session design rests on is a claim about Postgres:
  * that Serializable raises a retryable conflict, that `updateMany` with an
@@ -14,6 +15,7 @@ import { CenterAuthService } from '../src/modules/centers/center-auth.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { TokenCryptoService } from '../src/modules/auth/token-crypto.service';
+import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 
 const prisma = new PrismaService();
 const tokenService = new TokenService();
@@ -197,6 +199,44 @@ describe('center sessions against real Postgres', () => {
       where: { name: 'Race Center' },
     });
     expect(centerRows).toHaveLength(1);
+  });
+
+  /**
+   * The item Task 8 could not close: until a guard existed, logout revoked a
+   * row that nothing read, so the access token kept working until expiry.
+   * This walks login -> guarded request -> logout -> guarded request.
+   */
+  it('stops a protected request the moment its session is logged out', async () => {
+    const owner = await createVerifiedOwner('logout-guard');
+    const { accessToken, refreshToken } = await centerAuth.login({
+      email: owner.email,
+      password: PASSWORD,
+      deviceId: 'device-guard',
+    });
+
+    // No Valkey here, so isSessionRevoked answers null and the guard must fall
+    // through to the database — the path that has to hold when cache is down.
+    const guard = new CenterAuthGuard(
+      tokenService,
+      { isSessionRevoked: async () => null } as never,
+      prisma,
+    );
+    const contextFor = (token: string) =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({ headers: { authorization: `Bearer ${token}` } }),
+        }),
+      }) as never;
+
+    await expect(guard.canActivate(contextFor(accessToken))).resolves.toBe(
+      true,
+    );
+
+    await centerAuth.logout({ refreshToken });
+
+    await expect(guard.canActivate(contextFor(accessToken))).rejects.toThrow(
+      'CENTER_SESSION_REVOKED',
+    );
   });
 
   it('makes a revoked session invisible to the active-session predicate', async () => {
