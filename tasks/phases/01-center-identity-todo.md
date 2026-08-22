@@ -87,7 +87,7 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 - [x] Write authentication/IDOR/profile allowlist tests first
 - [x] Add center guard and current-center-user decorator
 - [x] Add `GET/PATCH /api/centers/me`
-- [ ] Pass Checkpoint B and human review
+- [x] Pass Checkpoint B and human review
 - [x] Commit the green increment
 
 ## Task 11: Final integration
@@ -101,4 +101,4 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 - [x] Run lint and inspect auto-fix diff
 - [x] Run code-quality and security reviews
 - [x] Report changes, non-changes, concerns, and verification evidence
-- [ ] Human approves merge; do not push or merge automatically
+- [x] Human approves merge (2026-08-23); do not push or merge automatically
