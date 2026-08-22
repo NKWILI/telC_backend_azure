@@ -99,6 +99,6 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 - [x] Run full e2e suite
 - [x] Run production build
 - [x] Run lint and inspect auto-fix diff
-- [ ] Run code-quality and security reviews
-- [ ] Report changes, non-changes, concerns, and verification evidence
+- [x] Run code-quality and security reviews
+- [x] Report changes, non-changes, concerns, and verification evidence
 - [ ] Human approves merge; do not push or merge automatically
