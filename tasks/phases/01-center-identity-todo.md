@@ -48,16 +48,16 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 - [x] Write HTTP contract and rate-limit tests first
 - [x] Add registration DTO, controller, error contract, and module
 - [x] Reject invalid/extra input and preserve generic responses
-- [ ] Pass Checkpoint A and human review
+- [x] Pass Checkpoint A and human review
 - [x] Commit the green increment
 
 ## Task 6: Authentication/session service
 
-- [ ] Write verification/login/session tests first
-- [ ] Implement verification, login, token issuance, and three-device policy
-- [ ] Implement atomic center refresh-hash rotation and revocation primitives
-- [ ] Confirm no student table/session mutation
-- [ ] Commit the green increment
+- [x] Write verification/login/session tests first
+- [x] Implement verification, login, token issuance, and three-device policy
+- [x] Implement atomic center refresh-hash rotation and revocation primitives
+- [x] Confirm no student table/session mutation
+- [x] Commit the green increment
 
 ## Task 7: Verify and login endpoints
 
