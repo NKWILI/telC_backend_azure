@@ -1,5 +1,6 @@
 import { Body, Controller, Ip, Post, UseFilters } from '@nestjs/common';
 import {
+  ApiBadGatewayResponse,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/swagger';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { CenterAuthService } from './center-auth.service';
+import { CentersService } from './centers.service';
 import { CenterExceptionFilter } from './center-exception.filter';
 import {
   CenterLoginDto,
@@ -24,15 +26,40 @@ import {
   CenterTokenPairDto,
 } from './dto/center-auth-response.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
+import { RegisterCenterDto } from './dto/register-center.dto';
 
 @ApiTags('Center Authentication')
 @Controller('api/center-auth')
 @UseFilters(CenterExceptionFilter)
 export class CenterAuthController {
   constructor(
+    private readonly centersService: CentersService,
     private readonly centerAuthService: CenterAuthService,
     private readonly rateLimitService: RateLimitService,
   ) {}
+
+  @Post('register')
+  @ApiOperation({
+    summary: 'Register a language center and its owner',
+    description:
+      'Creates an unverified center account and sends a verification email. The response is identical when the email already exists.',
+  })
+  @ApiCreatedResponse({
+    schema: { example: { message: 'verification email sent' } },
+  })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiTooManyRequestsResponse({ type: CenterErrorResponseDto })
+  @ApiBadGatewayResponse({ type: CenterErrorResponseDto })
+  async register(
+    @Ip() ip: string,
+    @Body() dto: RegisterCenterDto,
+  ): Promise<{ message: 'verification email sent' }> {
+    await this.rateLimitService.checkCenterRegisterLimit(
+      ip || 'unknown',
+      dto.email,
+    );
+    return this.centersService.register(dto);
+  }
 
   @Post('verify-email')
   @ApiOperation({

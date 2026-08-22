@@ -8,12 +8,13 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { CentersController } from '../src/modules/centers/centers.controller';
+import { CenterAuthController } from '../src/modules/centers/center-auth.controller';
+import { CenterAuthService } from '../src/modules/centers/center-auth.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
-describe('CentersController registration contract', () => {
+describe('Center registration contract', () => {
   let app: INestApplication<App>;
   let centersService: { register: jest.Mock };
   let rateLimitService: { checkCenterRegisterLimit: jest.Mock };
@@ -41,9 +42,10 @@ describe('CentersController registration contract', () => {
     };
 
     const module = await Test.createTestingModule({
-      controllers: [CentersController],
+      controllers: [CenterAuthController],
       providers: [
         { provide: CentersService, useValue: centersService },
+        { provide: CenterAuthService, useValue: {} },
         { provide: RateLimitService, useValue: rateLimitService },
       ],
     }).compile();
@@ -60,7 +62,7 @@ describe('CentersController registration contract', () => {
 
   it('registers a center with normalized input and a generic 201 response', async () => {
     await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send(validBody)
       .expect(201)
       .expect({ message: 'verification email sent' });
@@ -86,7 +88,7 @@ describe('CentersController registration contract', () => {
     Reflect.deleteProperty(body, 'logoUrl');
 
     await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send(body)
       .expect(201);
 
@@ -97,7 +99,7 @@ describe('CentersController registration contract', () => {
 
   it('rejects a non-HTTPS center logo before reaching the service', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send({ ...validBody, logoUrl: 'http://cdn.example.com/center.webp' })
       .expect(400);
 
@@ -107,7 +109,7 @@ describe('CentersController registration contract', () => {
 
   it('rejects unknown fields such as client-supplied partnership state', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send({ ...validBody, isSpecialPartner: true })
       .expect(400);
 
@@ -117,7 +119,7 @@ describe('CentersController registration contract', () => {
 
   it('rejects passwords longer than 72 UTF-8 bytes', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send({ ...validBody, password: 'é'.repeat(40) })
       .expect(400);
 
@@ -127,7 +129,7 @@ describe('CentersController registration contract', () => {
 
   it('rejects missing required fields with the center error contract', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send({ email: 'manager@example.com' })
       .expect(400);
 
@@ -146,7 +148,7 @@ describe('CentersController registration contract', () => {
     );
 
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send(validBody)
       .expect(429);
 
@@ -161,7 +163,7 @@ describe('CentersController registration contract', () => {
     centersService.register.mockRejectedValue(new Error('database offline'));
 
     const response = await request(app.getHttpServer())
-      .post('/api/centers/register')
+      .post('/api/center-auth/register')
       .send(validBody)
       .expect(500);
 

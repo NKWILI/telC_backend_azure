@@ -13,6 +13,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterAuthController } from '../src/modules/centers/center-auth.controller';
 import { CenterAuthService } from '../src/modules/centers/center-auth.service';
+import { CentersService } from '../src/modules/centers/centers.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
@@ -80,6 +81,7 @@ describe('CenterAuthController contract', () => {
       controllers: [CenterAuthController],
       providers: [
         { provide: CenterAuthService, useValue: centerAuthService },
+        { provide: CentersService, useValue: { register: jest.fn() } },
         { provide: RateLimitService, useValue: rateLimitService },
       ],
     }).compile();
