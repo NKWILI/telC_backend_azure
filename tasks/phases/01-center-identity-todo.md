@@ -93,12 +93,12 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 ## Task 11: Final integration
 
 - [x] Wire `CentersModule` into `AppModule`
-- [ ] Add critical center identity e2e flow
-- [ ] Update Swagger/API documentation
-- [ ] Run full unit suite
-- [ ] Run full e2e suite
-- [ ] Run production build
-- [ ] Run lint and inspect auto-fix diff
+- [x] Add critical center identity e2e flow
+- [x] Update Swagger/API documentation
+- [x] Run full unit suite
+- [x] Run full e2e suite
+- [x] Run production build
+- [x] Run lint and inspect auto-fix diff
 - [ ] Run code-quality and security reviews
 - [ ] Report changes, non-changes, concerns, and verification evidence
 - [ ] Human approves merge; do not push or merge automatically
