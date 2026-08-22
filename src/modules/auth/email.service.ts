@@ -68,6 +68,84 @@ export class EmailService {
     });
   }
 
+  async sendCenterVerificationEmail(
+    to: string,
+    rawToken: string,
+  ): Promise<void> {
+    const vitrineUrl = this.getVitrineUrl();
+    const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
+    const verificationLink = `${vitrineUrl}/center/verify-email?token=${rawToken}`;
+
+    await this.resend.emails.send({
+      from: emailFrom,
+      to,
+      subject: 'Verify your Lerniqo center account',
+      html:
+        '<p>Welcome to Lerniqo for language centers.</p>' +
+        '<p>Verify your email address to finish creating your center account:</p>' +
+        `<p><a href="${verificationLink}">${verificationLink}</a></p>` +
+        '<p>If you did not request this account, you can ignore this email.</p>',
+    });
+  }
+
+  async sendExistingCenterVerificationEmail(
+    to: string,
+    rawToken: string,
+  ): Promise<void> {
+    const vitrineUrl = this.getVitrineUrl();
+    const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
+    const verificationLink = `${vitrineUrl}/center/verify-email?token=${rawToken}`;
+
+    await this.resend.emails.send({
+      from: emailFrom,
+      to,
+      subject: 'Finish setting up your Lerniqo center account',
+      html:
+        '<p>An unverified center account already exists for this email address.</p>' +
+        '<p>Use this new link to verify it:</p>' +
+        `<p><a href="${verificationLink}">${verificationLink}</a></p>` +
+        '<p>Your password has not been changed, and your center details have not been changed.</p>' +
+        '<p>If you did not request this, you can ignore this email.</p>',
+    });
+  }
+
+  async sendCenterPasswordResetEmail(
+    to: string,
+    rawCode: string,
+  ): Promise<void> {
+    const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
+    const subject = 'Your Lerniqo center password-reset code';
+    const text = [
+      'Reset your Lerniqo center password',
+      '',
+      `Your confirmation code: ${rawCode}`,
+      '',
+      'Enter this code in the Lerniqo center app. It is valid for 10 minutes.',
+      'If you did not request this, you can ignore this email.',
+    ].join('\n');
+    const html =
+      '<h1>Reset your center password</h1>' +
+      '<p>Enter this confirmation code in the Lerniqo center app:</p>' +
+      `<p style="font-size:32px;font-weight:700;letter-spacing:6px">${rawCode}</p>` +
+      '<p>The code is valid for 10 minutes.</p>' +
+      '<p>If you did not request this, you can ignore this email.</p>';
+
+    await this.resend.emails.send({
+      from: emailFrom,
+      to,
+      subject,
+      html,
+      text,
+    });
+  }
+
+  private getVitrineUrl(): string {
+    return (
+      this.config.get<string>('VITRINE_URL') ||
+      this.config.getOrThrow<string>('FRONTEND_URL')
+    );
+  }
+
   async sendPasswordResetEmail(to: string, rawCode: string): Promise<void> {
     const emailFrom = this.config.getOrThrow<string>('EMAIL_FROM');
     const logo = readFileSync(

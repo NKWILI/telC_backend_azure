@@ -29,11 +29,11 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 3: Center emails
 
-- [ ] Write email transport/template tests first
-- [ ] Add center verification, existing-account, and reset emails
-- [ ] Export only required auth infrastructure
-- [ ] Keep all student email tests green
-- [ ] Commit the green increment
+- [x] Write email transport/template tests first
+- [x] Add center verification, existing-account, and reset emails
+- [x] Export only required auth infrastructure
+- [x] Keep all student email tests green
+- [x] Commit the green increment
 
 ## Task 4: Registration service
 

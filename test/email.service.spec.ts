@@ -57,6 +57,65 @@ describe('EmailService', () => {
     });
   });
 
+  describe('center emails', () => {
+    const baseConfig = {
+      RESEND_API_KEY: 'key',
+      EMAIL_FROM: 'noreply@example.com',
+      FRONTEND_URL: 'https://app.example.com',
+      VITRINE_URL: 'https://www.lerniqo.example',
+    };
+
+    it('sends center verification to the center-specific route', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendCenterVerificationEmail(
+        'manager@example.com',
+        'center-token',
+      );
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.to).toBe('manager@example.com');
+      expect(arg.html).toContain(
+        'https://www.lerniqo.example/center/verify-email?token=center-token',
+      );
+      expect(arg.html).not.toContain('/verify-email?token=student');
+    });
+
+    it('explains that repeat registration did not replace center credentials', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendExistingCenterVerificationEmail(
+        'manager@example.com',
+        'replacement-token',
+      );
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.html).toContain(
+        'https://www.lerniqo.example/center/verify-email?token=replacement-token',
+      );
+      expect(arg.html).toMatch(/password has not been changed/i);
+      expect(arg.html).toMatch(/center details have not been changed/i);
+    });
+
+    it('sends the center password-reset code without a reset link', async () => {
+      const service = new EmailService(makeConfig(baseConfig));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendCenterPasswordResetEmail(
+        'manager@example.com',
+        '907314',
+      );
+
+      const arg = send.mock.calls[0][0];
+      expect(arg.to).toBe('manager@example.com');
+      expect(arg.html).toContain('907314');
+      expect(arg.text).toContain('907314');
+      expect(arg.html).not.toMatch(/reset-password\?token=/);
+    });
+  });
+
   describe('sendPasswordResetEmail', () => {
     const baseConfig = {
       RESEND_API_KEY: 'key',
