@@ -1,7 +1,22 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  InternalServerErrorException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { CenterAuthService } from '../src/modules/centers/center-auth.service';
+
+jest.mock('bcryptjs', () => {
+  const actual = jest.requireActual('bcryptjs');
+  return {
+    ...actual,
+    compare: jest.fn((value: string, hash: string) =>
+      actual.compare(value, hash),
+    ),
+  };
+});
 
 describe('CenterAuthService', () => {
   const center = {
@@ -51,6 +66,7 @@ describe('CenterAuthService', () => {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue(undefined),
       },
       centerDeviceSession: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -122,7 +138,7 @@ describe('CenterAuthService', () => {
         deviceId: 'browser-1',
         sessionId: expect.any(String),
       });
-      expect(tx.centerUser.update).toHaveBeenCalledWith({
+      expect(prisma.centerUser.update).toHaveBeenCalledWith({
         where: { id: 'owner-1' },
         data: { last_seen_at: expect.any(Date) },
       });
@@ -216,6 +232,27 @@ describe('CenterAuthService', () => {
       );
     });
 
+    it('runs bcrypt comparison for an unknown email to resist timing enumeration', async () => {
+      prisma.centerUser.findUnique.mockResolvedValue(null);
+      const compareMock = bcrypt.compare as jest.MockedFunction<
+        typeof bcrypt.compare
+      >;
+      compareMock.mockClear();
+
+      await expect(
+        service.login({
+          email: 'unknown@example.com',
+          password: 'any-password',
+          deviceId: 'browser-1',
+        }),
+      ).rejects.toThrow('INVALID_CREDENTIALS');
+
+      expect(compareMock).toHaveBeenCalledWith(
+        'any-password',
+        expect.stringMatching(/^\$2[aby]\$12\$/),
+      );
+    });
+
     it.each([
       ['unknown email', null, 'any-password'],
       ['wrong password', verifiedOwner, 'a-password-that-does-not-match'],
@@ -289,6 +326,114 @@ describe('CenterAuthService', () => {
         },
       });
       expect(tx.centerDeviceSession.count).not.toHaveBeenCalled();
+    });
+
+    it('updates last seen only after the Serializable transaction commits', async () => {
+      const events: string[] = [];
+      prisma.$transaction.mockImplementation(
+        async (callback: (client: any) => unknown) => {
+          events.push('transaction-start');
+          const result = await callback(tx);
+          events.push('transaction-committed');
+          return result;
+        },
+      );
+      tx.centerUser.update.mockImplementation(async () => {
+        events.push('last-seen-in-transaction');
+      });
+      prisma.centerUser.update.mockImplementation(async () => {
+        events.push('last-seen-after-commit');
+      });
+
+      await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      expect(events).toEqual([
+        'transaction-start',
+        'transaction-committed',
+        'last-seen-after-commit',
+      ]);
+      expect(tx.centerUser.update).not.toHaveBeenCalled();
+    });
+
+    it('retries one Serializable transaction conflict and then succeeds', async () => {
+      const conflict = Object.assign(new Error('serialization conflict'), {
+        code: 'P2034',
+      });
+      prisma.$transaction
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce(async (callback: (client: any) => unknown) =>
+          callback(tx),
+        );
+
+      await expect(
+        service.login({
+          email: 'manager@example.com',
+          password: 'correct-password',
+          deviceId: 'browser-1',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          accessToken: 'center-access-token',
+        }),
+      );
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns 503 and logs the cause when transaction retries are exhausted', async () => {
+      const conflict = Object.assign(new Error('serialization conflict'), {
+        code: 'P2034',
+      });
+      prisma.$transaction.mockRejectedValue(conflict);
+      const logSpy = jest
+        .spyOn((service as any).logger, 'error')
+        .mockImplementation(() => undefined);
+
+      const error = await service
+        .login({
+          email: 'manager@example.com',
+          password: 'correct-password',
+          deviceId: 'browser-1',
+        })
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(ServiceUnavailableException);
+      expect((error as ServiceUnavailableException).getStatus()).toBe(503);
+      expect((error as Error).message).toBe('CENTER_SESSION_RETRY_EXHAUSTED');
+      expect((error as ServiceUnavailableException).cause).toBe(conflict);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('retry attempts exhausted'),
+        expect.stringContaining('serialization conflict'),
+      );
+    });
+
+    it('returns 500 and logs the stack for a non-retryable server failure', async () => {
+      const databaseError = new Error('database unavailable');
+      prisma.$transaction.mockRejectedValue(databaseError);
+      const logSpy = jest
+        .spyOn((service as any).logger, 'error')
+        .mockImplementation(() => undefined);
+
+      const error = await service
+        .login({
+          email: 'manager@example.com',
+          password: 'correct-password',
+          deviceId: 'browser-1',
+        })
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(InternalServerErrorException);
+      expect((error as InternalServerErrorException).getStatus()).toBe(500);
+      expect((error as Error).message).toBe('CENTER_SESSION_CREATION_FAILED');
+      expect((error as InternalServerErrorException).cause).toBe(databaseError);
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Center session creation failed'),
+        expect.stringContaining('database unavailable'),
+      );
     });
 
     it('evicts and revokes the least recently used session on device four', async () => {

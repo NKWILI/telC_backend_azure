@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   Optional,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, type CenterUser } from '@prisma/client';
@@ -181,6 +183,7 @@ export class CenterAuthService {
       deviceId,
       deviceName,
     );
+    await this.updateCenterLastSeen(centerUser.id);
 
     return {
       accessToken: tokens.accessToken,
@@ -209,35 +212,44 @@ export class CenterAuthService {
     deviceId: string,
     deviceName?: string,
   ): Promise<SessionIssueResult> {
+    let lastConflict: unknown;
+
     for (let attempt = 0; attempt < SESSION_TRANSACTION_ATTEMPTS; attempt++) {
       try {
-        const result = await this.prisma.$transaction(
-          async (tx) => {
-            const result = await this.issueSessionTokensInTransaction(
+        const transactionResult = await this.prisma.$transaction(
+          (tx) =>
+            this.issueSessionTokensInTransaction(
               tx,
               centerUser,
               deviceId,
               deviceName,
-            );
-            await tx.centerUser.update({
-              where: { id: centerUser.id },
-              data: { last_seen_at: new Date() },
-            });
-            return result;
-          },
+            ),
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
 
-        if (result.evictedSessionId) {
-          await this.revokeCachedSession(result.evictedSessionId);
+        if (transactionResult.evictedSessionId) {
+          await this.revokeCachedSession(transactionResult.evictedSessionId);
         }
-        return result;
+        return transactionResult;
       } catch (error) {
-        if (!this.isRetryableSessionConflict(error)) break;
+        if (!this.isRetryableSessionConflict(error)) {
+          this.logSessionError('Center session creation failed', error);
+          throw new InternalServerErrorException(
+            'CENTER_SESSION_CREATION_FAILED',
+            { cause: error },
+          );
+        }
+        lastConflict = error;
       }
     }
 
-    throw new BadRequestException('CENTER_SESSION_CREATION_FAILED');
+    this.logSessionError(
+      'Center session transaction retry attempts exhausted',
+      lastConflict,
+    );
+    throw new ServiceUnavailableException('CENTER_SESSION_RETRY_EXHAUSTED', {
+      cause: lastConflict,
+    });
   }
 
   private async issueSessionTokensInTransaction(
@@ -362,6 +374,25 @@ export class CenterAuthService {
       throw new BadRequestException('DEVICE_ID_REQUIRED');
     }
     return normalized;
+  }
+
+  private async updateCenterLastSeen(centerUserId: string): Promise<void> {
+    try {
+      await this.prisma.centerUser.update({
+        where: { id: centerUserId },
+        data: { last_seen_at: new Date() },
+      });
+    } catch (error) {
+      this.logSessionError('Center last-seen update failed', error);
+      throw new InternalServerErrorException('CENTER_LAST_SEEN_UPDATE_FAILED', {
+        cause: error,
+      });
+    }
+  }
+
+  private logSessionError(message: string, error: unknown): void {
+    const stack = error instanceof Error ? error.stack : undefined;
+    this.logger.error(message, stack);
   }
 
   private async revokeCachedSession(sessionId: string): Promise<void> {

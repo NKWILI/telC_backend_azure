@@ -9,6 +9,12 @@ import {
 import type { Response } from 'express';
 
 const CENTER_ERROR_MESSAGES: Record<string, string> = {
+  CENTER_LAST_SEEN_UPDATE_FAILED:
+    'The session was created, but account activity could not be updated.',
+  CENTER_SESSION_CREATION_FAILED:
+    'Unable to start a session. Please try again.',
+  CENTER_SESSION_RETRY_EXHAUSTED:
+    'Authentication is temporarily unavailable. Please try again.',
   EMAIL_DELIVERY_FAILED: 'Verification email delivery failed.',
   RATE_LIMIT_EXCEEDED: 'Too many requests. Please try again later.',
 };
