@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -75,7 +76,8 @@ describe('CentersController registration contract', () => {
   });
 
   it('allows registration without an optional logo', async () => {
-    const { logoUrl: _logoUrl, ...body } = validBody;
+    const body = { ...validBody };
+    Reflect.deleteProperty(body, 'logoUrl');
 
     await request(app.getHttpServer())
       .post('/api/centers/register')

@@ -97,6 +97,7 @@ describe('EmailService', () => {
       );
       expect(arg.html).toMatch(/password has not been changed/i);
       expect(arg.html).toMatch(/center details have not been changed/i);
+      expect(arg.html).toMatch(/forgot password/i);
     });
 
     it('sends the center password-reset code without a reset link', async () => {

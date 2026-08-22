@@ -105,6 +105,7 @@ export class EmailService {
         '<p>Use this new link to verify it:</p>' +
         `<p><a href="${verificationLink}">${verificationLink}</a></p>` +
         '<p>Your password has not been changed, and your center details have not been changed.</p>' +
+        '<p>If you no longer know that password, verify your email and then use Forgot password to replace it.</p>' +
         '<p>If you did not request this, you can ignore this email.</p>',
     });
   }

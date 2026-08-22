@@ -210,6 +210,8 @@ export class TokenService {
       }) as AccessTokenPayload;
       if (
         decoded.type !== 'access' ||
+        (decoded as AccessTokenPayload & { actorType?: unknown }).actorType !==
+          undefined ||
         typeof decoded.studentId !== 'string' ||
         typeof decoded.deviceId !== 'string'
       ) {
@@ -240,6 +242,8 @@ export class TokenService {
       }) as RefreshTokenPayload;
       if (
         decoded.type !== 'refresh' ||
+        (decoded as RefreshTokenPayload & { actorType?: unknown }).actorType !==
+          undefined ||
         typeof decoded.studentId !== 'string' ||
         typeof decoded.deviceId !== 'string' ||
         typeof decoded.sessionId !== 'string'

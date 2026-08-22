@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await */
 import { BadGatewayException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { CentersService } from '../src/modules/centers/centers.service';

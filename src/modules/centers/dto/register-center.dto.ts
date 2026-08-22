@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer';
+import { Transform, type TransformFnParams } from 'class-transformer';
 import {
   IsEmail,
   IsNotEmpty,
@@ -14,9 +14,17 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+function trimValue(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim() : value;
+}
+
+function normalizeEmailValue(value: unknown): unknown {
+  return typeof value === 'string' ? value.trim().toLowerCase() : value;
+}
+
 function Trim() {
-  return Transform(({ value }) =>
-    typeof value === 'string' ? value.trim() : value,
+  return Transform((params: TransformFnParams) =>
+    trimValue(params.value as unknown),
   );
 }
 
@@ -92,8 +100,8 @@ export class RegisterCenterDto {
   managerLastName: string;
 
   @ApiProperty({ example: 'manager@example.com', maxLength: 254 })
-  @Transform(({ value }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  @Transform((params: TransformFnParams) =>
+    normalizeEmailValue(params.value as unknown),
   )
   @IsString()
   @IsNotEmpty()
