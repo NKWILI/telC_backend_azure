@@ -159,11 +159,13 @@ describe('center sessions against real Postgres', () => {
 
     const rejected = results.filter((r) => r.status === 'rejected');
     if (rejected.length > 0) {
-      throw new Error(
-        `concurrent logins failed: ${rejected
-          .map((r) => String(r.reason))
-          .join(' | ')}`,
-      );
+      // Surfaces the cause, because the failure this test caught was a driver
+      // error with no Prisma `code` that the retry predicate did not match.
+      const causes = rejected.map((r) => {
+        const cause = (r.reason as { cause?: Error })?.cause;
+        return `${String(r.reason)} :: ${cause?.name}: ${cause?.message}`;
+      });
+      throw new Error(`concurrent logins failed: ${causes.join(' | ')}`);
     }
 
     const sessions = await prisma.centerDeviceSession.findMany({

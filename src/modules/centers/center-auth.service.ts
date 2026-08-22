@@ -14,7 +14,7 @@ import {
   type CenterUser,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import type { CenterRefreshTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { ValkeyService } from '../../shared/services/valkey.service';
@@ -190,7 +190,7 @@ export class CenterAuthService {
       },
     });
 
-    const ownedSession = await this.resolveSessionOwnedByToken(
+    const ownedSession = this.resolveSessionOwnedByToken(
       session,
       payload,
       input.refreshToken,
@@ -202,7 +202,7 @@ export class CenterAuthService {
       deviceId: payload.deviceId,
       sessionId: payload.sessionId,
     });
-    const newRefreshTokenHash = await this.tokenService.hashRefreshToken(
+    const newRefreshTokenHash = this.hashCenterRefreshToken(
       tokens.refreshToken,
     );
 
@@ -255,7 +255,7 @@ export class CenterAuthService {
       return { success: true };
     }
 
-    const presentedTokenMatches = await this.tokenService.compareRefreshToken(
+    const presentedTokenMatches = this.centerRefreshTokenMatches(
       input.refreshToken,
       session.refresh_token_hash,
     );
@@ -283,16 +283,16 @@ export class CenterAuthService {
    * Every rejection uses one error code so a caller cannot tell a revoked
    * session from a wrong device from a replayed token.
    */
-  private async resolveSessionOwnedByToken(
+  private resolveSessionOwnedByToken(
     session: CenterDeviceSession | null,
     payload: CenterRefreshTokenPayload,
     presentedToken: string,
-  ): Promise<CenterDeviceSession> {
+  ): CenterDeviceSession {
     if (!session || session.device_id !== payload.deviceId) {
       throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
     }
 
-    const presentedTokenMatches = await this.tokenService.compareRefreshToken(
+    const presentedTokenMatches = this.centerRefreshTokenMatches(
       presentedToken,
       session.refresh_token_hash,
     );
@@ -562,7 +562,7 @@ export class CenterAuthService {
     });
 
     if (existing && existing.revoked_at === null) {
-      const tokens = await this.generateCenterTokens(
+      const tokens = this.generateCenterTokens(
         centerUser,
         deviceId,
         existing.id,
@@ -607,11 +607,7 @@ export class CenterAuthService {
     }
 
     const sessionId = randomUUID();
-    const tokens = await this.generateCenterTokens(
-      centerUser,
-      deviceId,
-      sessionId,
-    );
+    const tokens = this.generateCenterTokens(centerUser, deviceId, sessionId);
     await tx.centerDeviceSession.create({
       data: {
         id: sessionId,
@@ -631,24 +627,22 @@ export class CenterAuthService {
     };
   }
 
-  private async generateCenterTokens(
+  private generateCenterTokens(
     centerUser: Pick<CenterUser, 'id' | 'center_id'>,
     deviceId: string,
     sessionId: string,
-  ): Promise<{
+  ): {
     accessToken: string;
     refreshToken: string;
     refreshTokenHash: string;
-  }> {
+  } {
     const tokens = this.tokenService.generateCenterTokenPair({
       centerUserId: centerUser.id,
       centerId: centerUser.center_id,
       deviceId,
       sessionId,
     });
-    const refreshTokenHash = await this.tokenService.hashRefreshToken(
-      tokens.refreshToken,
-    );
+    const refreshTokenHash = this.hashCenterRefreshToken(tokens.refreshToken);
 
     return { ...tokens, refreshTokenHash };
   }
@@ -663,14 +657,57 @@ export class CenterAuthService {
    * rolled back, so re-running it is safe — and by the second attempt the
    * database is warm.
    */
-  private isRetryableSessionConflict(error: unknown): boolean {
+  /**
+   * HMAC-SHA256, deliberately not bcrypt.
+   *
+   * bcrypt truncates its input at 72 bytes, and a refresh token is a ~400-byte
+   * JWT whose first 72 bytes — header plus the opening of the payload — are
+   * identical for every token issued to the same session. Hashing one with
+   * bcrypt therefore makes a spent token compare equal to its replacement, and
+   * rotation stops being single-use. An e2e run with real crypto caught this;
+   * mocked comparisons cannot.
+   *
+   * bcrypt is for low-entropy secrets people choose. A signed JWT already
+   * carries far more entropy than a password, so a fast keyed digest is both
+   * correct and cheap — and cheap matters, because this runs inside the
+   * Serializable session transaction.
+   */
+  private hashCenterRefreshToken(token: string): string {
+    return this.tokenCrypto.hashToken(token);
+  }
+
+  private centerRefreshTokenMatches(
+    token: string,
+    storedHash: string,
+  ): boolean {
+    const candidate = Buffer.from(this.hashCenterRefreshToken(token));
+    const stored = Buffer.from(storedHash);
     return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error.code === 'P2002' ||
-        error.code === 'P2034' ||
-        error.code === 'P2028')
+      candidate.length === stored.length && timingSafeEqual(candidate, stored)
+    );
+  }
+
+  private isRetryableSessionConflict(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+
+    const code = (error as { code?: unknown }).code;
+    if (code === 'P2002' || code === 'P2034' || code === 'P2028') {
+      return true;
+    }
+
+    // Prisma's driver adapter reports the Serializable conflict itself as a
+    // DriverAdapterError carrying a message and no `code` at all, so a
+    // code-only predicate silently never matched the one condition this retry
+    // loop exists for. Found by running concurrent logins against real
+    // Postgres; a mocked client cannot produce this shape.
+    const message = (error as { message?: unknown }).message;
+    return (
+      typeof message === 'string' &&
+      /TransactionWriteConflict|write conflict|deadlock|could not serialize/i.test(
+        message,
+      )
     );
   }
 

@@ -90,7 +90,6 @@ describe('CenterAuthService', () => {
         accessToken: 'center-access-token',
         refreshToken: 'center-refresh-token',
       }),
-      hashRefreshToken: jest.fn().mockResolvedValue('refresh-token-hash'),
       verifyCenterRefreshToken: jest.fn().mockReturnValue({
         type: 'refresh',
         actorType: 'CENTER_USER',
@@ -99,10 +98,14 @@ describe('CenterAuthService', () => {
         deviceId: 'browser-1',
         sessionId: 'center-session-1',
       }),
-      compareRefreshToken: jest.fn().mockResolvedValue(true),
     };
     tokenCrypto = {
-      hashToken: jest.fn().mockReturnValue('verification-token-hash'),
+      hashToken: jest.fn((raw: string) =>
+        String(raw).startsWith('center-refresh') ||
+        String(raw).startsWith('rotated-refresh')
+          ? `hmac:${raw}`
+          : 'verification-token-hash',
+      ),
       generateNumericCode: jest.fn().mockReturnValue('123456'),
       isExpired: jest.fn().mockReturnValue(false),
     };
@@ -338,7 +341,7 @@ describe('CenterAuthService', () => {
       expect(tx.centerDeviceSession.update).toHaveBeenCalledWith({
         where: { id: 'existing-center-session' },
         data: {
-          refresh_token_hash: 'refresh-token-hash',
+          refresh_token_hash: 'hmac:center-refresh-token',
           device_name: null,
           last_used_at: expect.any(Date),
           revoked_at: null,
@@ -396,6 +399,33 @@ describe('CenterAuthService', () => {
         'last-seen-after-commit',
       ]);
       expect(tx.centerUser.update).not.toHaveBeenCalled();
+    });
+
+    it('retries a driver-level write conflict that carries no Prisma code', async () => {
+      const errorLog = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      // What PrismaPg actually throws for a Serializable conflict: a
+      // DriverAdapterError with a message and no `code` property at all.
+      const driverConflict = Object.assign(
+        new Error('TransactionWriteConflict'),
+        { name: 'DriverAdapterError' },
+      );
+      prisma.$transaction
+        .mockRejectedValueOnce(driverConflict)
+        .mockImplementationOnce(async (callback: (client: any) => unknown) =>
+          callback(tx),
+        );
+
+      const result = await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      expect(result.accessToken).toBe('center-access-token');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      errorLog.mockRestore();
     });
 
     it('retries a transaction timeout so a cold database costs a retry, not a 500', async () => {
@@ -632,7 +662,7 @@ describe('CenterAuthService', () => {
       id: 'center-session-1',
       center_user_id: 'owner-1',
       device_id: 'browser-1',
-      refresh_token_hash: 'current-refresh-hash',
+      refresh_token_hash: 'hmac:center-refresh-token',
       revoked_at: null,
     };
 
@@ -642,7 +672,6 @@ describe('CenterAuthService', () => {
         accessToken: 'rotated-access-token',
         refreshToken: 'rotated-refresh-token',
       });
-      tokenService.hashRefreshToken.mockResolvedValue('rotated-refresh-hash');
     });
 
     it('rotates the stored hash and returns a new pair for the same session', async () => {
@@ -670,11 +699,11 @@ describe('CenterAuthService', () => {
         where: {
           id: 'center-session-1',
           center_user_id: 'owner-1',
-          refresh_token_hash: 'current-refresh-hash',
+          refresh_token_hash: 'hmac:center-refresh-token',
           revoked_at: null,
         },
         data: {
-          refresh_token_hash: 'rotated-refresh-hash',
+          refresh_token_hash: 'hmac:rotated-refresh-token',
           last_used_at: expect.any(Date),
         },
       });
@@ -709,7 +738,10 @@ describe('CenterAuthService', () => {
     });
 
     it('rejects a replayed token that no longer matches the stored hash', async () => {
-      tokenService.compareRefreshToken.mockResolvedValue(false);
+      prisma.centerDeviceSession.findFirst.mockResolvedValue({
+        ...activeSession,
+        refresh_token_hash: 'hmac:some-other-token',
+      });
 
       await expect(
         service.refresh({ refreshToken: 'stale-refresh-token' }),
@@ -758,7 +790,7 @@ describe('CenterAuthService', () => {
       id: 'center-session-1',
       center_user_id: 'owner-1',
       device_id: 'browser-1',
-      refresh_token_hash: 'current-refresh-hash',
+      refresh_token_hash: 'hmac:center-refresh-token',
       revoked_at: null,
     };
 
@@ -807,7 +839,10 @@ describe('CenterAuthService', () => {
     });
 
     it('refuses a stale token permission to revoke the session that replaced it', async () => {
-      tokenService.compareRefreshToken.mockResolvedValue(false);
+      prisma.centerDeviceSession.findFirst.mockResolvedValue({
+        ...activeSession,
+        refresh_token_hash: 'hmac:token-from-before-the-rotation',
+      });
 
       await expect(
         service.logout({ refreshToken: 'pre-rotation-token' }),

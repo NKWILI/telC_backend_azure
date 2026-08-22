@@ -69,30 +69,30 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 8: Refresh and logout
 
-- [ ] Write replay and token-confusion tests first
-- [ ] Add refresh and logout endpoints
-- [ ] Prove exactly one concurrent refresh succeeds
-- [ ] Prove logout invalidates protected access
-- [ ] Commit the green increment
+- [x] Write replay and token-confusion tests first
+- [x] Add refresh and logout endpoints
+- [x] Prove exactly one concurrent refresh succeeds
+- [x] Prove logout invalidates protected access
+- [x] Commit the green increment
 
 ## Task 9: Password recovery
 
-- [ ] Write enumeration, expiry, one-use, and session-revocation tests first
-- [ ] Add forgot/reset endpoints and business logic
-- [ ] Ensure student sessions are untouched
-- [ ] Commit the green increment
+- [x] Write enumeration, expiry, one-use, and session-revocation tests first
+- [x] Add forgot/reset endpoints and business logic
+- [x] Ensure student sessions are untouched
+- [x] Commit the green increment
 
 ## Task 10: Guard and profile
 
-- [ ] Write authentication/IDOR/profile allowlist tests first
-- [ ] Add center guard and current-center-user decorator
-- [ ] Add `GET/PATCH /api/centers/me`
+- [x] Write authentication/IDOR/profile allowlist tests first
+- [x] Add center guard and current-center-user decorator
+- [x] Add `GET/PATCH /api/centers/me`
 - [ ] Pass Checkpoint B and human review
-- [ ] Commit the green increment
+- [x] Commit the green increment
 
 ## Task 11: Final integration
 
-- [ ] Wire `CentersModule` into `AppModule`
+- [x] Wire `CentersModule` into `AppModule`
 - [ ] Add critical center identity e2e flow
 - [ ] Update Swagger/API documentation
 - [ ] Run full unit suite
