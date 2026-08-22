@@ -44,4 +44,10 @@ docs/api-contract.md
 
 #ignore agent-skills
 agent-skills/
-tasks/
+tasks/*
+!tasks/center-subscription-global-plan.md
+!tasks/center-subscription-global-todo.md
+!tasks/phases/
+tasks/phases/*
+!tasks/phases/01-center-identity-plan.md
+!tasks/phases/01-center-identity-todo.md
