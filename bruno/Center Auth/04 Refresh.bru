@@ -1,0 +1,40 @@
+meta {
+  name: 04 Refresh
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/center-auth/refresh
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+script:post-response {
+  bru.setEnvVar("accessToken", res.body.accessToken);
+  bru.setEnvVar("refreshToken", res.body.refreshToken);
+}
+
+docs {
+  Run this request TWICE in a row without re-running login.
+
+  The first call returns a new pair. The second must return
+  401 INVALID_CENTER_REFRESH_TOKEN, because the post-response script has
+  already replaced the stored token and the old one is spent.
+
+  This is the regression check for a real defect: refresh tokens were hashed
+  with bcrypt, which truncates at 72 bytes, and two tokens for one session are
+  identical over that window — so a spent token verified against its own
+  replacement and rotation was never single-use. If the second call succeeds,
+  that bug is back.
+}

@@ -1,0 +1,37 @@
+meta {
+  name: 02 Verify email
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/center-auth/verify-email
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "token": "{{verificationToken}}",
+    "deviceId": "{{deviceId}}",
+    "deviceName": "Bruno"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.centerUser.emailVerified: eq true
+}
+
+script:post-response {
+  bru.setEnvVar("accessToken", res.body.accessToken);
+  bru.setEnvVar("refreshToken", res.body.refreshToken);
+}
+
+docs {
+  Verification returns a usable session immediately — no second login needed.
+
+  Run this a second time with the same token: it must fail. The token is
+  single-use, consumed by a predicated update, so a success on replay means
+  the atomic consume has regressed.
+}

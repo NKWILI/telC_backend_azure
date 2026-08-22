@@ -1,0 +1,15 @@
+docs {
+  # Lerniqo API — manual verification
+
+  Run the server against the disposable database, never `.env`:
+
+      set -a && . ./.env.test && set +a
+      PORT=3001 npm run start:dev
+
+  Select the `local` environment, then walk `Center Auth` in numbered order.
+  Requests chain through environment variables, so order matters.
+
+  Tokens the API would normally email are not returned in responses. Read them
+  from the server console, or from the mail provider, and paste them into
+  `verificationToken` / `resetCode` before running steps 02 and 08.
+}

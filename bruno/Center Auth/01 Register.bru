@@ -1,0 +1,42 @@
+meta {
+  name: 01 Register
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/center-auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "centerName": "Goethe Language Center",
+    "country": "Cameroon",
+    "city": "Douala",
+    "logoUrl": "https://cdn.example.com/centers/logo.webp",
+    "managerFirstName": "Alain",
+    "managerLastName": "Ngeukeu",
+    "email": "{{centerEmail}}",
+    "phone": "+237690000000",
+    "password": "{{centerPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.message: eq verification email sent
+}
+
+docs {
+  Set `centerEmail` and `centerPassword` in the environment first. Use a fresh
+  address each run, or step 02 will fail — a verified account cannot re-verify.
+
+  Re-run this request with the same address: it must return the identical 201
+  body, never a conflict. That generic response is the anti-enumeration
+  property, so a different answer here is a defect.
+
+  The verification token is emailed, not returned. Copy it from the server
+  console into the `verificationToken` variable before running step 02.
+}

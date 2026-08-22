@@ -1,0 +1,41 @@
+meta {
+  name: 03 Login
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/center-auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{centerEmail}}",
+    "password": "{{centerPassword}}",
+    "deviceId": "{{deviceId}}",
+    "deviceName": "Bruno"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+script:post-response {
+  bru.setEnvVar("accessToken", res.body.accessToken);
+  bru.setEnvVar("refreshToken", res.body.refreshToken);
+}
+
+docs {
+  Checks worth doing by hand:
+
+  - wrong password  -> 401 INVALID_CREDENTIALS
+  - unknown address -> 401 INVALID_CREDENTIALS, same body and similar timing
+  - unverified account -> 403 EMAIL_NOT_VERIFIED, and only when the password
+    is correct
+
+  Logging in from four distinct `deviceId` values must leave three sessions;
+  the least recently used one is evicted.
+}

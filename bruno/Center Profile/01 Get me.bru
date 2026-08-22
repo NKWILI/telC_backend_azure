@@ -1,0 +1,33 @@
+meta {
+  name: 01 Get me
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.centerUser.emailVerified: eq true
+}
+
+docs {
+  Checks worth doing by hand:
+
+  - no Authorization header      -> 401
+  - a malformed or expired token -> 401
+  - a STUDENT access token       -> 401, the verifier refuses it outright
+  - after logout                 -> 401
+
+  The response must never contain password_hash, email_verification_token, or
+  password_reset_token. It is built field by field rather than spread from the
+  row, so a new column cannot leak here by default — confirm that holds.
+}

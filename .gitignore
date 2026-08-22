@@ -58,3 +58,6 @@ tasks/phases/*
 !tasks/phases/01-task-07-center-auth-endpoints-todo.md
 !tasks/phases/01-task-08-center-refresh-logout-plan.md
 !tasks/phases/01-task-08-center-refresh-logout-todo.md
+
+# Bruno: share the collection, never a filled-in environment
+bruno/environments/*.local.bru

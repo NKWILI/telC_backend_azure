@@ -1,0 +1,33 @@
+meta {
+  name: 05 Logout
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/center-auth/logout
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.success: eq true
+}
+
+docs {
+  Immediately afterwards, run `Center Profile / Get me` with the access token
+  you still hold. It must return 401.
+
+  That is the property the guard exists for: before it, logout revoked a row
+  nothing read, so the access token stayed usable until it expired.
+
+  Repeating logout must also succeed — an already-revoked session is the
+  desired end state, so the call is idempotent.
+}
