@@ -4,7 +4,6 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -67,13 +66,16 @@ export class CenterLoginDto {
   @IsEmail()
   email: string;
 
+  // Deliberately no minimum length. Login must not enforce the registration
+  // policy: a password below the current minimum has to fail as
+  // INVALID_CREDENTIALS, not as a validation error the caller cannot act on.
+  // The 72-byte cap stays — it bounds work and matches bcrypt's truncation.
   @ApiProperty({
-    minLength: 8,
     format: 'password',
     description: 'Maximum 72 UTF-8 bytes.',
   })
   @IsString()
-  @MinLength(8)
+  @IsNotEmpty()
   @MaxUtf8Bytes(72)
   password: string;
 

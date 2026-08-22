@@ -161,11 +161,6 @@ describe('CenterAuthController contract', () => {
       '/api/center-auth/login',
       { ...validLoginBody, email: 'not-an-email' },
     ],
-    [
-      'a password shorter than 8 characters',
-      '/api/center-auth/login',
-      { ...validLoginBody, password: 'short' },
-    ],
   ])('rejects %s before reaching the service', async (_case, path, body) => {
     const response = await request(app.getHttpServer())
       .post(path)
@@ -174,6 +169,30 @@ describe('CenterAuthController contract', () => {
 
     expect(response.body.error).toBe('VALIDATION_ERROR');
     expect(centerAuthService.verifyEmail).not.toHaveBeenCalled();
+    expect(centerAuthService.login).not.toHaveBeenCalled();
+  });
+
+  it('lets the credential check reject a short password, not the validator', async () => {
+    centerAuthService.login.mockRejectedValue(
+      new UnauthorizedException('INVALID_CREDENTIALS'),
+    );
+
+    const response = await request(app.getHttpServer())
+      .post('/api/center-auth/login')
+      .send({ ...validLoginBody, password: 'short' })
+      .expect(401);
+
+    expect(response.body.error).toBe('INVALID_CREDENTIALS');
+    expect(centerAuthService.login).toHaveBeenCalled();
+  });
+
+  it('still caps the login password at 72 UTF-8 bytes', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/center-auth/login')
+      .send({ ...validLoginBody, password: 'é'.repeat(40) })
+      .expect(400);
+
+    expect(response.body.error).toBe('VALIDATION_ERROR');
     expect(centerAuthService.login).not.toHaveBeenCalled();
   });
 
