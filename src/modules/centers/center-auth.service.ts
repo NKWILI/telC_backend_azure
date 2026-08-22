@@ -523,6 +523,13 @@ export class CenterAuthService {
     return normalized;
   }
 
+  /**
+   * Best-effort telemetry. By the time this runs the session is committed and
+   * the tokens are minted — and on a new device another session has already
+   * been evicted — so failing the request here would charge the caller the
+   * full cost of a successful login and hand back an error instead of the
+   * tokens. The write is worth a log line, not the session.
+   */
   private async updateCenterLastSeen(centerUserId: string): Promise<void> {
     try {
       await this.prisma.centerUser.update({
@@ -531,9 +538,6 @@ export class CenterAuthService {
       });
     } catch (error) {
       this.logSessionError('Center last-seen update failed', error);
-      throw new InternalServerErrorException('CENTER_LAST_SEEN_UPDATE_FAILED', {
-        cause: error,
-      });
     }
   }
 

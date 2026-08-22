@@ -2,6 +2,7 @@
 import {
   ForbiddenException,
   InternalServerErrorException,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -336,6 +337,26 @@ describe('CenterAuthService', () => {
         },
       });
       expect(tx.centerDeviceSession.count).not.toHaveBeenCalled();
+    });
+
+    it('still returns the session when the last-seen write fails', async () => {
+      const errorLog = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      prisma.centerUser.update.mockRejectedValue(
+        new Error('connection terminated'),
+      );
+
+      const result = await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      expect(result.accessToken).toBe('center-access-token');
+      expect(result.refreshToken).toBe('center-refresh-token');
+      expect(errorLog).toHaveBeenCalled();
+      errorLog.mockRestore();
     });
 
     it('updates last seen only after the Serializable transaction commits', async () => {
