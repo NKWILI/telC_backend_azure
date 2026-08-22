@@ -14,13 +14,13 @@ Companion to `tasks/center-subscription-global-plan.md`.
 
 ## Phase 1: Center identity and profile
 
-- [ ] Write `tasks/phases/01-center-identity-plan.md`
-- [ ] Resolve logo-storage choice required by the phase
+- [x] Write `tasks/phases/01-center-identity-plan.md`
+- [x] Resolve logo-storage choice required by the phase (client-supplied HTTPS URL; no upload handling in Phase 1)
 - [x] Human approves the specific plan
 - [x] Create `feature/center-identity` from the approved clean base
-- [ ] Implement with TDD and incremental commits
-- [ ] Pass focused tests, full tests, build, lint, and code review
-- [ ] Human approves merge
+- [x] Implement with TDD and incremental commits
+- [x] Pass focused tests, full tests, build, lint, and code review
+- [x] Human approves merge
 
 ## Phase 2: Partnership codes
 
