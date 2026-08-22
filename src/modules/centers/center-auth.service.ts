@@ -8,14 +8,23 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma, type CenterUser } from '@prisma/client';
+import {
+  Prisma,
+  type CenterDeviceSession,
+  type CenterUser,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
+import type { CenterRefreshTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { ValkeyService } from '../../shared/services/valkey.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 import { TokenService } from '../auth/token.service';
-import { CenterAuthResponseDto } from './dto/center-auth-response.dto';
+import {
+  CenterAuthResponseDto,
+  CenterLogoutResponseDto,
+  CenterTokenPairDto,
+} from './dto/center-auth-response.dto';
 
 const MAX_ACTIVE_CENTER_DEVICES = 3;
 const SESSION_TRANSACTION_ATTEMPTS = 2;
@@ -30,6 +39,10 @@ export interface VerifyCenterEmailInput {
   token: string;
   deviceId: string;
   deviceName?: string;
+}
+
+export interface CenterRefreshInput {
+  refreshToken: string;
 }
 
 export interface CenterLoginInput {
@@ -129,6 +142,140 @@ export class CenterAuthService {
     }
 
     return this.issueAuthResponse(centerUser, deviceId, input.deviceName);
+  }
+
+  /**
+   * Exchanges a center refresh token for a new pair, rotating the stored hash.
+   *
+   * Only `verifyCenterRefreshToken` is used, so a student or guest token can
+   * never reach a center session. Infrastructure failures are deliberately not
+   * caught: collapsing them into 401 would report a database outage as a
+   * credential problem and hide it from error monitoring.
+   */
+  async refresh(input: CenterRefreshInput): Promise<CenterTokenPairDto> {
+    const payload = this.tokenService.verifyCenterRefreshToken(
+      input.refreshToken,
+    );
+
+    const session = await this.prisma.centerDeviceSession.findFirst({
+      where: {
+        id: payload.sessionId,
+        center_user_id: payload.centerUserId,
+        revoked_at: null,
+      },
+    });
+
+    const ownedSession = await this.resolveSessionOwnedByToken(
+      session,
+      payload,
+      input.refreshToken,
+    );
+
+    const tokens = this.tokenService.generateCenterTokenPair({
+      centerUserId: payload.centerUserId,
+      centerId: payload.centerId,
+      deviceId: payload.deviceId,
+      sessionId: payload.sessionId,
+    });
+    const newRefreshTokenHash = await this.tokenService.hashRefreshToken(
+      tokens.refreshToken,
+    );
+
+    // The expected-hash predicate is the compare-and-swap. Two requests holding
+    // the same token both pass the checks above, but only the first update
+    // matches; the loser affects zero rows and is rejected as a replay.
+    const rotated = await this.rotateDeviceSessionRefreshHash(
+      payload.centerUserId,
+      payload.sessionId,
+      ownedSession.refresh_token_hash,
+      newRefreshTokenHash,
+    );
+    if (!rotated) {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+    }
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+  /**
+   * Revokes exactly the session the presented refresh token belongs to.
+   *
+   * Idempotent by design: a session that is already revoked or already deleted
+   * is the desired end state, so repeating logout succeeds. A token that no
+   * longer matches the stored hash is not idempotent — it is a stale token
+   * trying to revoke the session that replaced it, and is refused.
+   */
+  async logout(input: CenterRefreshInput): Promise<CenterLogoutResponseDto> {
+    const payload = this.tokenService.verifyCenterRefreshToken(
+      input.refreshToken,
+    );
+
+    const session = await this.prisma.centerDeviceSession.findFirst({
+      where: {
+        id: payload.sessionId,
+        center_user_id: payload.centerUserId,
+      },
+    });
+
+    if (!session) {
+      return { success: true };
+    }
+    if (session.device_id !== payload.deviceId) {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+    }
+    if (session.revoked_at !== null) {
+      return { success: true };
+    }
+
+    const presentedTokenMatches = await this.tokenService.compareRefreshToken(
+      input.refreshToken,
+      session.refresh_token_hash,
+    );
+    if (!presentedTokenMatches) {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+    }
+
+    // Possession is already proven above, so the revoke is not conditioned on
+    // the hash. A refresh racing this logout must not leave the session alive.
+    await this.prisma.centerDeviceSession.updateMany({
+      where: {
+        id: payload.sessionId,
+        center_user_id: payload.centerUserId,
+        revoked_at: null,
+      },
+      data: { revoked_at: new Date() },
+    });
+
+    await this.revokeCachedSession(payload.sessionId);
+
+    return { success: true };
+  }
+
+  /**
+   * Every rejection uses one error code so a caller cannot tell a revoked
+   * session from a wrong device from a replayed token.
+   */
+  private async resolveSessionOwnedByToken(
+    session: CenterDeviceSession | null,
+    payload: CenterRefreshTokenPayload,
+    presentedToken: string,
+  ): Promise<CenterDeviceSession> {
+    if (!session || session.device_id !== payload.deviceId) {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+    }
+
+    const presentedTokenMatches = await this.tokenService.compareRefreshToken(
+      presentedToken,
+      session.refresh_token_hash,
+    );
+    if (!presentedTokenMatches) {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+    }
+
+    return session;
   }
 
   async rotateDeviceSessionRefreshHash(

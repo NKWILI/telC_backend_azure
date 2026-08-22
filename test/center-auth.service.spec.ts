@@ -69,6 +69,7 @@ describe('CenterAuthService', () => {
         update: jest.fn().mockResolvedValue(undefined),
       },
       centerDeviceSession: {
+        findFirst: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $transaction: jest.fn(async (callback: (client: any) => unknown) =>
@@ -87,6 +88,15 @@ describe('CenterAuthService', () => {
         refreshToken: 'center-refresh-token',
       }),
       hashRefreshToken: jest.fn().mockResolvedValue('refresh-token-hash'),
+      verifyCenterRefreshToken: jest.fn().mockReturnValue({
+        type: 'refresh',
+        actorType: 'CENTER_USER',
+        centerUserId: 'owner-1',
+        centerId: 'center-1',
+        deviceId: 'browser-1',
+        sessionId: 'center-session-1',
+      }),
+      compareRefreshToken: jest.fn().mockResolvedValue(true),
     };
     tokenCrypto = {
       hashToken: jest.fn().mockReturnValue('verification-token-hash'),
@@ -553,6 +563,217 @@ describe('CenterAuthService', () => {
         service.revokeDeviceSession('owner-2', 'center-session-1'),
       ).rejects.toThrow('INVALID_SESSION');
       expect(valkeyService.revokeSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refresh', () => {
+    const activeSession = {
+      id: 'center-session-1',
+      center_user_id: 'owner-1',
+      device_id: 'browser-1',
+      refresh_token_hash: 'current-refresh-hash',
+      revoked_at: null,
+    };
+
+    beforeEach(() => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue(activeSession);
+      tokenService.generateCenterTokenPair.mockReturnValue({
+        accessToken: 'rotated-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+      tokenService.hashRefreshToken.mockResolvedValue('rotated-refresh-hash');
+    });
+
+    it('rotates the stored hash and returns a new pair for the same session', async () => {
+      const result = await service.refresh({
+        refreshToken: 'center-refresh-token',
+      });
+
+      expect(tokenService.verifyCenterRefreshToken).toHaveBeenCalledWith(
+        'center-refresh-token',
+      );
+      expect(prisma.centerDeviceSession.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: 'center-session-1',
+          center_user_id: 'owner-1',
+          revoked_at: null,
+        },
+      });
+      expect(tokenService.generateCenterTokenPair).toHaveBeenCalledWith({
+        centerUserId: 'owner-1',
+        centerId: 'center-1',
+        deviceId: 'browser-1',
+        sessionId: 'center-session-1',
+      });
+      expect(prisma.centerDeviceSession.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'center-session-1',
+          center_user_id: 'owner-1',
+          refresh_token_hash: 'current-refresh-hash',
+          revoked_at: null,
+        },
+        data: {
+          refresh_token_hash: 'rotated-refresh-hash',
+          last_used_at: expect.any(Date),
+        },
+      });
+      expect(result).toEqual({
+        accessToken: 'rotated-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+    });
+
+    it('rejects a token that is not a valid center refresh token', async () => {
+      tokenService.verifyCenterRefreshToken.mockImplementation(() => {
+        throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+      });
+
+      await expect(
+        service.refresh({ refreshToken: 'student-refresh-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.findFirst).not.toHaveBeenCalled();
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a token whose device does not match the stored session', async () => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue({
+        ...activeSession,
+        device_id: 'another-device',
+      });
+
+      await expect(
+        service.refresh({ refreshToken: 'center-refresh-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a replayed token that no longer matches the stored hash', async () => {
+      tokenService.compareRefreshToken.mockResolvedValue(false);
+
+      await expect(
+        service.refresh({ refreshToken: 'stale-refresh-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a revoked or missing session without disclosing which', async () => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.refresh({ refreshToken: 'center-refresh-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('lets exactly one of two concurrent refreshes win the rotation', async () => {
+      prisma.centerDeviceSession.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+
+      const results = await Promise.allSettled([
+        service.refresh({ refreshToken: 'center-refresh-token' }),
+        service.refresh({ refreshToken: 'center-refresh-token' }),
+      ]);
+
+      expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected']);
+      expect((results[1] as PromiseRejectedResult).reason).toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+
+    it('does not disguise an infrastructure failure as an authentication failure', async () => {
+      prisma.centerDeviceSession.findFirst.mockRejectedValue(
+        new Error('connection terminated'),
+      );
+
+      await expect(
+        service.refresh({ refreshToken: 'center-refresh-token' }),
+      ).rejects.not.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('logout', () => {
+    const activeSession = {
+      id: 'center-session-1',
+      center_user_id: 'owner-1',
+      device_id: 'browser-1',
+      refresh_token_hash: 'current-refresh-hash',
+      revoked_at: null,
+    };
+
+    beforeEach(() => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue(activeSession);
+    });
+
+    it('revokes only the session the presented token belongs to', async () => {
+      const result = await service.logout({
+        refreshToken: 'center-refresh-token',
+      });
+
+      expect(prisma.centerDeviceSession.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'center-session-1',
+          center_user_id: 'owner-1',
+          revoked_at: null,
+        },
+        data: { revoked_at: expect.any(Date) },
+      });
+      expect(valkeyService.revokeSession).toHaveBeenCalledWith(
+        'center-session-1',
+      );
+      expect(result).toEqual({ success: true });
+    });
+
+    it('is idempotent when the session was already revoked', async () => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue({
+        ...activeSession,
+        revoked_at: new Date(),
+      });
+
+      await expect(
+        service.logout({ refreshToken: 'center-refresh-token' }),
+      ).resolves.toEqual({ success: true });
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent when the session row is already gone', async () => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.logout({ refreshToken: 'center-refresh-token' }),
+      ).resolves.toEqual({ success: true });
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a stale token permission to revoke the session that replaced it', async () => {
+      tokenService.compareRefreshToken.mockResolvedValue(false);
+
+      await expect(
+        service.logout({ refreshToken: 'pre-rotation-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+      expect(valkeyService.revokeSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses a token whose device does not match the stored session', async () => {
+      prisma.centerDeviceSession.findFirst.mockResolvedValue({
+        ...activeSession,
+        device_id: 'another-device',
+      });
+
+      await expect(
+        service.logout({ refreshToken: 'center-refresh-token' }),
+      ).rejects.toThrow('INVALID_CENTER_REFRESH_TOKEN');
+      expect(prisma.centerDeviceSession.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps the database revocation authoritative when Valkey fails', async () => {
+      valkeyService.revokeSession.mockRejectedValue(new Error('cache down'));
+
+      await expect(
+        service.logout({ refreshToken: 'center-refresh-token' }),
+      ).resolves.toEqual({ success: true });
+      expect(prisma.centerDeviceSession.updateMany).toHaveBeenCalled();
     });
   });
 });

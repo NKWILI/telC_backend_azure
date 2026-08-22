@@ -41,6 +41,19 @@ export class CenterAuthCenterDto {
   logoUrl: string | null;
 }
 
+export class CenterTokenPairDto {
+  @ApiProperty()
+  accessToken: string;
+
+  @ApiProperty()
+  refreshToken: string;
+}
+
+export class CenterLogoutResponseDto {
+  @ApiProperty({ example: true })
+  success: true;
+}
+
 export class CenterAuthResponseDto {
   @ApiProperty()
   accessToken: string;
