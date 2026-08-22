@@ -1,13 +1,27 @@
 vars {
   baseUrl: http://localhost:3001
   deviceId: bruno-device-1
+  centerEmail: owner+bruno@example.com
+  centerPassword: a-strong-password
 }
 
 vars:secret [
-  centerEmail,
-  centerPassword,
   accessToken,
   refreshToken,
   verificationToken,
   resetCode
 ]
+
+docs {
+  Change `centerEmail` before each full run. A verified account cannot verify
+  again, so step 02 fails on a reused address. `owner+bruno2@example.com`,
+  `+bruno3`, and so on works — the plus-suffix is a distinct address to the
+  API but reaches the same inbox.
+
+  `accessToken` and `refreshToken` are written for you by the post-response
+  scripts on steps 02, 03, 04 and 07.
+
+  `verificationToken` and `resetCode` are emailed, never returned in a
+  response. Read them from the server console and paste them in before running
+  steps 02 and 07.
+}
