@@ -51,3 +51,5 @@ tasks/*
 tasks/phases/*
 !tasks/phases/01-center-identity-plan.md
 !tasks/phases/01-center-identity-todo.md
+!tasks/phases/01-task-06-center-auth-session-plan.md
+!tasks/phases/01-task-06-center-auth-session-todo.md
