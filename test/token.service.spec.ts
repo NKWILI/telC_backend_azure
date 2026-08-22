@@ -12,6 +12,8 @@ describe('TokenService', () => {
       'test-refresh-secret-that-is-different-and-long-enough-1234567890';
     process.env.JWT_ACCESS_TOKEN_EXPIRY = '1h';
     process.env.JWT_REFRESH_TOKEN_EXPIRY = '30d';
+    process.env.TOKEN_HMAC_SECRET =
+      'test-hmac-secret-that-is-long-enough-for-testing-purposes-1234567890';
   });
 
   beforeEach(() => {
@@ -411,6 +413,55 @@ describe('TokenService', () => {
       );
 
       expect(isMatch).toBe(false);
+    });
+  });
+  /**
+   * Regression guard for a real defect: refresh tokens were hashed with
+   * bcrypt, which truncates its input at 72 bytes. A refresh token is a
+   * ~400-byte JWT whose first 72 bytes — header plus the opening of the
+   * payload — are identical for every token issued to the same session, so a
+   * spent token compared equal to its replacement and rotation was never
+   * single-use. These assertions fail against any truncating hash.
+   */
+  describe('refresh token hashing does not truncate', () => {
+    const payload = {
+      studentId: 'student-1',
+      deviceId: 'device-1',
+      sessionId: 'session-1',
+    };
+
+    it('distinguishes two tokens that share their first 72 bytes', async () => {
+      const spent = tokenService.generateRefreshToken(payload);
+      const replacement = tokenService.generateRefreshToken(payload);
+
+      // Precondition: the tokens really do collide over bcrypt's input window.
+      expect(spent).not.toBe(replacement);
+      expect(spent.slice(0, 72)).toBe(replacement.slice(0, 72));
+
+      const replacementHash = await tokenService.hashRefreshToken(replacement);
+
+      expect(
+        await tokenService.compareRefreshToken(spent, replacementHash),
+      ).toBe(false);
+      expect(
+        await tokenService.compareRefreshToken(replacement, replacementHash),
+      ).toBe(true);
+    });
+
+    it('distinguishes inputs that differ only past byte 72', async () => {
+      const shared = 'x'.repeat(72);
+      const hash = await tokenService.hashRefreshToken(`${shared}alpha`);
+
+      expect(
+        await tokenService.compareRefreshToken(`${shared}beta`, hash),
+      ).toBe(false);
+    });
+
+    it('rejects a hash of the wrong shape without throwing', async () => {
+      expect(await tokenService.compareRefreshToken('token', '')).toBe(false);
+      expect(await tokenService.compareRefreshToken('token', 'nonsense')).toBe(
+        false,
+      );
     });
   });
 });
