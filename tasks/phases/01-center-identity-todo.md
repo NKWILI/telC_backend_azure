@@ -45,11 +45,11 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 5: Registration endpoint
 
-- [ ] Write HTTP contract and rate-limit tests first
-- [ ] Add registration DTO, controller, error contract, and module
-- [ ] Reject invalid/extra input and preserve generic responses
+- [x] Write HTTP contract and rate-limit tests first
+- [x] Add registration DTO, controller, error contract, and module
+- [x] Reject invalid/extra input and preserve generic responses
 - [ ] Pass Checkpoint A and human review
-- [ ] Commit the green increment
+- [x] Commit the green increment
 
 ## Task 6: Authentication/session service
 
