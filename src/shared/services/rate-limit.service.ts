@@ -251,6 +251,25 @@ export class RateLimitService {
   }
 
   /**
+   * Center login uses the student login policy values but isolated keys.
+   * Neither product can consume the other's IP or email budget.
+   */
+  checkCenterLoginLimit(ip: string, email: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:login:ip:${ip}`,
+        max: this.loginIpMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+      {
+        key: `ratelimit:centers:login:email:${email.trim().toLowerCase()}`,
+        max: this.loginEmailMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+    ]);
+  }
+
+  /**
    * Rate limit for POST /api/auth/verify-email-public. Throws 429 when exceeded.
    * Key is typically the requester's IP address.
    */
@@ -258,6 +277,17 @@ export class RateLimitService {
     return this.enforceDistributed([
       {
         key: `ratelimit:auth:verify-email-public:${key}`,
+        max: this.verifyEmailPublicMaxAttempts,
+        ttlSeconds: this.verifyEmailPublicWindowSeconds,
+      },
+    ]);
+  }
+
+  /** Center verification is isolated from student verification traffic. */
+  checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:verify-email:ip:${ip}`,
         max: this.verifyEmailPublicMaxAttempts,
         ttlSeconds: this.verifyEmailPublicWindowSeconds,
       },
