@@ -1,4 +1,3 @@
-import { Transform, type TransformFnParams } from 'class-transformer';
 import {
   IsEmail,
   IsNotEmpty,
@@ -8,48 +7,13 @@ import {
   Matches,
   MaxLength,
   MinLength,
-  registerDecorator,
-  type ValidationArguments,
-  type ValidationOptions,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-function trimValue(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim() : value;
-}
-
-function normalizeEmailValue(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim().toLowerCase() : value;
-}
-
-function Trim() {
-  return Transform((params: TransformFnParams) =>
-    trimValue(params.value as unknown),
-  );
-}
-
-function MaxUtf8Bytes(maximum: number, options?: ValidationOptions) {
-  return (object: object, propertyName: string): void => {
-    registerDecorator({
-      name: 'maxUtf8Bytes',
-      target: object.constructor,
-      propertyName,
-      constraints: [maximum],
-      options,
-      validator: {
-        validate(value: unknown, args: ValidationArguments): boolean {
-          return (
-            typeof value === 'string' &&
-            Buffer.byteLength(value, 'utf8') <= Number(args.constraints[0])
-          );
-        },
-        defaultMessage(args: ValidationArguments): string {
-          return `${args.property} must not exceed ${args.constraints[0]} UTF-8 bytes`;
-        },
-      },
-    });
-  };
-}
+import {
+  MaxUtf8Bytes,
+  NormalizeEmail,
+  Trim,
+} from './center-validation.decorators';
 
 export class RegisterCenterDto {
   @ApiProperty({ example: 'Goethe Language Center', maxLength: 150 })
@@ -100,9 +64,7 @@ export class RegisterCenterDto {
   managerLastName: string;
 
   @ApiProperty({ example: 'manager@example.com', maxLength: 254 })
-  @Transform((params: TransformFnParams) =>
-    normalizeEmailValue(params.value as unknown),
-  )
+  @NormalizeEmail()
   @IsString()
   @IsNotEmpty()
   @MaxLength(254)
