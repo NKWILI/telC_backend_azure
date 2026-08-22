@@ -10,14 +10,14 @@ Companion to `tasks/center-subscription-global-plan.md`.
 - [x] Verify baseline production build passes
 - [x] Human approves the global architecture and phase order
 - [x] Human authorizes progression into Phase 1 detailed planning; phase-specific defaults remain individually gated
-- [ ] Do not create a feature branch before this gate is approved
+- [x] Do not create a feature branch before this gate is approved
 
 ## Phase 1: Center identity and profile
 
 - [ ] Write `tasks/phases/01-center-identity-plan.md`
 - [ ] Resolve logo-storage choice required by the phase
-- [ ] Human approves the specific plan
-- [ ] Create `feature/center-identity` from the approved clean base
+- [x] Human approves the specific plan
+- [x] Create `feature/center-identity` from the approved clean base
 - [ ] Implement with TDD and incremental commits
 - [ ] Pass focused tests, full tests, build, lint, and code review
 - [ ] Human approves merge

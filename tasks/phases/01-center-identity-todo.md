@@ -6,18 +6,18 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 - [x] Inspect existing auth, token, email, validation, rate-limit, Valkey, Prisma, and test patterns
 - [x] Define Phase 1 API contract and threat model
-- [ ] Human approves the four defaults in the plan's Approval Decision
-- [ ] Human approves this specific Phase 1 plan
-- [ ] Confirm tracked worktree changes are limited to approved planning files
-- [ ] Create `feature/center-identity` only after approval
+- [x] Human approves the four defaults in the plan's Approval Decision
+- [x] Human approves this specific Phase 1 plan
+- [x] Confirm tracked worktree changes are limited to approved planning files
+- [x] Create `feature/center-identity` only after approval
 
 ## Task 1: Schema
 
-- [ ] Write failing/schema contract check where applicable
-- [ ] Add `Center`, `CenterUser`, `CenterDeviceSession`, and `CenterUserRole`
-- [ ] Add additive Prisma migration with reviewed FK actions and unique constraints
-- [ ] Prisma validate/generate and production build pass
-- [ ] Commit the green increment
+- [x] Write failing/schema contract check where applicable
+- [x] Add `Center`, `CenterUser`, `CenterDeviceSession`, and `CenterUserRole`
+- [x] Add additive Prisma migration with reviewed FK actions and unique constraints
+- [x] Prisma validate/generate and production build pass
+- [x] Commit the green increment
 
 ## Task 2: Center tokens
 
