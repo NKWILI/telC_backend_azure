@@ -25,16 +25,16 @@ This is a backend initiative. Center-dashboard and student-app UI implementation
 
 ## Confirmed Product Rules
 
-| Rule | Standard center | Special partner |
-|---|---:|---:|
-| Registration | Public center form | Same public center form plus partnership code |
-| Trial | 30 days, maximum 3 students | Same unless contract later overrides it |
-| Minimum paid seats | 10 | 10 |
-| Monthly unit price | 4,800 XAF | 4,500 XAF |
-| Minimum monthly payment | 48,000 XAF | 45,000 XAF |
-| Payment | Center initiates website checkout | Same checkout; backend applies partner price |
-| Automatic renewal | No | No |
-| Grace period | 7 days | 7 days unless contract later overrides it |
+| Rule                    |                   Standard center |                               Special partner |
+| ----------------------- | --------------------------------: | --------------------------------------------: |
+| Registration            |                Public center form | Same public center form plus partnership code |
+| Trial                   |       30 days, maximum 3 students |       Same unless contract later overrides it |
+| Minimum paid seats      |                                10 |                                            10 |
+| Monthly unit price      |                         4,800 XAF |                                     4,500 XAF |
+| Minimum monthly payment |                        48,000 XAF |                                    45,000 XAF |
+| Payment                 | Center initiates website checkout |  Same checkout; backend applies partner price |
+| Automatic renewal       |                                No |                                            No |
+| Grace period            |                            7 days |     7 days unless contract later overrides it |
 
 ## Assumptions Requiring Approval
 
@@ -65,18 +65,18 @@ This is a backend initiative. Center-dashboard and student-app UI implementation
 
 ## Capability and Dependency Map
 
-| Phase | Capability | Depends on | Planned branch |
-|---|---|---|---|
-| 1 | Center identity and profile | Existing auth infrastructure | `feature/center-identity` |
-| 2 | Partnership code and pricing assignment | Phase 1 | `feature/partnership-codes` |
-| 3 | Trial, subscription, and seat policy | Phases 1-2 | `feature/center-subscriptions` |
-| 4 | Center-managed student activation | Phases 1-3 | `feature/student-activation` |
-| 5 | Subscription access enforcement | Phases 3-4 | `feature/subscription-access` |
-| 6 | Price quotation and payment records | Phases 2-3 | `feature/subscription-payments` |
-| 7 | Notch Pay checkout and webhooks | Phase 6 | `feature/notchpay-checkout` |
-| 8 | Renewal, reminders, grace, and blocking | Phases 5 and 7 | `feature/subscription-renewal` |
-| 9 | AI usage metering and quotas | Phases 4-5 | `feature/ai-usage-limits` |
-| 10 | Migration, end-to-end hardening, and rollout | Phases 1-9 | `feature/center-access-rollout` |
+| Phase | Capability                                   | Depends on                   | Planned branch                  |
+| ----- | -------------------------------------------- | ---------------------------- | ------------------------------- |
+| 1     | Center identity and profile                  | Existing auth infrastructure | `feature/center-identity`       |
+| 2     | Partnership code and pricing assignment      | Phase 1                      | `feature/partnership-codes`     |
+| 3     | Trial, subscription, and seat policy         | Phases 1-2                   | `feature/center-subscriptions`  |
+| 4     | Center-managed student activation            | Phases 1-3                   | `feature/student-activation`    |
+| 5     | Subscription access enforcement              | Phases 3-4                   | `feature/subscription-access`   |
+| 6     | Price quotation and payment records          | Phases 2-3                   | `feature/subscription-payments` |
+| 7     | Notch Pay checkout and webhooks              | Phase 6                      | `feature/notchpay-checkout`     |
+| 8     | Renewal, reminders, grace, and blocking      | Phases 5 and 7               | `feature/subscription-renewal`  |
+| 9     | AI usage metering and quotas                 | Phases 4-5                   | `feature/ai-usage-limits`       |
+| 10    | Migration, end-to-end hardening, and rollout | Phases 1-9                   | `feature/center-access-rollout` |
 
 Build order:
 
@@ -304,19 +304,19 @@ Lint currently runs with `--fix`; before using it, the detailed phase plan must 
 
 ## Main Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
+| Risk                                                | Impact   | Mitigation                                                                                |
+| --------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------- |
 | Existing student self-registration bypasses centers | Critical | Migrate/deprecate it explicitly; access guard requires center ownership for paid learning |
-| Google flow auto-creates students | Critical | Keep disabled and prevent future re-enable until it follows center activation rules |
-| Duplicate or forged payment events grant access | Critical | Signature + server verification + unique provider reference + transactional idempotency |
-| Concurrent center operations exceed seats | High | Database transaction and locking/atomic constraint strategy tested under concurrency |
-| Subscription scheduler runs late | High | Access guard derives effective status from authoritative timestamps |
-| Partnership code leaks or is guessed | High | 128-bit randomness, keyed hash, rate limiting, single-use atomic consumption, no logs |
-| Blocked student uses a stale token | High | Subscription check on protected requests and refresh, not only at login |
-| Guest/demo access contradicts full blocking | Medium | Make an explicit product decision before Phase 5 and test the chosen rule |
-| Logo upload becomes an arbitrary-file vulnerability | Medium | Signed storage upload or strict MIME/size validation; never trust file extension |
-| AI retries double-count or exceed quota | Medium | Reserve quota atomically before provider call and record final provider usage |
-| Long-lived branches create integration conflicts | Medium | One short-lived branch per approved phase; merge completed vertical slices promptly |
+| Google flow auto-creates students                   | Critical | Keep disabled and prevent future re-enable until it follows center activation rules       |
+| Duplicate or forged payment events grant access     | Critical | Signature + server verification + unique provider reference + transactional idempotency   |
+| Concurrent center operations exceed seats           | High     | Database transaction and locking/atomic constraint strategy tested under concurrency      |
+| Subscription scheduler runs late                    | High     | Access guard derives effective status from authoritative timestamps                       |
+| Partnership code leaks or is guessed                | High     | 128-bit randomness, keyed hash, rate limiting, single-use atomic consumption, no logs     |
+| Blocked student uses a stale token                  | High     | Subscription check on protected requests and refresh, not only at login                   |
+| Guest/demo access contradicts full blocking         | Medium   | Make an explicit product decision before Phase 5 and test the chosen rule                 |
+| Logo upload becomes an arbitrary-file vulnerability | Medium   | Signed storage upload or strict MIME/size validation; never trust file extension          |
+| AI retries double-count or exceed quota             | Medium   | Reserve quota atomically before provider call and record final provider usage             |
+| Long-lived branches create integration conflicts    | Medium   | One short-lived branch per approved phase; merge completed vertical slices promptly       |
 
 ## Open Questions to Resolve Before Their Phase
 
@@ -340,4 +340,3 @@ Lint currently runs with `--fix`; before using it, the detailed phase plan must 
 - Blocked subscriptions deny learning access while retaining account/progress data.
 - Swagger/API documentation and environment examples are current.
 - Production deployment and rollback steps are documented and tested proportionally to risk.
-

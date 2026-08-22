@@ -336,20 +336,20 @@ At least one field is required. `centerId`, role, email, verification state, pas
 
 ## Threat Model
 
-| Abuse case | Control and required test |
-|---|---|
-| Enumerate registered center emails | Generic registration and forgot-password responses; identical status/shape |
-| Pre-hijack an unverified center | Repeat registration rotates only verification token; never overwrites stored password/profile |
-| Brute-force login/reset | Reuse distributed IP/email rate limits and short reset-code TTL |
-| Use student token as center owner | Distinct `actorType` and center-token verifier; negative token-confusion tests |
-| Access another center by changing an ID | No center ID accepted by `/me`; signed `centerId` is the only ownership source |
-| Replay refresh token concurrently | Compare-and-update refresh hash atomically; exactly one request succeeds |
-| Continue after logout | Session revocation checked in Valkey and database fallback |
-| Inject unexpected profile fields | Global whitelist + `forbidNonWhitelisted`; explicit DTO allowlist |
-| Abuse logo URL as SSRF | HTTPS validation and no server-side fetch or redirect following |
-| Upload executable/oversized logo | No binary upload exists in this phase |
-| Leak credentials/PII through logs or responses | Never log tokens/passwords; response DTO allowlists fields; generic internal errors |
-| Hold database locks during email outage | Commit identity transaction before calling Resend |
+| Abuse case                                     | Control and required test                                                                     |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Enumerate registered center emails             | Generic registration and forgot-password responses; identical status/shape                    |
+| Pre-hijack an unverified center                | Repeat registration rotates only verification token; never overwrites stored password/profile |
+| Brute-force login/reset                        | Reuse distributed IP/email rate limits and short reset-code TTL                               |
+| Use student token as center owner              | Distinct `actorType` and center-token verifier; negative token-confusion tests                |
+| Access another center by changing an ID        | No center ID accepted by `/me`; signed `centerId` is the only ownership source                |
+| Replay refresh token concurrently              | Compare-and-update refresh hash atomically; exactly one request succeeds                      |
+| Continue after logout                          | Session revocation checked in Valkey and database fallback                                    |
+| Inject unexpected profile fields               | Global whitelist + `forbidNonWhitelisted`; explicit DTO allowlist                             |
+| Abuse logo URL as SSRF                         | HTTPS validation and no server-side fetch or redirect following                               |
+| Upload executable/oversized logo               | No binary upload exists in this phase                                                         |
+| Leak credentials/PII through logs or responses | Never log tokens/passwords; response DTO allowlists fields; generic internal errors           |
+| Hold database locks during email outage        | Commit identity transaction before calling Resend                                             |
 
 ## Task Dependency Graph
 
@@ -671,4 +671,3 @@ Approve this plan as written, or change one of these defaults before implementat
 2. center and student accounts may use the same email;
 3. a center user may use at most three devices;
 4. profile email changes are deferred to a later verified-email-change feature.
-
