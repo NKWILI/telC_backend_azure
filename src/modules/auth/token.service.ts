@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
-import * as bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import {
   AccessTokenPayload,
   RefreshTokenPayload,
@@ -14,6 +13,7 @@ export class TokenService {
   private readonly refreshTokenSecret: string;
   private readonly accessTokenExpiry: string;
   private readonly refreshTokenExpiry: string;
+  private readonly refreshTokenHashSecret: string;
   private readonly issuer = 'lerniqo-api';
   private readonly audience = 'lerniqo-app';
 
@@ -22,6 +22,10 @@ export class TokenService {
     this.refreshTokenSecret = this.requireSecret('JWT_REFRESH_SECRET');
     this.accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
     this.refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
+    // Falls back to the refresh signing secret so an existing deployment does
+    // not need a new variable before it can take this fix.
+    this.refreshTokenHashSecret =
+      process.env.TOKEN_HMAC_SECRET || this.refreshTokenSecret;
   }
 
   private requireSecret(
@@ -194,18 +198,47 @@ export class TokenService {
   }
 
   /**
-   * Hash a refresh token before storing in DB
-   * Uses bcrypt with cost factor 10
+   * Hash a refresh token before storing it.
+   *
+   * HMAC-SHA256, deliberately not bcrypt. bcrypt truncates its input at 72
+   * bytes, and a refresh token is a ~400-byte JWT whose first 72 bytes —
+   * header plus the opening of the payload — are identical for every token
+   * issued to the same session. Hashing one with bcrypt therefore made a spent
+   * token compare equal to its replacement, so rotation was never single-use
+   * and a leaked refresh token stayed valid for its whole lifetime.
+   *
+   * bcrypt earns its cost for low-entropy secrets that people choose. A signed
+   * JWT already carries far more entropy than any password, so there is
+   * nothing to slow an attacker down against — a fast keyed digest over the
+   * *whole* input is both correct and cheaper.
+   *
+   * Kept async so every existing caller keeps working unchanged.
    */
   async hashRefreshToken(token: string): Promise<string> {
-    return bcrypt.hash(token, 10);
+    return Promise.resolve(this.digestRefreshToken(token));
   }
 
   /**
-   * Compare a plain refresh token with its stored hash
+   * Compare a presented refresh token with its stored hash, in constant time.
    */
   async compareRefreshToken(token: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(token, hash);
+    const expected = Buffer.from(this.digestRefreshToken(token), 'utf8');
+    const stored = Buffer.from(hash ?? '', 'utf8');
+
+    // timingSafeEqual throws on a length mismatch, which any legacy bcrypt
+    // hash will be. Those cannot be verified any more by design, so they fail
+    // closed and the student signs in again.
+    if (expected.length !== stored.length) {
+      return Promise.resolve(false);
+    }
+
+    return Promise.resolve(timingSafeEqual(expected, stored));
+  }
+
+  private digestRefreshToken(token: string): string {
+    return createHmac('sha256', this.refreshTokenHashSecret)
+      .update(token)
+      .digest('hex');
   }
 
   /**
