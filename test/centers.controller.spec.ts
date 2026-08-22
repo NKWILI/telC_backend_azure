@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  INestApplication,
+  Logger,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
@@ -50,6 +55,7 @@ describe('CentersController registration contract', () => {
 
   afterEach(async () => {
     await app.close();
+    jest.restoreAllMocks();
   });
 
   it('registers a center with normalized input and a generic 201 response', async () => {
@@ -146,5 +152,31 @@ describe('CentersController registration contract', () => {
 
     expect(response.body.error).toBe('RATE_LIMIT_EXCEEDED');
     expect(centersService.register).not.toHaveBeenCalled();
+  });
+
+  it('logs unexpected failures without exposing request data', async () => {
+    const errorLog = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    centersService.register.mockRejectedValue(new Error('database offline'));
+
+    const response = await request(app.getHttpServer())
+      .post('/api/centers/register')
+      .send(validBody)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      error: 'INTERNAL_SERVER_ERROR',
+      message: 'Unexpected error',
+    });
+    expect(errorLog).toHaveBeenCalledWith(
+      'Unexpected error while handling a center request (Error)',
+    );
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      'manager@example.com',
+    );
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      'private-password',
+    );
   });
 });

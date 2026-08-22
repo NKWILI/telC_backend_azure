@@ -1,4 +1,5 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
+import type { CenterUser } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { EmailService } from '../auth/email.service';
@@ -20,11 +21,10 @@ export interface RegisterCenterInput {
   password: string;
 }
 
-type ExistingCenterUser = {
-  id: string;
-  email_verified: boolean;
-  email_verification_expires: Date | null;
-};
+type ExistingCenterUser = Pick<
+  CenterUser,
+  'id' | 'email_verified' | 'email_verification_expires'
+>;
 
 @Injectable()
 export class CentersService {
@@ -40,14 +40,14 @@ export class CentersService {
     input: RegisterCenterInput,
   ): Promise<{ message: 'verification email sent' }> {
     const email = input.email.trim().toLowerCase();
-    const existing = (await this.prisma.centerUser.findUnique({
+    const existing = await this.prisma.centerUser.findUnique({
       where: { email },
       select: {
         id: true,
         email_verified: true,
         email_verification_expires: true,
       },
-    })) as ExistingCenterUser | null;
+    });
 
     if (existing?.email_verified) {
       return REGISTRATION_RESPONSE;
@@ -64,6 +64,8 @@ export class CentersService {
     existing: ExistingCenterUser,
     email: string,
   ): Promise<{ message: 'verification email sent' }> {
+    // expiresAt = sentAt + TTL, so this threshold is equivalent to
+    // sentAt = now - cooldown. It is also reused by the atomic update below.
     const resendThreshold = new Date(
       Date.now() + VERIFICATION_TOKEN_TTL_MS - VERIFICATION_RESEND_COOLDOWN_MS,
     );
@@ -154,6 +156,8 @@ export class CentersService {
         return centerUser.id;
       });
 
+      // Delivery stays outside the transaction so provider latency or failure
+      // cannot hold database locks or roll back the created identity.
       try {
         await this.emailService.sendCenterVerificationEmail(email, rawToken);
       } catch {
