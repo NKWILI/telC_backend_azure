@@ -37,11 +37,11 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 4: Registration service
 
-- [ ] Write new/duplicate/concurrent registration tests first
-- [ ] Implement normalized, atomic center/owner creation
-- [ ] Implement safe duplicate behavior and bcrypt-12 hashing
-- [ ] Send verification after database commit
-- [ ] Commit the green increment
+- [x] Write new/duplicate/concurrent registration tests first
+- [x] Implement normalized, atomic center/owner creation
+- [x] Implement safe duplicate behavior and bcrypt-12 hashing
+- [x] Send verification after database commit
+- [x] Commit the green increment
 
 ## Task 5: Registration endpoint
 
