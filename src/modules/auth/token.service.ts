@@ -6,6 +6,8 @@ import {
   AccessTokenPayload,
   RefreshTokenPayload,
   LinkingTokenPayload,
+  CenterAccessTokenPayload,
+  CenterRefreshTokenPayload,
 } from '../../shared/interfaces/token-payload.interface';
 
 @Injectable()
@@ -132,6 +134,69 @@ export class TokenService {
     };
   }
 
+  generateCenterAccessToken(payload: {
+    centerUserId: string;
+    centerId: string;
+    deviceId: string;
+    sessionId: string;
+  }): string {
+    return jwt.sign(
+      {
+        type: 'access',
+        actorType: 'CENTER_USER',
+        centerUserId: payload.centerUserId,
+        centerId: payload.centerId,
+        deviceId: payload.deviceId,
+        sessionId: payload.sessionId,
+      },
+      this.accessTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        expiresIn: this.accessTokenExpiry as jwt.SignOptions['expiresIn'],
+      },
+    );
+  }
+
+  generateCenterRefreshToken(payload: {
+    centerUserId: string;
+    centerId: string;
+    deviceId: string;
+    sessionId: string;
+  }): string {
+    return jwt.sign(
+      {
+        type: 'refresh',
+        actorType: 'CENTER_USER',
+        centerUserId: payload.centerUserId,
+        centerId: payload.centerId,
+        deviceId: payload.deviceId,
+        sessionId: payload.sessionId,
+      },
+      this.refreshTokenSecret,
+      {
+        algorithm: 'HS256',
+        issuer: this.issuer,
+        audience: this.audience,
+        jwtid: randomUUID(),
+        expiresIn: this.refreshTokenExpiry as jwt.SignOptions['expiresIn'],
+      },
+    );
+  }
+
+  generateCenterTokenPair(payload: {
+    centerUserId: string;
+    centerId: string;
+    deviceId: string;
+    sessionId: string;
+  }): { accessToken: string; refreshToken: string } {
+    return {
+      accessToken: this.generateCenterAccessToken(payload),
+      refreshToken: this.generateCenterRefreshToken(payload),
+    };
+  }
+
   /**
    * Verify and decode an access token
    * Throws UnauthorizedException if invalid/expired
@@ -190,6 +255,52 @@ export class TokenService {
         throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
       }
       throw new UnauthorizedException('INVALID_REFRESH_TOKEN');
+    }
+  }
+
+  verifyCenterAccessToken(token: string): CenterAccessTokenPayload {
+    try {
+      const decoded = jwt.verify(token, this.accessTokenSecret, {
+        algorithms: ['HS256'],
+        issuer: this.issuer,
+        audience: this.audience,
+      }) as CenterAccessTokenPayload;
+      if (
+        decoded.type !== 'access' ||
+        decoded.actorType !== 'CENTER_USER' ||
+        typeof decoded.centerUserId !== 'string' ||
+        typeof decoded.centerId !== 'string' ||
+        typeof decoded.deviceId !== 'string' ||
+        typeof decoded.sessionId !== 'string'
+      ) {
+        throw new UnauthorizedException('INVALID_CENTER_ACCESS_TOKEN');
+      }
+      return decoded;
+    } catch {
+      throw new UnauthorizedException('INVALID_CENTER_ACCESS_TOKEN');
+    }
+  }
+
+  verifyCenterRefreshToken(token: string): CenterRefreshTokenPayload {
+    try {
+      const decoded = jwt.verify(token, this.refreshTokenSecret, {
+        algorithms: ['HS256'],
+        issuer: this.issuer,
+        audience: this.audience,
+      }) as CenterRefreshTokenPayload;
+      if (
+        decoded.type !== 'refresh' ||
+        decoded.actorType !== 'CENTER_USER' ||
+        typeof decoded.centerUserId !== 'string' ||
+        typeof decoded.centerId !== 'string' ||
+        typeof decoded.deviceId !== 'string' ||
+        typeof decoded.sessionId !== 'string'
+      ) {
+        throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
+      }
+      return decoded;
+    } catch {
+      throw new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN');
     }
   }
 

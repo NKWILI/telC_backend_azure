@@ -21,11 +21,11 @@ Companion to `tasks/phases/01-center-identity-plan.md`.
 
 ## Task 2: Center tokens
 
-- [ ] Write token isolation tests first
-- [ ] Add center access/refresh payload types
-- [ ] Add center token generation and verification to `TokenService`
-- [ ] Prove student, guest, and center token types cannot cross
-- [ ] Commit the green increment
+- [x] Write token isolation tests first
+- [x] Add center access/refresh payload types
+- [x] Add center token generation and verification to `TokenService`
+- [x] Prove student, guest, and center token types cannot cross
+- [x] Commit the green increment
 
 ## Task 3: Center emails
 
