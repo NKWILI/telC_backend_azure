@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -56,10 +57,14 @@ describe('CenterAuthController contract', () => {
     login: jest.Mock;
     refresh: jest.Mock;
     logout: jest.Mock;
+    forgotPassword: jest.Mock;
+    resetPassword: jest.Mock;
   };
   let rateLimitService: {
     checkCenterVerifyEmailLimit: jest.Mock;
     checkCenterLoginLimit: jest.Mock;
+    checkCenterForgotPasswordLimit: jest.Mock;
+    checkCenterResetPasswordLimit: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -71,10 +76,16 @@ describe('CenterAuthController contract', () => {
         refreshToken: 'rotated-refresh-token',
       }),
       logout: jest.fn().mockResolvedValue({ success: true }),
+      forgotPassword: jest.fn().mockResolvedValue({
+        message: 'If that account exists, a reset code was sent.',
+      }),
+      resetPassword: jest.fn().mockResolvedValue(authResponse),
     };
     rateLimitService = {
       checkCenterVerifyEmailLimit: jest.fn().mockResolvedValue(undefined),
       checkCenterLoginLimit: jest.fn().mockResolvedValue(undefined),
+      checkCenterForgotPasswordLimit: jest.fn().mockResolvedValue(undefined),
+      checkCenterResetPasswordLimit: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({
@@ -407,5 +418,78 @@ describe('CenterAuthController contract', () => {
     expect(response.body.error).toBe('VALIDATION_ERROR');
     expect(centerAuthService.refresh).not.toHaveBeenCalled();
     expect(centerAuthService.logout).not.toHaveBeenCalled();
+  });
+  describe('password recovery', () => {
+    const validReset = {
+      email: ' Manager@Example.COM ',
+      code: '123456',
+      newPassword: 'a-brand-new-password',
+      deviceId: ' browser-installation-1 ',
+    };
+
+    it('returns the same body for a known and an unknown address', async () => {
+      const known = await request(app.getHttpServer())
+        .post('/api/center-auth/forgot-password')
+        .send({ email: 'manager@example.com' })
+        .expect(201);
+
+      const unknown = await request(app.getHttpServer())
+        .post('/api/center-auth/forgot-password')
+        .send({ email: 'nobody@example.com' })
+        .expect(201);
+
+      expect(known.body).toEqual(unknown.body);
+      expect(
+        rateLimitService.checkCenterForgotPasswordLimit,
+      ).toHaveBeenCalled();
+    });
+
+    it('normalizes reset input and returns a fresh session', async () => {
+      await request(app.getHttpServer())
+        .post('/api/center-auth/reset-password')
+        .send(validReset)
+        .expect(201)
+        .expect(authResponse);
+
+      expect(centerAuthService.resetPassword).toHaveBeenCalledWith({
+        ...validReset,
+        email: 'manager@example.com',
+        deviceId: 'browser-installation-1',
+      });
+      expect(rateLimitService.checkCenterResetPasswordLimit).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a non-numeric code', { ...validReset, code: 'abcdef' }],
+      ['a short code', { ...validReset, code: '12345' }],
+      ['a weak new password', { ...validReset, newPassword: 'short' }],
+      [
+        'a new password over 72 bytes',
+        { ...validReset, newPassword: 'é'.repeat(40) },
+      ],
+      ['a missing device id', { ...validReset, deviceId: '   ' }],
+      ['a client-supplied role', { ...validReset, role: 'OWNER' }],
+    ])('rejects %s before reaching the service', async (_case, body) => {
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/reset-password')
+        .send(body)
+        .expect(400);
+
+      expect(response.body.error).toBe('VALIDATION_ERROR');
+      expect(centerAuthService.resetPassword).not.toHaveBeenCalled();
+    });
+
+    it('returns the stable 400 contract for a spent code', async () => {
+      centerAuthService.resetPassword.mockRejectedValue(
+        new BadRequestException('RESET_CODE_INVALID'),
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/reset-password')
+        .send(validReset)
+        .expect(400);
+
+      expect(response.body.error).toBe('RESET_CODE_INVALID');
+    });
   });
 });

@@ -49,6 +49,11 @@ export class CenterTokenPairDto {
   refreshToken: string;
 }
 
+export class CenterMessageResponseDto {
+  @ApiProperty({ example: 'If that account exists, a reset code was sent.' })
+  message: string;
+}
+
 export class CenterLogoutResponseDto {
   @ApiProperty({ example: true })
   success: true;

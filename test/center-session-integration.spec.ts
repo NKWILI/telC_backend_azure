@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await */
 /**
  * Everything the center session design rests on is a claim about Postgres:
  * that Serializable raises a retryable conflict, that `updateMany` with an
@@ -26,9 +26,15 @@ const tokenCrypto = new TokenCryptoService({
 const emailService = {
   sendCenterVerificationEmail: jest.fn().mockResolvedValue(undefined),
   sendExistingCenterVerificationEmail: jest.fn().mockResolvedValue(undefined),
+  sendCenterPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
 };
 
-const centerAuth = new CenterAuthService(prisma, tokenService, tokenCrypto);
+const centerAuth = new CenterAuthService(
+  prisma,
+  tokenService,
+  tokenCrypto,
+  emailService as never,
+);
 const centers = new CentersService(prisma, tokenCrypto, emailService as never);
 
 const PASSWORD = 'integration-password';
@@ -237,6 +243,64 @@ describe('center sessions against real Postgres', () => {
     await expect(guard.canActivate(contextFor(accessToken))).rejects.toThrow(
       'CENTER_SESSION_REVOKED',
     );
+  });
+
+  it('locks every other device out when the password is reset', async () => {
+    const owner = await createVerifiedOwner('reset');
+    const laptop = await centerAuth.login({
+      email: owner.email,
+      password: PASSWORD,
+      deviceId: 'device-laptop',
+    });
+    await centerAuth.login({
+      email: owner.email,
+      password: PASSWORD,
+      deviceId: 'device-phone',
+    });
+
+    // Drive the real reset path: forgotPassword writes a hashed code, and the
+    // raw code is whatever the mailer was handed.
+    await centerAuth.forgotPassword({ email: owner.email });
+    const rawCode = emailService.sendCenterPasswordResetEmail.mock.calls.at(
+      -1,
+    )?.[1] as string;
+
+    const fresh = await centerAuth.resetPassword({
+      email: owner.email,
+      code: rawCode,
+      newPassword: 'a-brand-new-password',
+      deviceId: 'device-reset',
+    });
+
+    const guard = new CenterAuthGuard(
+      tokenService,
+      { isSessionRevoked: async () => null } as never,
+      prisma,
+    );
+    const contextFor = (token: string) =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({ headers: { authorization: `Bearer ${token}` } }),
+        }),
+      }) as never;
+
+    // The device that performed the reset keeps working; the others do not.
+    await expect(
+      guard.canActivate(contextFor(fresh.accessToken)),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(contextFor(laptop.accessToken)),
+    ).rejects.toThrow('CENTER_SESSION_REVOKED');
+
+    // The code is single use.
+    await expect(
+      centerAuth.resetPassword({
+        email: owner.email,
+        code: rawCode,
+        newPassword: 'another-password',
+        deviceId: 'device-reset',
+      }),
+    ).rejects.toThrow('RESET_CODE_INVALID');
   });
 
   it('makes a revoked session invisible to the active-session predicate', async () => {

@@ -45,6 +45,7 @@ describe('CenterAuthService', () => {
   let tx: any;
   let tokenService: any;
   let tokenCrypto: any;
+  let emailService: any;
   let valkeyService: any;
   let service: CenterAuthService;
 
@@ -71,6 +72,7 @@ describe('CenterAuthService', () => {
       },
       centerDeviceSession: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       $transaction: jest.fn(async (callback: (client: any) => unknown) =>
@@ -101,6 +103,11 @@ describe('CenterAuthService', () => {
     };
     tokenCrypto = {
       hashToken: jest.fn().mockReturnValue('verification-token-hash'),
+      generateNumericCode: jest.fn().mockReturnValue('123456'),
+      isExpired: jest.fn().mockReturnValue(false),
+    };
+    emailService = {
+      sendCenterPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
     };
     valkeyService = {
       revokeSession: jest.fn().mockResolvedValue(true),
@@ -109,6 +116,7 @@ describe('CenterAuthService', () => {
       prisma,
       tokenService,
       tokenCrypto,
+      emailService,
       valkeyService,
     );
   });
@@ -827,6 +835,163 @@ describe('CenterAuthService', () => {
         service.logout({ refreshToken: 'center-refresh-token' }),
       ).resolves.toEqual({ success: true });
       expect(prisma.centerDeviceSession.updateMany).toHaveBeenCalled();
+    });
+  });
+  describe('password recovery', () => {
+    const unverifiedTail = {
+      center_id: 'center-1',
+      first_name: 'Alain',
+      last_name: 'Ngeukeu',
+      email: 'manager@example.com',
+      phone: '+237690000000',
+      center,
+    };
+
+    describe('forgotPassword', () => {
+      it('returns the same response whether or not the account exists', async () => {
+        prisma.centerUser.findUnique.mockResolvedValue(null);
+        const missing = await service.forgotPassword({
+          email: 'nobody@example.com',
+        });
+
+        prisma.centerUser.findUnique.mockResolvedValue(verifiedOwner);
+        const present = await service.forgotPassword({
+          email: 'manager@example.com',
+        });
+
+        expect(missing).toEqual(present);
+      });
+
+      it('sends no email and writes nothing for an unknown address', async () => {
+        prisma.centerUser.findUnique.mockResolvedValue(null);
+
+        await service.forgotPassword({ email: 'nobody@example.com' });
+
+        expect(prisma.centerUser.update).not.toHaveBeenCalled();
+        expect(
+          emailService.sendCenterPasswordResetEmail,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('stores only the hashed code and mails the raw one', async () => {
+        prisma.centerUser.findUnique.mockResolvedValue(verifiedOwner);
+        tokenCrypto.hashToken.mockReturnValue('reset-code-hash');
+
+        await service.forgotPassword({ email: ' Manager@Example.COM ' });
+
+        expect(prisma.centerUser.findUnique).toHaveBeenCalledWith({
+          where: { email: 'manager@example.com' },
+          select: expect.any(Object),
+        });
+        const update = prisma.centerUser.update.mock.calls[0][0];
+        expect(update.data.password_reset_token).toBe('reset-code-hash');
+        expect(update.data.password_reset_expires).toBeInstanceOf(Date);
+        expect(emailService.sendCenterPasswordResetEmail).toHaveBeenCalledWith(
+          'manager@example.com',
+          '123456',
+        );
+      });
+
+      it('keeps the generic response when email delivery fails', async () => {
+        prisma.centerUser.findUnique.mockResolvedValue(verifiedOwner);
+        emailService.sendCenterPasswordResetEmail.mockRejectedValue(
+          new Error('provider down'),
+        );
+        const errorLog = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        const warnLog = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+
+        await expect(
+          service.forgotPassword({ email: 'manager@example.com' }),
+        ).resolves.toBeDefined();
+
+        errorLog.mockRestore();
+        warnLog.mockRestore();
+      });
+    });
+
+    describe('resetPassword', () => {
+      const resetInput = {
+        email: 'manager@example.com',
+        code: '123456',
+        newPassword: 'a-brand-new-password',
+        deviceId: 'browser-1',
+      };
+
+      beforeEach(() => {
+        tokenCrypto.hashToken.mockReturnValue('reset-code-hash');
+        prisma.centerUser.findFirst.mockResolvedValue({
+          ...verifiedOwner,
+          ...unverifiedTail,
+          password_reset_token: 'reset-code-hash',
+          password_reset_expires: new Date(Date.now() + 60_000),
+        });
+      });
+
+      it('rotates the password, consumes the code, and returns a session', async () => {
+        const result = await service.resetPassword(resetInput);
+
+        const consume = prisma.centerUser.updateMany.mock.calls[0][0];
+        expect(consume.where).toEqual(
+          expect.objectContaining({
+            id: 'owner-1',
+            password_reset_token: 'reset-code-hash',
+          }),
+        );
+        expect(consume.data.password_reset_token).toBeNull();
+        expect(consume.data.password_reset_expires).toBeNull();
+        expect(
+          await bcrypt.compare(
+            resetInput.newPassword,
+            consume.data.password_hash,
+          ),
+        ).toBe(true);
+        expect(bcrypt.getRounds(consume.data.password_hash)).toBe(12);
+        expect(result.accessToken).toBe('center-access-token');
+      });
+
+      it('revokes every existing center session and no student session', async () => {
+        await service.resetPassword(resetInput);
+
+        expect(prisma.centerDeviceSession.updateMany).toHaveBeenCalledWith({
+          where: { center_user_id: 'owner-1', revoked_at: null },
+          data: { revoked_at: expect.any(Date) },
+        });
+      });
+
+      it('rejects an unknown code without revealing whether the email exists', async () => {
+        prisma.centerUser.findFirst.mockResolvedValue(null);
+
+        await expect(service.resetPassword(resetInput)).rejects.toThrow(
+          'RESET_CODE_INVALID',
+        );
+        expect(prisma.centerUser.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('rejects an expired code', async () => {
+        prisma.centerUser.findFirst.mockResolvedValue({
+          ...verifiedOwner,
+          ...unverifiedTail,
+          password_reset_token: 'reset-code-hash',
+          password_reset_expires: new Date(Date.now() - 60_000),
+        });
+
+        await expect(service.resetPassword(resetInput)).rejects.toThrow(
+          'RESET_CODE_EXPIRED',
+        );
+        expect(prisma.centerUser.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('lets only one of two concurrent redemptions consume the code', async () => {
+        prisma.centerUser.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(service.resetPassword(resetInput)).rejects.toThrow(
+          'RESET_CODE_INVALID',
+        );
+      });
     });
   });
 });

@@ -283,6 +283,28 @@ export class RateLimitService {
     ]);
   }
 
+  /** Center recovery reuses the student policy values under isolated keys. */
+  checkCenterForgotPasswordLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:forgot-password:ip:${ip}`,
+        max: this.forgotPasswordMaxAttempts,
+        ttlSeconds: this.forgotPasswordWindowSeconds,
+      },
+    ]);
+  }
+
+  /** Caps random-spray guessing against the six-digit center reset code. */
+  checkCenterResetPasswordLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:reset-password:ip:${ip}`,
+        max: this.resetPasswordMaxAttempts,
+        ttlSeconds: this.resetPasswordWindowSeconds,
+      },
+    ]);
+  }
+
   /** Center verification is isolated from student verification traffic. */
   checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
     return this.enforceDistributed([

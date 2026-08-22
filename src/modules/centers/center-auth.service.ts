@@ -19,15 +19,21 @@ import type { CenterRefreshTokenPayload } from '../../shared/interfaces/token-pa
 import { PrismaService } from '../../shared/services/prisma.service';
 import { ValkeyService } from '../../shared/services/valkey.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
+import { EmailService } from '../auth/email.service';
 import { TokenService } from '../auth/token.service';
 import {
   CenterAuthResponseDto,
   CenterLogoutResponseDto,
+  CenterMessageResponseDto,
   CenterTokenPairDto,
 } from './dto/center-auth-response.dto';
 
 const MAX_ACTIVE_CENTER_DEVICES = 3;
 const SESSION_TRANSACTION_ATTEMPTS = 2;
+const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_RESPONSE = {
+  message: 'If that account exists, a reset code was sent.',
+} as const;
 /**
  * Prisma's own default is 5s. That is not much once a serverless Postgres
  * resumes from idle, and the transaction also pays for a bcrypt hash of the
@@ -43,6 +49,18 @@ type CenterUserWithCenter = Prisma.CenterUserGetPayload<{
 
 export interface VerifyCenterEmailInput {
   token: string;
+  deviceId: string;
+  deviceName?: string;
+}
+
+export interface CenterForgotPasswordInput {
+  email: string;
+}
+
+export interface CenterResetPasswordInput {
+  email: string;
+  code: string;
+  newPassword: string;
   deviceId: string;
   deviceName?: string;
 }
@@ -72,6 +90,7 @@ export class CenterAuthService {
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
     private readonly tokenCrypto: TokenCryptoService,
+    private readonly emailService: EmailService,
     @Optional() private readonly valkeyService?: ValkeyService,
   ) {}
 
@@ -282,6 +301,125 @@ export class CenterAuthService {
     }
 
     return session;
+  }
+
+  /**
+   * Always answers the same thing. An address that has no center account and
+   * one that does must be indistinguishable, so the absent case returns early
+   * rather than reporting anything, and a delivery failure is logged instead
+   * of surfaced — a 502 here would be an enumeration oracle of its own.
+   */
+  async forgotPassword(
+    input: CenterForgotPasswordInput,
+  ): Promise<CenterMessageResponseDto> {
+    const email = input.email.trim().toLowerCase();
+    const centerUser = await this.prisma.centerUser.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!centerUser) {
+      return PASSWORD_RESET_RESPONSE;
+    }
+
+    const rawCode = this.tokenCrypto.generateNumericCode(6);
+    await this.prisma.centerUser.update({
+      where: { id: centerUser.id },
+      data: {
+        password_reset_token: this.tokenCrypto.hashToken(rawCode),
+        password_reset_expires: new Date(
+          Date.now() + PASSWORD_RESET_CODE_TTL_MS,
+        ),
+      },
+    });
+
+    try {
+      await this.emailService.sendCenterPasswordResetEmail(email, rawCode);
+    } catch (error) {
+      this.logSessionError(
+        'Center password-reset email delivery failed',
+        error,
+      );
+    }
+
+    return PASSWORD_RESET_RESPONSE;
+  }
+
+  /**
+   * Consumes the code and rotates the password in one predicated update, so a
+   * code cannot be redeemed twice. Every existing center session is revoked —
+   * whoever knew the old password loses their devices — and the caller gets a
+   * fresh session for the device that performed the reset.
+   */
+  async resetPassword(
+    input: CenterResetPasswordInput,
+  ): Promise<CenterAuthResponseDto> {
+    const deviceId = this.normalizeDeviceId(input.deviceId);
+    const email = input.email.trim().toLowerCase();
+    const codeHash = this.tokenCrypto.hashToken(input.code.trim());
+
+    const centerUser = await this.prisma.centerUser.findFirst({
+      where: { email, password_reset_token: codeHash },
+      include: { center: true },
+    });
+
+    if (!centerUser) {
+      throw new BadRequestException('RESET_CODE_INVALID');
+    }
+
+    const now = new Date();
+    if (
+      !centerUser.password_reset_expires ||
+      centerUser.password_reset_expires <= now
+    ) {
+      throw new BadRequestException('RESET_CODE_EXPIRED');
+    }
+
+    const passwordHash = await bcrypt.hash(input.newPassword, 12);
+    const consumed = await this.prisma.centerUser.updateMany({
+      where: {
+        id: centerUser.id,
+        password_reset_token: codeHash,
+        password_reset_expires: { gt: now },
+      },
+      data: {
+        password_hash: passwordHash,
+        password_reset_token: null,
+        password_reset_expires: null,
+      },
+    });
+
+    if (consumed.count !== 1) {
+      throw new BadRequestException('RESET_CODE_INVALID');
+    }
+
+    await this.revokeAllCenterSessions(centerUser.id);
+
+    return this.issueAuthResponse(
+      { ...centerUser, password_hash: passwordHash },
+      deviceId,
+      input.deviceName,
+    );
+  }
+
+  /**
+   * Center sessions only. A center password reset must never reach a student's
+   * DeviceSession rows, even for a person who holds both kinds of account.
+   */
+  private async revokeAllCenterSessions(centerUserId: string): Promise<void> {
+    const sessions = await this.prisma.centerDeviceSession.findMany({
+      where: { center_user_id: centerUserId, revoked_at: null },
+      select: { id: true },
+    });
+
+    await this.prisma.centerDeviceSession.updateMany({
+      where: { center_user_id: centerUserId, revoked_at: null },
+      data: { revoked_at: new Date() },
+    });
+
+    for (const session of sessions) {
+      await this.revokeCachedSession(session.id);
+    }
   }
 
   async rotateDeviceSessionRefreshHash(

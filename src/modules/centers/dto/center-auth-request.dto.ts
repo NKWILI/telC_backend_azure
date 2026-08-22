@@ -3,7 +3,9 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -34,6 +36,54 @@ export class VerifyCenterEmailDto {
   deviceId: string;
 
   @ApiPropertyOptional({ example: 'Chrome on Windows', maxLength: 255 })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  deviceName?: string;
+}
+
+export class CenterForgotPasswordDto {
+  @ApiProperty({ format: 'email', maxLength: 254 })
+  @NormalizeEmail()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(254)
+  @IsEmail()
+  email: string;
+}
+
+export class CenterResetPasswordDto {
+  @ApiProperty({ format: 'email', maxLength: 254 })
+  @NormalizeEmail()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(254)
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Six-digit code from the reset email.' })
+  @Trim()
+  @IsString()
+  @Matches(/^[0-9]{6}$/, { message: 'Reset code must be six digits' })
+  code: string;
+
+  // The registration minimum applies here: this call sets a new password, so
+  // it is the policy boundary, unlike login which only checks an existing one.
+  @ApiProperty({ minLength: 8, format: 'password' })
+  @IsString()
+  @MinLength(8)
+  @MaxUtf8Bytes(72)
+  newPassword: string;
+
+  @ApiProperty({ maxLength: 255 })
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  deviceId: string;
+
+  @ApiPropertyOptional({ maxLength: 255 })
   @Trim()
   @IsOptional()
   @IsString()

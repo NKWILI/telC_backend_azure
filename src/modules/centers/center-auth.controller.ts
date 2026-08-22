@@ -16,13 +16,16 @@ import { CenterAuthService } from './center-auth.service';
 import { CentersService } from './centers.service';
 import { CenterExceptionFilter } from './center-exception.filter';
 import {
+  CenterForgotPasswordDto,
   CenterLoginDto,
   CenterRefreshTokenDto,
+  CenterResetPasswordDto,
   VerifyCenterEmailDto,
 } from './dto/center-auth-request.dto';
 import {
   CenterAuthResponseDto,
   CenterLogoutResponseDto,
+  CenterMessageResponseDto,
   CenterTokenPairDto,
 } from './dto/center-auth-response.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
@@ -117,6 +120,41 @@ export class CenterAuthController {
    * signed token, so login remains the brute-force boundary; adding throttling
    * here is a separate policy decision.
    */
+  @Post('forgot-password')
+  @ApiOperation({
+    summary: 'Request a center password-reset code',
+    description:
+      'Always returns the same response, whether or not an account exists for the address.',
+  })
+  @ApiCreatedResponse({ type: CenterMessageResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiTooManyRequestsResponse({ type: CenterErrorResponseDto })
+  async forgotPassword(
+    @Ip() ip: string,
+    @Body() dto: CenterForgotPasswordDto,
+  ): Promise<CenterMessageResponseDto> {
+    await this.rateLimitService.checkCenterForgotPasswordLimit(ip || 'unknown');
+    return this.centerAuthService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({
+    summary: 'Redeem a center password-reset code',
+    description:
+      'Consumes the one-time code, revokes every existing center session, and returns a new session for this device.',
+  })
+  @ApiCreatedResponse({ type: CenterAuthResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiTooManyRequestsResponse({ type: CenterErrorResponseDto })
+  @ApiInternalServerErrorResponse({ type: CenterErrorResponseDto })
+  async resetPassword(
+    @Ip() ip: string,
+    @Body() dto: CenterResetPasswordDto,
+  ): Promise<CenterAuthResponseDto> {
+    await this.rateLimitService.checkCenterResetPasswordLimit(ip || 'unknown');
+    return this.centerAuthService.resetPassword(dto);
+  }
+
   @Post('refresh')
   @ApiOperation({
     summary: 'Exchange a center refresh token for a new pair',
