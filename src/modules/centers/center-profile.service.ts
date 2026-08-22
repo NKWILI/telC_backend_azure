@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { CenterProfileResponseDto } from './dto/center-profile.dto';
@@ -41,7 +42,9 @@ export class CenterProfileService {
     // token, so a caller cannot reach another center's row even by guessing.
     await this.loadOwnedUser(identity);
 
-    const writes = [];
+    // PrismaPromise, not Promise: $transaction([...]) only accepts the
+    // lazy query objects Prisma returns, which is what makes the batch atomic.
+    const writes: Prisma.PrismaPromise<unknown>[] = [];
     if (Object.keys(userData).length > 0) {
       writes.push(
         this.prisma.centerUser.update({
