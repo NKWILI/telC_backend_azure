@@ -15,9 +15,14 @@ import { CenterAuthService } from './center-auth.service';
 import { CenterExceptionFilter } from './center-exception.filter';
 import {
   CenterLoginDto,
+  CenterRefreshTokenDto,
   VerifyCenterEmailDto,
 } from './dto/center-auth-request.dto';
-import { CenterAuthResponseDto } from './dto/center-auth-response.dto';
+import {
+  CenterAuthResponseDto,
+  CenterLogoutResponseDto,
+  CenterTokenPairDto,
+} from './dto/center-auth-response.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
 
 @ApiTags('Center Authentication')
@@ -78,5 +83,42 @@ export class CenterAuthController {
       dto.email,
     );
     return this.centerAuthService.login(dto);
+  }
+
+  /**
+   * Refresh and logout are not rate limited. Both require an unguessable
+   * signed token, so login remains the brute-force boundary; adding throttling
+   * here is a separate policy decision.
+   */
+  @Post('refresh')
+  @ApiOperation({
+    summary: 'Exchange a center refresh token for a new pair',
+    description:
+      'The submitted token is single-use. Replayed, revoked, mismatched-device, student, and guest tokens all return the same 401.',
+  })
+  @ApiCreatedResponse({ type: CenterTokenPairDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiInternalServerErrorResponse({ type: CenterErrorResponseDto })
+  async refresh(
+    @Body() dto: CenterRefreshTokenDto,
+  ): Promise<CenterTokenPairDto> {
+    return this.centerAuthService.refresh(dto);
+  }
+
+  @Post('logout')
+  @ApiOperation({
+    summary: 'Revoke the center session the refresh token belongs to',
+    description:
+      'Revokes only this device session. Repeating logout for an already-revoked session succeeds; a token superseded by a refresh returns 401.',
+  })
+  @ApiCreatedResponse({ type: CenterLogoutResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiInternalServerErrorResponse({ type: CenterErrorResponseDto })
+  async logout(
+    @Body() dto: CenterRefreshTokenDto,
+  ): Promise<CenterLogoutResponseDto> {
+    return this.centerAuthService.logout(dto);
   }
 }

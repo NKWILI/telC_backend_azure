@@ -53,6 +53,8 @@ describe('CenterAuthController contract', () => {
   let centerAuthService: {
     verifyEmail: jest.Mock;
     login: jest.Mock;
+    refresh: jest.Mock;
+    logout: jest.Mock;
   };
   let rateLimitService: {
     checkCenterVerifyEmailLimit: jest.Mock;
@@ -63,6 +65,11 @@ describe('CenterAuthController contract', () => {
     centerAuthService = {
       verifyEmail: jest.fn().mockResolvedValue(authResponse),
       login: jest.fn().mockResolvedValue(authResponse),
+      refresh: jest.fn().mockResolvedValue({
+        accessToken: 'rotated-access-token',
+        refreshToken: 'rotated-refresh-token',
+      }),
+      logout: jest.fn().mockResolvedValue({ success: true }),
     };
     rateLimitService = {
       checkCenterVerifyEmailLimit: jest.fn().mockResolvedValue(undefined),
@@ -264,5 +271,120 @@ describe('CenterAuthController contract', () => {
     ).toEqual(
       expect.arrayContaining(['201', '400', '401', '403', '429', '500', '503']),
     );
+    expect(
+      Object.keys(
+        document.paths['/api/center-auth/refresh']?.post?.responses ?? {},
+      ),
+    ).toEqual(expect.arrayContaining(['201', '400', '401', '500']));
+    expect(
+      Object.keys(
+        document.paths['/api/center-auth/logout']?.post?.responses ?? {},
+      ),
+    ).toEqual(expect.arrayContaining(['201', '400', '401', '500']));
+  });
+
+  describe('refresh', () => {
+    it('returns a rotated token pair and nothing else', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/refresh')
+        .send({ refreshToken: 'center-refresh-token' })
+        .expect(201);
+
+      expect(centerAuthService.refresh).toHaveBeenCalledWith({
+        refreshToken: 'center-refresh-token',
+      });
+      expect(response.body).toEqual({
+        accessToken: 'rotated-access-token',
+        refreshToken: 'rotated-refresh-token',
+      });
+    });
+
+    it('returns the stable 401 contract for a rejected token', async () => {
+      centerAuthService.refresh.mockRejectedValue(
+        new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN'),
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/refresh')
+        .send({ refreshToken: 'replayed-token' })
+        .expect(401);
+
+      expect(response.body.error).toBe('INVALID_CENTER_REFRESH_TOKEN');
+    });
+
+    it('surfaces an infrastructure failure as 500, not 401', async () => {
+      centerAuthService.refresh.mockRejectedValue(
+        new InternalServerErrorException('CENTER_SESSION_CREATION_FAILED'),
+      );
+
+      await request(app.getHttpServer())
+        .post('/api/center-auth/refresh')
+        .send({ refreshToken: 'center-refresh-token' })
+        .expect(500);
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes the presented session and returns success', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/logout')
+        .send({ refreshToken: 'center-refresh-token' })
+        .expect(201);
+
+      expect(centerAuthService.logout).toHaveBeenCalledWith({
+        refreshToken: 'center-refresh-token',
+      });
+      expect(response.body).toEqual({ success: true });
+    });
+
+    it('returns the stable 401 contract for a stale token', async () => {
+      centerAuthService.logout.mockRejectedValue(
+        new UnauthorizedException('INVALID_CENTER_REFRESH_TOKEN'),
+      );
+
+      const response = await request(app.getHttpServer())
+        .post('/api/center-auth/logout')
+        .send({ refreshToken: 'pre-rotation-token' })
+        .expect(401);
+
+      expect(response.body.error).toBe('INVALID_CENTER_REFRESH_TOKEN');
+    });
+  });
+
+  it.each([
+    ['a missing refresh token', '/api/center-auth/refresh', {}],
+    [
+      'an empty refresh token',
+      '/api/center-auth/logout',
+      { refreshToken: '   ' },
+    ],
+    [
+      'a non-string refresh token',
+      '/api/center-auth/refresh',
+      { refreshToken: 12345 },
+    ],
+    [
+      'an oversized refresh token',
+      '/api/center-auth/refresh',
+      { refreshToken: 'x'.repeat(4097) },
+    ],
+    [
+      'unexpected session-scoping fields',
+      '/api/center-auth/logout',
+      {
+        refreshToken: 'center-refresh-token',
+        sessionId: 'someone-elses-session',
+        centerUserId: 'owner-2',
+      },
+    ],
+  ])('rejects %s before reaching the service', async (_case, path, body) => {
+    const response = await request(app.getHttpServer())
+      .post(path)
+      .send(body)
+      .expect(400);
+
+    expect(response.body.error).toBe('VALIDATION_ERROR');
+    expect(centerAuthService.refresh).not.toHaveBeenCalled();
+    expect(centerAuthService.logout).not.toHaveBeenCalled();
   });
 });

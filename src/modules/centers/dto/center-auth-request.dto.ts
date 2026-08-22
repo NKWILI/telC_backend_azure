@@ -42,6 +42,18 @@ export class VerifyCenterEmailDto {
   deviceName?: string;
 }
 
+export class CenterRefreshTokenDto {
+  @ApiProperty({
+    description: 'The center refresh token issued by login or a prior refresh.',
+    maxLength: 4096,
+  })
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(4096)
+  refreshToken: string;
+}
+
 export class CenterLoginDto {
   @ApiProperty({
     format: 'email',

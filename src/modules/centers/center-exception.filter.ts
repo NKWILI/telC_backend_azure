@@ -16,6 +16,8 @@ const CENTER_ERROR_MESSAGES: Record<string, string> = {
   CENTER_SESSION_RETRY_EXHAUSTED:
     'Authentication is temporarily unavailable. Please try again.',
   EMAIL_DELIVERY_FAILED: 'Verification email delivery failed.',
+  INVALID_CENTER_REFRESH_TOKEN:
+    'This session is no longer valid. Please log in again.',
   RATE_LIMIT_EXCEEDED: 'Too many requests. Please try again later.',
 };
 
