@@ -28,6 +28,12 @@ import {
 
 const MAX_ACTIVE_CENTER_DEVICES = 3;
 const SESSION_TRANSACTION_ATTEMPTS = 2;
+/**
+ * Prisma's own default is 5s. That is not much once a serverless Postgres
+ * resumes from idle, and the transaction also pays for a bcrypt hash of the
+ * refresh token. Budget generously; the retry below covers what still expires.
+ */
+const SESSION_TRANSACTION_TIMEOUT_MS = 15_000;
 const DUMMY_PASSWORD_HASH =
   '$2b$12$qFTZukjWcXnvTRaxRPtsaOilBLN4JeORTxRVuk6G8jLxqChc.UQSm';
 
@@ -371,7 +377,10 @@ export class CenterAuthService {
               deviceId,
               deviceName,
             ),
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            timeout: SESSION_TRANSACTION_TIMEOUT_MS,
+          },
         );
 
         if (transactionResult.evictedSessionId) {
@@ -506,12 +515,24 @@ export class CenterAuthService {
     return { ...tokens, refreshTokenHash };
   }
 
+  /**
+   * P2002 and P2034 are the write-conflict codes this transaction races on.
+   *
+   * P2028 is a transaction timeout, and it belongs here for a reason found by
+   * running this against a real serverless Postgres: the first request after
+   * the compute resumes from idle can outlast the budget, and that surfaced as
+   * a 500 on login rather than a retry. A timed-out transaction has already
+   * rolled back, so re-running it is safe — and by the second attempt the
+   * database is warm.
+   */
   private isRetryableSessionConflict(error: unknown): boolean {
     return (
       typeof error === 'object' &&
       error !== null &&
       'code' in error &&
-      (error.code === 'P2002' || error.code === 'P2034')
+      (error.code === 'P2002' ||
+        error.code === 'P2034' ||
+        error.code === 'P2028')
     );
   }
 

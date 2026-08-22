@@ -390,6 +390,38 @@ describe('CenterAuthService', () => {
       expect(tx.centerUser.update).not.toHaveBeenCalled();
     });
 
+    it('retries a transaction timeout so a cold database costs a retry, not a 500', async () => {
+      const errorLog = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      prisma.$transaction
+        .mockRejectedValueOnce({ code: 'P2028' })
+        .mockImplementationOnce(async (callback: (client: any) => unknown) =>
+          callback(tx),
+        );
+
+      const result = await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      expect(result.accessToken).toBe('center-access-token');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      errorLog.mockRestore();
+    });
+
+    it('opens the session transaction with an explicit timeout budget', async () => {
+      await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      const options = prisma.$transaction.mock.calls[0][1];
+      expect(options.timeout).toBeGreaterThanOrEqual(10_000);
+    });
+
     it('retries one Serializable transaction conflict and then succeeds', async () => {
       const conflict = Object.assign(new Error('serialization conflict'), {
         code: 'P2034',
