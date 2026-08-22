@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CenterUserRole {
+  OWNER
+  MANAGER
+}
+
 model Student {
   id           String   @id @default(uuid())
   first_name   String?
@@ -61,6 +66,65 @@ model DeviceSession {
   @@unique([student_id, device_id])
   @@index([student_id])
   @@map("device_sessions")
+}
+
+model Center {
+  id         String   @id @default(uuid())
+  name       String
+  country    String
+  city       String
+  logo_url   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  users CenterUser[]
+
+  @@map("centers")
+}
+
+model CenterUser {
+  id           String         @id @default(uuid())
+  center_id    String
+  role         CenterUserRole @default(OWNER)
+  first_name   String
+  last_name    String
+  email        String         @unique
+  phone        String
+  created_at   DateTime       @default(now())
+  updated_at   DateTime       @default(now()) @updatedAt
+  last_seen_at DateTime       @default(now())
+
+  password_hash              String
+  email_verified             Boolean   @default(false)
+  email_verification_token   String?
+  email_verification_expires DateTime?
+  password_reset_token       String?
+  password_reset_expires     DateTime?
+
+  center          Center                @relation(fields: [center_id], references: [id], onDelete: Restrict)
+  device_sessions CenterDeviceSession[]
+
+  @@index([center_id])
+  @@index([email_verification_token])
+  @@index([password_reset_token])
+  @@map("center_users")
+}
+
+model CenterDeviceSession {
+  id                 String    @id @default(uuid())
+  center_user_id     String
+  device_id          String
+  refresh_token_hash String
+  device_name        String?
+  last_used_at       DateTime  @default(now())
+  created_at         DateTime  @default(now())
+  revoked_at         DateTime?
+
+  center_user CenterUser @relation(fields: [center_user_id], references: [id], onDelete: Cascade)
+
+  @@unique([center_user_id, device_id])
+  @@index([center_user_id])
+  @@map("center_device_sessions")
 }
 
 model ExamSession {

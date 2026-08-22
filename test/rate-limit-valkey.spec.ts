@@ -57,4 +57,71 @@ describe('RateLimitService with Valkey', () => {
       },
     ]);
   });
+
+  it('uses center-specific distributed registration buckets', async () => {
+    const enforce = jest.fn().mockResolvedValue(true);
+    const service = new RateLimitService({
+      enforce,
+    } as unknown as ValkeyService);
+
+    await service.checkCenterRegisterLimit(
+      '203.0.113.40',
+      ' Manager@Example.COM ',
+    );
+
+    expect(enforce).toHaveBeenCalledWith([
+      {
+        key: 'ratelimit:centers:register:email:manager@example.com',
+        max: 5,
+        ttlSeconds: 3600,
+      },
+      {
+        key: 'ratelimit:centers:register:ip:203.0.113.40',
+        max: 20,
+        ttlSeconds: 3600,
+      },
+    ]);
+  });
+
+  it('uses center-specific distributed login buckets', async () => {
+    const enforce = jest.fn().mockResolvedValue(true);
+    const service = new RateLimitService({
+      enforce,
+    } as unknown as ValkeyService);
+
+    await service.checkCenterLoginLimit(
+      '203.0.113.50',
+      ' Manager@Example.COM ',
+    );
+
+    expect(enforce).toHaveBeenCalledWith([
+      {
+        key: 'ratelimit:centers:login:ip:203.0.113.50',
+        max: 20,
+        ttlSeconds: 900,
+      },
+      {
+        key: 'ratelimit:centers:login:email:manager@example.com',
+        max: 10,
+        ttlSeconds: 900,
+      },
+    ]);
+  });
+
+  it('uses a center-specific distributed verification bucket', async () => {
+    const enforce = jest.fn().mockResolvedValue(true);
+    const service = new RateLimitService({
+      enforce,
+    } as unknown as ValkeyService);
+
+    await service.checkCenterVerifyEmailLimit('203.0.113.60');
+
+    expect(enforce).toHaveBeenCalledWith([
+      {
+        key: 'ratelimit:centers:verify-email:ip:203.0.113.60',
+        max: 10,
+        ttlSeconds: 900,
+      },
+    ]);
+  });
 });

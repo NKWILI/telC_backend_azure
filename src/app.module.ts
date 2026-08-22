@@ -12,6 +12,7 @@ import { LesenModule } from './modules/lesen/lesen.module';
 import { ModelltestsModule } from './modules/modelltests/modelltests.module';
 import { NewsletterModule } from './modules/newsletter/newsletter.module';
 import { RateLimitModule } from './shared/rate-limit.module';
+import { CentersModule } from './modules/centers/centers.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RateLimitModule } from './shared/rate-limit.module';
     PrismaModule,
     RateLimitModule,
     AuthModule,
+    CentersModule,
     SpeakingModule,
     WritingModule,
     ListeningModule,

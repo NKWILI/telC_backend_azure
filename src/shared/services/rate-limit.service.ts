@@ -251,6 +251,25 @@ export class RateLimitService {
   }
 
   /**
+   * Center login uses the student login policy values but isolated keys.
+   * Neither product can consume the other's IP or email budget.
+   */
+  checkCenterLoginLimit(ip: string, email: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:login:ip:${ip}`,
+        max: this.loginIpMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+      {
+        key: `ratelimit:centers:login:email:${email.trim().toLowerCase()}`,
+        max: this.loginEmailMaxAttempts,
+        ttlSeconds: this.loginWindowSeconds,
+      },
+    ]);
+  }
+
+  /**
    * Rate limit for POST /api/auth/verify-email-public. Throws 429 when exceeded.
    * Key is typically the requester's IP address.
    */
@@ -258,6 +277,39 @@ export class RateLimitService {
     return this.enforceDistributed([
       {
         key: `ratelimit:auth:verify-email-public:${key}`,
+        max: this.verifyEmailPublicMaxAttempts,
+        ttlSeconds: this.verifyEmailPublicWindowSeconds,
+      },
+    ]);
+  }
+
+  /** Center recovery reuses the student policy values under isolated keys. */
+  checkCenterForgotPasswordLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:forgot-password:ip:${ip}`,
+        max: this.forgotPasswordMaxAttempts,
+        ttlSeconds: this.forgotPasswordWindowSeconds,
+      },
+    ]);
+  }
+
+  /** Caps random-spray guessing against the six-digit center reset code. */
+  checkCenterResetPasswordLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:reset-password:ip:${ip}`,
+        max: this.resetPasswordMaxAttempts,
+        ttlSeconds: this.resetPasswordWindowSeconds,
+      },
+    ]);
+  }
+
+  /** Center verification is isolated from student verification traffic. */
+  checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:verify-email:ip:${ip}`,
         max: this.verifyEmailPublicMaxAttempts,
         ttlSeconds: this.verifyEmailPublicWindowSeconds,
       },
@@ -346,6 +398,31 @@ export class RateLimitService {
       },
       {
         key: `ratelimit:auth:register:ip:${ipKey}`,
+        max: this.registerIpMaxAttempts,
+        ttlSeconds: this.registerIpWindowSeconds,
+      },
+    ]);
+  }
+
+  /**
+   * Rate limit for POST /api/centers/register.
+   *
+   * The limits intentionally use the same policy values as student
+   * registration but a different namespace. A student-registration request
+   * must never consume a language center's registration budget, or vice versa.
+   */
+  checkCenterRegisterLimit(
+    ipKey: string,
+    emailKey: string,
+  ): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:register:email:${emailKey.trim().toLowerCase()}`,
+        max: this.registerEmailMaxAttempts,
+        ttlSeconds: this.registerEmailWindowSeconds,
+      },
+      {
+        key: `ratelimit:centers:register:ip:${ipKey}`,
         max: this.registerIpMaxAttempts,
         ttlSeconds: this.registerIpWindowSeconds,
       },

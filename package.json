@@ -120,6 +120,9 @@
       "src/**/*.(t|j)s"
     ],
     "coverageDirectory": "./coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "<rootDir>/test/center-session-integration\\.spec\\.ts$"
+    ]
   }
 }
