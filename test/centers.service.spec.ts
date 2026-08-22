@@ -213,5 +213,43 @@ describe('CentersService registration', () => {
     );
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.centerUser.create).toHaveBeenCalledTimes(1);
+    expect(prisma.centerUser.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'owner-1',
+        email_verified: false,
+        email_verification_token: 'hashed-verification-token',
+      },
+      data: {
+        email_verification_token: null,
+        email_verification_expires: null,
+      },
+    });
+  });
+
+  it('clears a failed resend token so the owner can retry immediately', async () => {
+    prisma.centerUser.findUnique.mockResolvedValue({
+      id: 'owner-1',
+      email_verified: false,
+      email_verification_expires: new Date(Date.now() + 20 * 60 * 60 * 1000),
+    });
+    emailService.sendExistingCenterVerificationEmail.mockRejectedValue(
+      new Error('provider unavailable'),
+    );
+
+    await expect(service.register(registration)).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+
+    expect(prisma.centerUser.updateMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        id: 'owner-1',
+        email_verified: false,
+        email_verification_token: 'hashed-verification-token',
+      },
+      data: {
+        email_verification_token: null,
+        email_verification_expires: null,
+      },
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable } from '@nestjs/common';
+import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { EmailService } from '../auth/email.service';
@@ -28,6 +28,8 @@ type ExistingCenterUser = {
 
 @Injectable()
 export class CentersService {
+  private readonly logger = new Logger(CentersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenCrypto: TokenCryptoService,
@@ -105,6 +107,7 @@ export class CentersService {
         rawToken,
       );
     } catch {
+      await this.clearFailedVerificationToken(existing.id, tokenHash);
       throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
     }
 
@@ -121,7 +124,7 @@ export class CentersService {
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     try {
-      await this.prisma.$transaction(async (tx) => {
+      const centerUserId = await this.prisma.$transaction(async (tx) => {
         const center = await tx.center.create({
           data: {
             name: input.centerName.trim(),
@@ -132,7 +135,7 @@ export class CentersService {
           select: { id: true },
         });
 
-        await tx.centerUser.create({
+        const centerUser = await tx.centerUser.create({
           data: {
             center_id: center.id,
             role: 'OWNER',
@@ -145,8 +148,18 @@ export class CentersService {
             email_verification_token: tokenHash,
             email_verification_expires: expiresAt,
           },
+          select: { id: true },
         });
+
+        return centerUser.id;
       });
+
+      try {
+        await this.emailService.sendCenterVerificationEmail(email, rawToken);
+      } catch {
+        await this.clearFailedVerificationToken(centerUserId, tokenHash);
+        throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
+      }
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         return REGISTRATION_RESPONSE;
@@ -154,15 +167,31 @@ export class CentersService {
       throw error;
     }
 
-    // Delivery is deliberately outside the transaction: a slow or unavailable
-    // email provider must never hold locks or roll back the created identity.
-    try {
-      await this.emailService.sendCenterVerificationEmail(email, rawToken);
-    } catch {
-      throw new BadGatewayException('EMAIL_DELIVERY_FAILED');
-    }
-
     return REGISTRATION_RESPONSE;
+  }
+
+  private async clearFailedVerificationToken(
+    centerUserId: string,
+    tokenHash: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.centerUser.updateMany({
+        where: {
+          id: centerUserId,
+          email_verified: false,
+          email_verification_token: tokenHash,
+        },
+        data: {
+          email_verification_token: null,
+          email_verification_expires: null,
+        },
+      });
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      this.logger.error(
+        `Failed to clear a center verification token after email delivery failure (${errorName})`,
+      );
+    }
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
