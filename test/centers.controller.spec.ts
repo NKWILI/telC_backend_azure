@@ -11,7 +11,7 @@ import { createGlobalValidationPipe } from '../src/shared/pipes/global-validatio
 describe('CentersController registration contract', () => {
   let app: INestApplication<App>;
   let centersService: { register: jest.Mock };
-  let rateLimitService: { checkRegisterLimit: jest.Mock };
+  let rateLimitService: { checkCenterRegisterLimit: jest.Mock };
 
   const validBody = {
     centerName: '  Goethe Language Center  ',
@@ -32,7 +32,7 @@ describe('CentersController registration contract', () => {
         .mockResolvedValue({ message: 'verification email sent' }),
     };
     rateLimitService = {
-      checkRegisterLimit: jest.fn().mockResolvedValue(undefined),
+      checkCenterRegisterLimit: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({
@@ -59,7 +59,7 @@ describe('CentersController registration contract', () => {
       .expect(201)
       .expect({ message: 'verification email sent' });
 
-    expect(rateLimitService.checkRegisterLimit).toHaveBeenCalledWith(
+    expect(rateLimitService.checkCenterRegisterLimit).toHaveBeenCalledWith(
       expect.any(String),
       'manager@example.com',
     );
@@ -135,7 +135,7 @@ describe('CentersController registration contract', () => {
   });
 
   it('applies rate limiting before calling the registration service', async () => {
-    rateLimitService.checkRegisterLimit.mockRejectedValue(
+    rateLimitService.checkCenterRegisterLimit.mockRejectedValue(
       new HttpException('RATE_LIMIT_EXCEEDED', HttpStatus.TOO_MANY_REQUESTS),
     );
 

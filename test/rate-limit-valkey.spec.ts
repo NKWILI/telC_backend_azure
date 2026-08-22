@@ -57,4 +57,29 @@ describe('RateLimitService with Valkey', () => {
       },
     ]);
   });
+
+  it('uses center-specific distributed registration buckets', async () => {
+    const enforce = jest.fn().mockResolvedValue(true);
+    const service = new RateLimitService({
+      enforce,
+    } as unknown as ValkeyService);
+
+    await service.checkCenterRegisterLimit(
+      '203.0.113.40',
+      ' Manager@Example.COM ',
+    );
+
+    expect(enforce).toHaveBeenCalledWith([
+      {
+        key: 'ratelimit:centers:register:email:manager@example.com',
+        max: 5,
+        ttlSeconds: 3600,
+      },
+      {
+        key: 'ratelimit:centers:register:ip:203.0.113.40',
+        max: 20,
+        ttlSeconds: 3600,
+      },
+    ]);
+  });
 });

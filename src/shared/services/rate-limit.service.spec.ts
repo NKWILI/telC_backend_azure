@@ -105,6 +105,38 @@ describe('RateLimitService', () => {
     });
   });
 
+  describe('checkCenterRegisterLimit', () => {
+    it('uses an email budget independent from student registration', () => {
+      for (let i = 0; i < 5; i++) {
+        void service.checkRegisterLimit('1.2.3.4', 'manager@example.com');
+      }
+
+      expect(() =>
+        service.checkCenterRegisterLimit('1.2.3.4', 'manager@example.com'),
+      ).not.toThrow();
+    });
+
+    it('throws 429 on the 6th center attempt for the same email', () => {
+      for (let i = 0; i < 5; i++) {
+        void service.checkCenterRegisterLimit('1.2.3.4', 'manager@example.com');
+      }
+
+      expect(() =>
+        service.checkCenterRegisterLimit('10.0.0.99', 'manager@example.com'),
+      ).toThrow(HttpException);
+    });
+
+    it('uses an IP budget independent from student registration', () => {
+      for (let i = 0; i < 20; i++) {
+        void service.checkRegisterLimit('1.2.3.4', `student${i}@example.com`);
+      }
+
+      expect(() =>
+        service.checkCenterRegisterLimit('1.2.3.4', 'manager@example.com'),
+      ).not.toThrow();
+    });
+  });
+
   describe('checkGuestSessionLimit', () => {
     it('allows requests up to the default limit (10) from one IP', () => {
       for (let i = 0; i < 10; i++) {

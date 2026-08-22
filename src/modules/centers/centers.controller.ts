@@ -39,7 +39,10 @@ export class CentersController {
     @Ip() ip: string,
     @Body() dto: RegisterCenterDto,
   ): Promise<{ message: 'verification email sent' }> {
-    await this.rateLimitService.checkRegisterLimit(ip || 'unknown', dto.email);
+    await this.rateLimitService.checkCenterRegisterLimit(
+      ip || 'unknown',
+      dto.email,
+    );
     return this.centersService.register(dto);
   }
 }

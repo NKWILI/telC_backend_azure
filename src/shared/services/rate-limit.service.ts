@@ -353,6 +353,31 @@ export class RateLimitService {
   }
 
   /**
+   * Rate limit for POST /api/centers/register.
+   *
+   * The limits intentionally use the same policy values as student
+   * registration but a different namespace. A student-registration request
+   * must never consume a language center's registration budget, or vice versa.
+   */
+  checkCenterRegisterLimit(
+    ipKey: string,
+    emailKey: string,
+  ): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:register:email:${emailKey.trim().toLowerCase()}`,
+        max: this.registerEmailMaxAttempts,
+        ttlSeconds: this.registerEmailWindowSeconds,
+      },
+      {
+        key: `ratelimit:centers:register:ip:${ipKey}`,
+        max: this.registerIpMaxAttempts,
+        ttlSeconds: this.registerIpWindowSeconds,
+      },
+    ]);
+  }
+
+  /**
    * Rate limit for POST /api/writing/submit when the caller is a guest.
    * Capped per IP (default 3/hour) — much tighter than the per-student limit
    * for logged-in users. Protects the free-tier Gemini quota from scripted abuse.
