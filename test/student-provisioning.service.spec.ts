@@ -56,6 +56,9 @@ describe('StudentProvisioningService', () => {
     expect(data.center_id).toBe('center-1');
     expect(data.first_name).toBe('Awa');
     expect(data.email).toBe('awa@example.com');
+    // WhatsApp is the channel that actually reaches people in-market, so a
+    // silently dropped phone would cost a renewal reminder later.
+    expect(data.phone).toBe('+237690000000');
   });
 
   it('leaves the account without a password until the student activates', async () => {

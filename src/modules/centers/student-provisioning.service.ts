@@ -102,6 +102,7 @@ export class StudentProvisioningService {
             first_name: input.firstName.trim(),
             last_name: input.lastName.trim(),
             email,
+            phone: input.phone?.trim() || null,
             // The center vouched for the address, so reset stays available
             // without a second confirmation step the student never asked for.
             email_verified: true,

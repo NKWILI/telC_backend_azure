@@ -33,6 +33,11 @@ model Student {
   password_reset_token       String?
   password_reset_expires     DateTime?
 
+  /// WhatsApp number. Optional, and the channel that actually reaches people
+  /// in-market — email deliverability is the weaker of the two, which matters
+  /// for renewal reminders and for reaching a student whose center lapses.
+  phone String?
+
   /// One-time key a center hands to a student, hashed at rest exactly like the
   /// verification and reset tokens above. The raw key is shown to the center
   /// once, at generation, and cannot be recovered afterwards.
