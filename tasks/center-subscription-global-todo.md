@@ -42,13 +42,13 @@ Companion to `tasks/center-subscription-global-plan.md`.
 
 ## Phase 4: Student activation
 
-- [ ] Resolve activation-key lifetime and seat-release policy
-- [ ] Write `tasks/phases/04-student-activation-plan.md`
-- [ ] Human approves the specific plan
-- [ ] Create `feature/student-activation`
-- [ ] Implement center student management and one-time activation
-- [ ] Pass ownership, expiry, replay, and seat-concurrency tests
-- [ ] Human approves merge
+- [x] Resolve activation-key lifetime and seat-release policy
+- [x] Write `tasks/phases/04-student-activation-plan.md`
+- [x] Human approves the specific plan
+- [x] Create `feature/student-activation`
+- [x] Implement center student management and one-time activation
+- [x] Pass ownership, expiry, replay, and seat-concurrency tests
+- [x] Human approves merge
 
 ## Phase 5: Subscription access
 
