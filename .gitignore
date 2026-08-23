@@ -71,3 +71,5 @@ bruno/environments/*.local.bru
 # `local.bru` with placeholders; anything else stays local.
 bruno/environments/*.local.bru
 .bruno-local-backup/
+!tasks/phases/05-subscription-access-plan.md
+!tasks/phases/05-subscription-access-todo.md
