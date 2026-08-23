@@ -320,8 +320,8 @@ Lint currently runs with `--fix`; before using it, the detailed phase plan must 
 
 ## Open Questions to Resolve Before Their Phase
 
-1. **Student activation-key lifetime:** recommended 7 days. Confirm before Phase 4.
-2. **Student removal:** should deleting a student immediately free a paid seat, or should removal take effect next billing period? Resolve before Phase 4.
+1. ~~**Student activation-key lifetime**~~ **RESOLVED 2026-08-23: 7 days.**
+2. ~~**Student removal**~~ **RESOLVED 2026-08-23: removing a student frees the seat immediately.** Simple to reason about and to explain to a center; the abuse case (churning students to exceed a seat count) is a billing concern to watch, not a reason to complicate the model.
 3. **Existing students:** assign them to a Lerniqo/internal center, preserve them as legacy users, or require migration? Resolve before Phase 5.
 4. **Guest mode:** keep a restricted public demo or remove it when center access launches? Resolve before Phase 5.
 5. **Logo storage:** use the existing Supabase/Cloudflare setup or another object store? Resolve before Phase 1 profile upload is finalized.
@@ -330,7 +330,7 @@ Lint currently runs with `--fix`; before using it, the detailed phase plan must 
 8. **Notch Pay merchant readiness:** confirm approved business account, test/live API keys, webhook secret/signature contract, and enabled Cameroon channels before Phase 7.
 
 
-9. **Student email requirement:** is a student's email required, or is phone (WhatsApp) enough? Email is unreliable in-market, but without it a student who forgets their password has no self-service recovery; center-mediated recovery via a re-issued activation key is the alternative. Resolve before Phase 4.
+9. ~~**Student email requirement**~~ **RESOLVED 2026-08-23: email is required, phone/WhatsApp optional, name required.** Email required keeps self-service password recovery working, which avoids every forgotten password becoming a support request routed through the center.
 10. **Blocked-student experience:** what a student sees when their center stops paying. Agreed to be an in-product offer to continue rather than outbound marketing; the wording and destination are unspecified. Resolve before Phase 5.
 
 See `docs/ARCHITECTURE-B2B2C.md` for the agreed model these questions sit inside.
