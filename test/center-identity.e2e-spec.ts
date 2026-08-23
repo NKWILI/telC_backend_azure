@@ -40,6 +40,7 @@ class FakeDb {
   centers = new Map<string, any>();
   users = new Map<string, any>();
   sessions = new Map<string, any>();
+  subscriptions = new Map<string, any>();
   private seq = 0;
 
   id(prefix: string) {
@@ -51,6 +52,9 @@ class FakeDb {
   }
   sessionsList() {
     return [...this.sessions.values()];
+  }
+  subscriptionsList() {
+    return [...this.subscriptions.values()];
   }
   withCenter(user: any) {
     return user && { ...user, center: this.centers.get(user.center_id) };
@@ -111,6 +115,27 @@ function buildPrisma(db: FakeDb) {
         hits.forEach((u) => db.users.set(u.id, { ...u, ...data }));
         return Promise.resolve({ count: hits.length });
       },
+    },
+    centerSubscription: {
+      create: ({ data }: any) => {
+        const row = {
+          id: db.id('subscription'),
+          trial_started_at: null,
+          trial_ends_at: null,
+          paid_until: null,
+          ...data,
+        };
+        db.subscriptions.set(row.id, row);
+        return Promise.resolve(row);
+      },
+      findFirst: ({ where }: any) =>
+        Promise.resolve(
+          db.subscriptionsList().find((x) => matches(x, where)) ?? null,
+        ),
+      findUnique: ({ where }: any) =>
+        Promise.resolve(
+          db.subscriptionsList().find((x) => matches(x, where)) ?? null,
+        ),
     },
     centerDeviceSession: {
       create: ({ data }: any) => {
@@ -243,6 +268,17 @@ describe('center identity end to end', () => {
     const rawVerificationToken =
       mailer.sendCenterVerificationEmail.mock.calls[0][1];
     expect(db.usersList()[0].email_verified).toBe(false);
+
+    // The subscription is created with the center, so nothing downstream has
+    // to handle a center that has none.
+    expect(db.subscriptionsList()).toHaveLength(1);
+    expect(db.subscriptionsList()[0]).toEqual(
+      expect.objectContaining({
+        plan: 'TRIAL',
+        seats: 3,
+        trial_started_at: null,
+      }),
+    );
 
     // 2. Login is refused until the address is verified.
     await http()

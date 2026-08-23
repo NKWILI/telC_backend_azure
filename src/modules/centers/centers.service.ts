@@ -6,6 +6,9 @@ import { EmailService } from '../auth/email.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+/** Seats a center starts with. The trial clock itself starts at the first
+ *  student activation, not here. */
+const TRIAL_SEATS = 3;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 const REGISTRATION_RESPONSE = { message: 'verification email sent' } as const;
 
@@ -151,6 +154,17 @@ export class CentersService {
             email_verification_expires: expiresAt,
           },
           select: { id: true },
+        });
+
+        // Third insert in the same transaction: every center provably has
+        // exactly one subscription, so nothing downstream needs a
+        // missing-row branch. A failed registration leaves neither behind.
+        await tx.centerSubscription.create({
+          data: {
+            center_id: center.id,
+            plan: 'TRIAL',
+            seats: TRIAL_SEATS,
+          },
         });
 
         return centerUser.id;

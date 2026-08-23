@@ -30,6 +30,9 @@ describe('CentersService registration', () => {
       centerUser: {
         create: jest.fn().mockResolvedValue({ id: 'owner-1' }),
       },
+      centerSubscription: {
+        create: jest.fn().mockResolvedValue({ id: 'subscription-1' }),
+      },
     };
     prisma = {
       centerUser: {
@@ -251,5 +254,38 @@ describe('CentersService registration', () => {
         email_verification_expires: null,
       },
     });
+  });
+  it('creates the subscription inside the same transaction as the center', async () => {
+    await service.register(registration);
+
+    expect(tx.centerSubscription.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        center_id: 'center-1',
+        plan: 'TRIAL',
+        seats: 3,
+      }),
+    });
+  });
+
+  it('starts a new center pending, with no trial clock running', async () => {
+    await service.register(registration);
+
+    const data = tx.centerSubscription.create.mock.calls[0][0].data;
+    // The trial begins at the first student activation (Phase 4), not here, so
+    // a center that never provisions anyone never burns its 30 days.
+    expect(data.trial_started_at ?? null).toBeNull();
+    expect(data.trial_ends_at ?? null).toBeNull();
+    expect(data.paid_until ?? null).toBeNull();
+  });
+
+  it('leaves no center behind when the owner insert fails', async () => {
+    tx.centerUser.create.mockRejectedValue({ code: 'P2002' });
+
+    await expect(service.register(registration)).resolves.toEqual({
+      message: 'verification email sent',
+    });
+    // All three inserts share one transaction, so a duplicate email cannot
+    // leave an orphan center or a subscription with nothing to bill.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
