@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum CenterPlan {
+  TRIAL
+  PAID
+}
+
 enum CenterUserRole {
   OWNER
   MANAGER
@@ -28,10 +33,18 @@ model Student {
   password_reset_token       String?
   password_reset_expires     DateTime?
 
+  /// The center that provisioned this student, and the seat-counting boundary.
+  /// Nullable: students who predate the center model, and any future
+  /// independent student, simply have none.
+  center_id String?
+
+  center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
   oauth_accounts  OAuthAccount[]
+
+  @@index([center_id])
 
   @@index([email])
   @@map("students")
@@ -77,9 +90,41 @@ model Center {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  users CenterUser[]
+  users        CenterUser[]
+  students     Student[]
+  subscription CenterSubscription?
 
   @@map("centers")
+}
+
+/// One per center, created with the center so a center without a subscription
+/// is a bug rather than a supported state.
+///
+/// There is no `status` column on purpose. A stored status has to be kept
+/// correct by a scheduled job, and when that job runs late the failure
+/// direction is granting access nobody paid for. These timestamps are the
+/// facts; `SubscriptionPolicyService` derives the status from them on read.
+model CenterSubscription {
+  id         String     @id @default(uuid())
+  center_id  String     @unique
+  plan       CenterPlan @default(TRIAL)
+  /// 3 while on trial, 10 or more once paid. Always the authority for the seat
+  /// limit, so there is no status-dependent branch in the seat logic.
+  seats      Int        @default(3)
+
+  /// Set by the first student activation (Phase 4), not at registration.
+  trial_started_at DateTime?
+  trial_ends_at    DateTime?
+  /// Set by verified payment (Phase 7). Grace is derived from it, and applies
+  /// only to a lapsed paid period — an expired trial blocks immediately.
+  paid_until       DateTime?
+
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now()) @updatedAt
+
+  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+
+  @@map("center_subscriptions")
 }
 
 model CenterUser {

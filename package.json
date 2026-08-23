@@ -123,7 +123,8 @@
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",
     "testPathIgnorePatterns": [
-      "<rootDir>/test/center-session-integration\\.spec\\.ts$"
+      "<rootDir>/test/center-session-integration",
+      "<rootDir>/test/center-subscription-integration"
     ]
   }
 }

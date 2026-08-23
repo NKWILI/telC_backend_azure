@@ -35,6 +35,7 @@ async function bootstrap() {
     .setDescription(
       'REST API for the Lerniqo telC B1+ Beruf exam preparation platform.\n\n' +
         'Modules: **Auth**, **Center Authentication**, **Center Profile**, ' +
+        '**Center Subscription**, ' +
         '**Writing (Schreiben)**, **Reading (Lesen)**, ' +
         '**Sprachbausteine**, **Listening (Hören)**, **Speaking (Sprechen)**, **Modelltests**.\n\n' +
         'Protected endpoints require the access token as `Authorization: Bearer <accessToken>`. ' +
@@ -43,7 +44,10 @@ async function bootstrap() {
         'Language centers are a separate identity: their accounts live under `/api/center-auth/*`, ' +
         'their tokens are issued and verified independently of student tokens, and neither kind is accepted ' +
         'on the other side. Center endpoints carry `deviceId`, cap a center at three active devices, ' +
-        'and rotate refresh tokens single-use. `GET/PATCH /api/centers/me` requires a center access token.',
+        'and rotate refresh tokens single-use. `GET/PATCH /api/centers/me` requires a center access token. ' +
+        'A center subscription status is derived from stored timestamps on every read rather than kept in a status ' +
+        'column, so it is correct whether or not a scheduled job has run. Seats are counted from the students that ' +
+        'carry a center id, so seat usage cannot drift from reality.',
     )
     .setVersion('1.0')
     .addBearerAuth()
