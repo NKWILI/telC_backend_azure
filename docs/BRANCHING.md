@@ -62,6 +62,22 @@ waiting on the release train by choice.
 If that calculus changes — a suspected token leak, or the release slipping
 further than expected — the hotfix lane below exists to ship it on its own.
 
+## API documentation (decided 2026-08-23)
+
+Two different things get called "Swagger", and they are treated differently.
+
+**Per-endpoint `@Api*` decorators are written with the endpoint, every time.**
+They are not a separate document — they sit inline, cost a couple of minutes,
+and are what makes `/api-docs` usable while a phase is still being built. The
+frontend needs that contract during the phase, not after Phase 10. Deferring
+them would mean writing dozens of bare endpoints and then reconstructing every
+response shape from memory in one long pass.
+
+**The narrative description in `main.ts` is deferred until after the last
+phase.** That one genuinely is a document, it churns on every phase, and
+polishing it ten times is waste. It gets one pass at the end, once the API has
+stopped moving and everything has been verified end to end.
+
 ## Cutting a release
 
 Only when every phase intended for the release is on `dev` and green:
