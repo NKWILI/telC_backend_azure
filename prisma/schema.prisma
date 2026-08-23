@@ -33,10 +33,18 @@ model Student {
   password_reset_token       String?
   password_reset_expires     DateTime?
 
+  /// The center that provisioned this student, and the seat-counting boundary.
+  /// Nullable: students who predate the center model, and any future
+  /// independent student, simply have none.
+  center_id String?
+
+  center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
   oauth_accounts  OAuthAccount[]
+
+  @@index([center_id])
 
   @@index([email])
   @@map("students")
@@ -83,6 +91,7 @@ model Center {
   updated_at DateTime @default(now()) @updatedAt
 
   users        CenterUser[]
+  students     Student[]
   subscription CenterSubscription?
 
   @@map("centers")

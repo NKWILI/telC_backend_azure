@@ -5,6 +5,8 @@ import { CenterAuthService } from './center-auth.service';
 import { CenterExceptionFilter } from './center-exception.filter';
 import { CenterProfileController } from './center-profile.controller';
 import { CenterProfileService } from './center-profile.service';
+import { CenterSubscriptionService } from './center-subscription.service';
+import { SubscriptionPolicyService } from './subscription-policy.service';
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CentersService } from './centers.service';
 
@@ -15,9 +17,11 @@ import { CentersService } from './centers.service';
     CentersService,
     CenterAuthService,
     CenterProfileService,
+    CenterSubscriptionService,
+    SubscriptionPolicyService,
     CenterAuthGuard,
     CenterExceptionFilter,
   ],
-  exports: [CentersService],
+  exports: [CentersService, SubscriptionPolicyService],
 })
 export class CentersModule {}
