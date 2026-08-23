@@ -7,8 +7,8 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 - [x] Resolve the three questions that blocked this phase
 - [x] Record the build order (Phase 2 deferred to the end)
 - [x] Human approves the eight design decisions
-- [ ] Human approves this specific plan
-- [ ] Create `feature/center-subscriptions` from `dev`
+- [x] Human approves this specific plan (2026-08-23)
+- [x] Create `feature/center-subscriptions` from `dev`
 
 ## Task 1: Subscription schema
 
