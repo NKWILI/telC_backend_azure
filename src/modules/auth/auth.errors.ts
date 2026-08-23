@@ -1,13 +1,15 @@
 export const AUTH_ERROR_MESSAGES: Record<string, string> = {
   INVALID_CREDENTIALS: 'Invalid email or password.',
   EMAIL_NOT_VERIFIED: 'Please verify your email to continue.',
-  VERIFICATION_TOKEN_EXPIRED: 'Verification link has expired. Please request a new one.',
+  VERIFICATION_TOKEN_EXPIRED:
+    'Verification link has expired. Please request a new one.',
   VERIFICATION_TOKEN_INVALID: 'Invalid verification token.',
   TOKEN_ALREADY_USED: 'This link has already been used.',
   EMAIL_DELIVERY_FAILED: 'Verification email delivery failed.',
   RESET_TOKEN_EXPIRED: 'Password reset link has expired.',
   RESET_TOKEN_INVALID: 'Invalid password reset token.',
-  LINKING_REQUIRED: 'An account with this email already exists. Confirm to link your Google account.',
+  LINKING_REQUIRED:
+    'An account with this email already exists. Confirm to link your Google account.',
   INVALID_GOOGLE_TOKEN: 'Google authentication failed. Please try again.',
   INVALID_ACCESS_TOKEN: 'Invalid access token.',
   INVALID_REFRESH_TOKEN: 'Invalid refresh token.',
