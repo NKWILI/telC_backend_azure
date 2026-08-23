@@ -32,11 +32,18 @@ export class EmailService {
     });
   }
 
+  /**
+   * Trailing slashes are stripped here rather than trusted to whoever edits
+   * the environment. `https://www.lerniqo.tech/` would otherwise build
+   * `...tech//verify-email`, which some routers answer with a 404 — and the
+   * failure would only ever be visible in a real inbox.
+   */
   private getVitrineUrl(): string {
-    return (
+    const configured =
       this.config.get<string>('VITRINE_URL') ||
-      this.config.getOrThrow<string>('FRONTEND_URL')
-    );
+      this.config.getOrThrow<string>('FRONTEND_URL');
+
+    return configured.trim().replace(/\/+$/, '');
   }
 
   /**
