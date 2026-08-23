@@ -1,4 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires */
+// require() is the point of this file: controllers are discovered on disk at
+// runtime, so they cannot be named in static imports. A static list would
+// defeat the test, which exists to catch a controller nobody remembered.
+/* eslint-disable @typescript-eslint/no-require-imports */
 import { readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
@@ -13,9 +16,10 @@ const EXEMPT: Record<string, string> = {
   // A blocked student still has to log in, refresh and reset a password.
   // Refusing here would strand the account their center may yet pay for.
   AuthController: 'auth must stay reachable while blocked',
-  // Guards are per-route here, and room creation is closed separately in
-  // Task 2b so that guest join by link keeps working.
-  RoomController: 'per-route guards; handled by Task 2b',
+  // Guards are per-route here. Room creation carries both guards; the public
+  // room lookup stays open so a guest can join by link. Proven in
+  // room-subscription.spec.ts rather than by this sweep.
+  RoomController: 'per-route guards; enforced on create, public on lookup',
 };
 
 /** The seven the plan inventoried. Named so the scan cannot pass vacuously. */

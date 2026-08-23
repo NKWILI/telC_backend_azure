@@ -26,9 +26,16 @@ Companion to `tasks/phases/05-subscription-access-plan.md`.
 
 ## Task 2b: Close the speaking room entrance
 
-- [ ] JwtAuthGuard + subscription on POST /api/speaking/rooms
-- [ ] GET /rooms/:roomId stays public; guest join still works without a token
-- [ ] Commit the green increment
+- [x] JwtAuthGuard + subscription on POST /api/speaking/rooms
+- [x] GET /rooms/:roomId stays public; guest join still works without a token
+- [x] Commit the green increment
+
+Guest join is proven by `room.gateway.spec.ts` ("guest path (no token or
+wrong token)") plus the public-lookup tests in `room-subscription.spec.ts`.
+The full socket e2e (`RUN_SPEAKING_E2E=1`) could not corroborate it: it fails
+on `students.phone does not exist`, a Phase 4 migration missing from that
+database. Pre-existing, unrelated to this phase, and opt-in so the normal
+gate never ran it. Worth fixing before Checkpoint B.
 
 ## Task 3: Report status on refresh and login
 
