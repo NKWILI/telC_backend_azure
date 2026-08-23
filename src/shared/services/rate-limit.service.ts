@@ -283,6 +283,24 @@ export class RateLimitService {
     ]);
   }
 
+  /**
+   * Rate limit for POST /api/student-activations.
+   *
+   * The only public endpoint where guessing a value yields an account, so it
+   * gets the tighter reset-password budget rather than a generous one. Keys
+   * carry 32 bytes of entropy, which makes brute force impractical on its own;
+   * this bounds the attempt rate anyway.
+   */
+  checkStudentActivationLimit(ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:students:activation:ip:${ip}`,
+        max: this.resetPasswordMaxAttempts,
+        ttlSeconds: this.resetPasswordWindowSeconds,
+      },
+    ]);
+  }
+
   /** Center recovery reuses the student policy values under isolated keys. */
   checkCenterForgotPasswordLimit(ip: string): void | Promise<void> {
     return this.enforceDistributed([
