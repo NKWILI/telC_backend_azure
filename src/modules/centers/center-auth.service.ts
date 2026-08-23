@@ -31,6 +31,7 @@ import {
 const MAX_ACTIVE_CENTER_DEVICES = 3;
 const SESSION_TRANSACTION_ATTEMPTS = 2;
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const EMAIL_VERIFIED_RESPONSE = { message: 'email verified' } as const;
 const PASSWORD_RESET_RESPONSE = {
   message: 'If that account exists, a reset code was sent.',
 } as const;
@@ -51,6 +52,10 @@ export interface VerifyCenterEmailInput {
   token: string;
   deviceId: string;
   deviceName?: string;
+}
+
+export interface VerifyCenterEmailPublicInput {
+  token: string;
 }
 
 export interface CenterForgotPasswordInput {
@@ -94,11 +99,47 @@ export class CenterAuthService {
     @Optional() private readonly valkeyService?: ValkeyService,
   ) {}
 
+  /**
+   * Verification from inside the center app: consumes the token and returns a
+   * session bound to the calling device.
+   */
   async verifyEmail(
     input: VerifyCenterEmailInput,
   ): Promise<CenterAuthResponseDto> {
     const deviceId = this.normalizeDeviceId(input.deviceId);
-    const rawToken = input.token?.trim();
+    const centerUser = await this.consumeVerificationToken(input.token);
+
+    return this.issueAuthResponse(
+      { ...centerUser, email_verified: true },
+      deviceId,
+      input.deviceName,
+    );
+  }
+
+  /**
+   * Verification from the public website, which is where the emailed link
+   * points. It deliberately creates no session: a web confirmation page has no
+   * meaningful device identity and no safe place to keep a seven-day refresh
+   * token. The owner confirms here, then signs in from the app.
+   *
+   * Mirrors the student `verify-email-public` endpoint.
+   */
+  async verifyEmailPublic(
+    input: VerifyCenterEmailPublicInput,
+  ): Promise<CenterMessageResponseDto> {
+    await this.consumeVerificationToken(input.token);
+    return EMAIL_VERIFIED_RESPONSE;
+  }
+
+  /**
+   * The single-use consume, shared by both entry points so neither can drift
+   * into weaker checks than the other. The pre-reads exist only to separate
+   * EXPIRED from INVALID for the caller; the predicated update is the gate.
+   */
+  private async consumeVerificationToken(
+    rawInput: string,
+  ): Promise<CenterUserWithCenter> {
+    const rawToken = rawInput?.trim();
     if (!rawToken) {
       throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
     }
@@ -139,11 +180,7 @@ export class CenterAuthService {
       throw new BadRequestException('VERIFICATION_TOKEN_INVALID');
     }
 
-    return this.issueAuthResponse(
-      { ...centerUser, email_verified: true },
-      deviceId,
-      input.deviceName,
-    );
+    return centerUser;
   }
 
   async login(input: CenterLoginInput): Promise<CenterAuthResponseDto> {

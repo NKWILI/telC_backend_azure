@@ -43,6 +43,18 @@ export class VerifyCenterEmailDto {
   deviceName?: string;
 }
 
+export class VerifyCenterEmailPublicDto {
+  @ApiProperty({
+    description: 'One-time token from the center verification email.',
+    maxLength: 256,
+  })
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(256)
+  token: string;
+}
+
 export class CenterForgotPasswordDto {
   @ApiProperty({ format: 'email', maxLength: 254 })
   @NormalizeEmail()
