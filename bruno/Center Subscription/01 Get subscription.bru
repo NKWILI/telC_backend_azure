@@ -1,0 +1,50 @@
+meta {
+  name: 01 Get subscription
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/subscription
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq TRIAL_PENDING
+  res.body.studentsMayLearn: eq false
+}
+
+docs {
+  Run `Center Auth / 03 Login` first — this needs a live `accessToken`.
+
+  A freshly registered center sits at TRIAL_PENDING with `studentsMayLearn`
+  false. The trial clock starts at the first student activation (Phase 4), not
+  at registration, so a center that never provisions anyone never burns its 30
+  days. That is why this is the expected state and not TRIAL.
+
+  Checks worth doing by hand:
+
+  - no Authorization header  -> 401
+  - a STUDENT access token   -> 401, the center verifier refuses it outright
+  - after `Center Auth / 05 Logout` -> 401
+
+  `status` is computed from the timestamps on every read, never stored. To see
+  a different state, change `paid_until` directly in the database and re-run
+  this request — no job has to run, and the answer changes immediately:
+
+      paid_until = now + 5 days   -> ACTIVE,       studentsMayLearn true
+      paid_until = now - 2 days   -> GRACE_PERIOD, studentsMayLearn true
+      paid_until = now - 30 days  -> BLOCKED,      studentsMayLearn false
+
+  `graceEndsAt` is null whenever `paid_until` is null. An expired trial gets no
+  grace — it blocks the instant it ends.
+
+  This endpoint must keep answering while BLOCKED. A blocked center still needs
+  to see what it owes in order to pay it.
+}

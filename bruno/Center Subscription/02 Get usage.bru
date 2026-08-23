@@ -1,0 +1,43 @@
+meta {
+  name: 02 Get usage
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/usage
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.seatsUsed: eq 0
+  res.body.seatsLimit: eq 3
+  res.body.seatsAvailable: eq 3
+}
+
+docs {
+  A seat is a student row carrying this center id. Usage is counted on every
+  read rather than stored in a column, so there is no counter that can drift
+  away from the students it claims to describe.
+
+  Nothing can provision students until Phase 4, so `seatsUsed` is 0 here. To
+  exercise it now, set `center_id` on a student row in the database and re-run:
+  the count moves immediately.
+
+  Two things to verify by hand:
+
+  - Students of a DIFFERENT center must never appear in this count. Point a
+    second center's students at that center and confirm this number ignores
+    them.
+
+  - `seatsAvailable` must never go negative. Give the center more students than
+    `seatsLimit` and it reports 0, not a deficit. Being over the limit blocks
+    future provisioning; it does not evict anyone, and existing students keep
+    working.
+}
