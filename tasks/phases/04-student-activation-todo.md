@@ -4,9 +4,9 @@ Companion to `tasks/phases/04-student-activation-plan.md`.
 
 ## Approval gate
 
-- [ ] Human answers the four open questions
-- [ ] Human approves this specific plan
-- [ ] Create `feature/student-activation` from `dev`
+- [x] Human answers the four open questions
+- [x] Human approves this specific plan
+- [x] Create `feature/student-activation` from `dev`
 
 ## Task 1: Activation schema
 
