@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
 jest.mock('resend', () => ({
   Resend: jest.fn().mockImplementation(() => ({
     emails: { send: jest.fn().mockResolvedValue({}) },
@@ -76,10 +77,14 @@ describe('EmailService', () => {
 
       const arg = send.mock.calls[0][0];
       expect(arg.to).toBe('manager@example.com');
-      expect(arg.html).toContain(
-        'https://www.lerniqo.example/center/verify-email?token=center-token',
+      // Both audiences verify on the same website page; `type=center` is what
+      // tells it to call the center endpoint rather than the student one.
+      // The HTML href is escaped, so the plain-text part carries the raw URL.
+      expect(arg.text).toContain(
+        'https://www.lerniqo.example/verify-email?token=center-token&type=center',
       );
-      expect(arg.html).not.toContain('/verify-email?token=student');
+      expect(arg.html).toContain('token=center-token');
+      expect(arg.html).toContain('type=center');
     });
 
     it('explains that repeat registration did not replace center credentials', async () => {
@@ -92,12 +97,12 @@ describe('EmailService', () => {
       );
 
       const arg = send.mock.calls[0][0];
-      expect(arg.html).toContain(
-        'https://www.lerniqo.example/center/verify-email?token=replacement-token',
+      expect(arg.text).toContain(
+        'https://www.lerniqo.example/verify-email?token=replacement-token&type=center',
       );
-      expect(arg.html).toMatch(/password has not been changed/i);
-      expect(arg.html).toMatch(/center details have not been changed/i);
-      expect(arg.html).toMatch(/forgot password/i);
+      expect(arg.html).toMatch(/Passwort .*nicht geändert/i);
+      expect(arg.html).toMatch(/Sprachschuldaten wurden nicht geändert/i);
+      expect(arg.html).toMatch(/Passwort vergessen/i);
     });
 
     it('sends the center password-reset code without a reset link', async () => {
@@ -187,5 +192,83 @@ describe('EmailService', () => {
       const arg = send.mock.calls[0][0];
       expect(arg.subject).toMatch(/Passwort/i);
     });
+  });
+  /**
+   * Five of the six emails were plain unstyled HTML while only the student
+   * password reset was branded. These assertions apply to every message, so a
+   * new email cannot quietly ship without the shell, the logo or a text part.
+   */
+  describe('every transactional email', () => {
+    const config = {
+      RESEND_API_KEY: 'key',
+      EMAIL_FROM: 'noreply@lerniqo.tech',
+      FRONTEND_URL: 'https://www.lerniqo.example',
+      VITRINE_URL: 'https://www.lerniqo.example',
+    };
+    const cases: Array<[string, (s: EmailService) => Promise<void>]> = [
+      ['student verification', (s) => s.sendVerificationEmail('a@b.co', 'tok')],
+      [
+        'student existing account',
+        (s) => s.sendExistingAccountVerificationEmail('a@b.co', 'tok'),
+      ],
+      [
+        'student password reset',
+        (s) => s.sendPasswordResetEmail('a@b.co', '123456'),
+      ],
+      [
+        'center verification',
+        (s) => s.sendCenterVerificationEmail('a@b.co', 'tok'),
+      ],
+      [
+        'center existing account',
+        (s) => s.sendExistingCenterVerificationEmail('a@b.co', 'tok'),
+      ],
+      [
+        'center password reset',
+        (s) => s.sendCenterPasswordResetEmail('a@b.co', '123456'),
+      ],
+    ];
+
+    it.each(cases)('%s is branded and complete', async (_name, sendIt) => {
+      const service = new EmailService(makeConfig(config));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await sendIt(service);
+      const arg = send.mock.calls[0][0];
+
+      // The shell
+      expect(arg.html).toContain('<!doctype html>');
+      expect(arg.html).toContain('cid:lerniqo-logo');
+      expect(arg.html).toContain('www.lerniqo.tech');
+
+      // The logo actually travels with the message, so it renders even when
+      // the client blocks remote images.
+      expect(arg.attachments?.[0]?.contentId).toBe('lerniqo-logo');
+      expect(Buffer.isBuffer(arg.attachments?.[0]?.content)).toBe(true);
+
+      // A text/plain part: better deliverability, and some clients show
+      // nothing without one.
+      expect(typeof arg.text).toBe('string');
+      expect(arg.text.length).toBeGreaterThan(40);
+
+      expect(arg.subject).toBeTruthy();
+    });
+
+    it.each(cases)(
+      '%s never leaks an unsubstituted placeholder',
+      async (_n, sendIt) => {
+        const service = new EmailService(makeConfig(config));
+        const send = (service as any).resend.emails.send as jest.Mock;
+
+        await sendIt(service);
+        const arg = send.mock.calls[0][0];
+
+        // FRONTEND_URL was once literally "http://localhost:PORT", which shipped
+        // a dead link to real inboxes.
+        expect(`${arg.html}${arg.text}`).not.toMatch(
+          /localhost:PORT|\{\{|undefined/,
+        );
+      },
+    );
   });
 });

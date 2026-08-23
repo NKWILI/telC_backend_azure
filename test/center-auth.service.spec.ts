@@ -1029,4 +1029,79 @@ describe('CenterAuthService', () => {
       });
     });
   });
+  describe('verifyEmailPublic', () => {
+    beforeEach(() => {
+      prisma.centerUser.findFirst.mockResolvedValue({
+        ...verifiedOwner,
+        email_verified: false,
+        email_verification_expires: new Date(Date.now() + 60_000),
+      });
+    });
+
+    it('confirms the address without creating a session', async () => {
+      const result = await service.verifyEmailPublic({
+        token: 'raw-verification-token',
+      });
+
+      expect(prisma.centerUser.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'owner-1',
+          email_verified: false,
+          email_verification_token: 'verification-token-hash',
+          email_verification_expires: { gt: expect.any(Date) },
+        },
+        data: {
+          email_verified: true,
+          email_verification_token: null,
+          email_verification_expires: null,
+        },
+      });
+      expect(result).toEqual({ message: 'email verified' });
+    });
+
+    it('mints no tokens and opens no session transaction', async () => {
+      await service.verifyEmailPublic({ token: 'raw-verification-token' });
+
+      expect(tokenService.generateCenterTokenPair).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('returns nothing a web page could leak', async () => {
+      const result = await service.verifyEmailPublic({
+        token: 'raw-verification-token',
+      });
+
+      expect(JSON.stringify(result)).not.toContain('manager@example.com');
+      expect(JSON.stringify(result)).not.toContain('center-1');
+      expect(Object.keys(result)).toEqual(['message']);
+    });
+
+    it('rejects an expired token', async () => {
+      prisma.centerUser.findFirst.mockResolvedValue({
+        ...verifiedOwner,
+        email_verified: false,
+        email_verification_expires: new Date(Date.now() - 1),
+      });
+
+      await expect(
+        service.verifyEmailPublic({ token: 'expired' }),
+      ).rejects.toThrow('VERIFICATION_TOKEN_EXPIRED');
+    });
+
+    it('rejects an unknown or already-consumed token', async () => {
+      prisma.centerUser.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.verifyEmailPublic({ token: 'unknown' }),
+      ).rejects.toThrow('VERIFICATION_TOKEN_INVALID');
+    });
+
+    it('is not idempotent: a second use of the same token fails', async () => {
+      prisma.centerUser.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.verifyEmailPublic({ token: 'already-used' }),
+      ).rejects.toThrow('VERIFICATION_TOKEN_INVALID');
+    });
+  });
 });

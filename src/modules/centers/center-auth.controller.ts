@@ -21,6 +21,7 @@ import {
   CenterRefreshTokenDto,
   CenterResetPasswordDto,
   VerifyCenterEmailDto,
+  VerifyCenterEmailPublicDto,
 } from './dto/center-auth-request.dto';
 import {
   CenterAuthResponseDto,
@@ -85,6 +86,23 @@ export class CenterAuthController {
   ): Promise<CenterAuthResponseDto> {
     await this.rateLimitService.checkCenterVerifyEmailLimit(ip || 'unknown');
     return this.centerAuthService.verifyEmail(dto);
+  }
+
+  @Post('verify-email-public')
+  @ApiOperation({
+    summary: 'Verify a center email from the public website',
+    description:
+      'What the emailed link points at. Consumes the one-time token and creates no session, because a web page has no device identity and no safe place to keep a refresh token. The owner signs in from the app afterwards.',
+  })
+  @ApiCreatedResponse({ type: CenterMessageResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiTooManyRequestsResponse({ type: CenterErrorResponseDto })
+  async verifyEmailPublic(
+    @Ip() ip: string,
+    @Body() dto: VerifyCenterEmailPublicDto,
+  ): Promise<CenterMessageResponseDto> {
+    await this.rateLimitService.checkCenterVerifyEmailLimit(ip || 'unknown');
+    return this.centerAuthService.verifyEmailPublic(dto);
   }
 
   @Post('login')
