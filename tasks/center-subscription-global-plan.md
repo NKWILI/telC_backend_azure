@@ -69,14 +69,43 @@ This is a backend initiative. Center-dashboard and student-app UI implementation
 | ----- | -------------------------------------------- | ---------------------------- | ------------------------------- |
 | 1     | Center identity and profile                  | Existing auth infrastructure | `feature/center-identity`       |
 | 2     | Partnership code and pricing assignment      | Phase 1                      | `feature/partnership-codes`     |
-| 3     | Trial, subscription, and seat policy         | Phases 1-2                   | `feature/center-subscriptions`  |
-| 4     | Center-managed student activation            | Phases 1-3                   | `feature/student-activation`    |
+| 3     | Trial, subscription, and seat policy         | Phase 1                      | `feature/center-subscriptions`  |
+| 4     | Center-managed student activation            | Phases 1, 3                  | `feature/student-activation`    |
 | 5     | Subscription access enforcement              | Phases 3-4                   | `feature/subscription-access`   |
-| 6     | Price quotation and payment records          | Phases 2-3                   | `feature/subscription-payments` |
+| 6     | Price quotation and payment records          | Phase 3                      | `feature/subscription-payments` |
 | 7     | Notch Pay checkout and webhooks              | Phase 6                      | `feature/notchpay-checkout`     |
 | 8     | Renewal, reminders, grace, and blocking      | Phases 5 and 7               | `feature/subscription-renewal`  |
 | 9     | AI usage metering and quotas                 | Phases 4-5                   | `feature/ai-usage-limits`       |
 | 10    | Migration, end-to-end hardening, and rollout | Phases 1-9                   | `feature/center-access-rollout` |
+
+### Execution order (decided 2026-08-23)
+
+Phases are numbered by subject, not by the order they are built. The build
+order is:
+
+```
+1 → 3 → 4 → 5 → [pilot with one real center] → 6 → 7 → 8 → 9 → 2 → 10
+```
+
+**Phase 2 moves to the end.** Partnership codes gate who may register a center.
+Nothing gates it today, which matters for a public launch and not at all for a
+pilot with schools that are onboarded by hand. The gate can be added any time
+before registration opens publicly; building it first would only delay finding
+out whether the product works.
+
+**Phases 3, 4 and 5 contain no payment code.** Completing them yields a
+product a real center can use end to end on a free trial: register, receive a
+three-student trial, provision students, watch them learn, and be blocked
+correctly when the trial expires.
+
+That is the point to run a pilot, because it answers the questions that are
+expensive to answer late — whether handing out activation keys works in a
+classroom, whether centers understand seats, whether the monitoring view is the
+one they actually want. Building Notch Pay first would mean integrating
+payments for a product nobody has used.
+
+Phase 4 still depends on Phase 3: there is no seat limit to enforce until a
+subscription defines one.
 
 Build order:
 
