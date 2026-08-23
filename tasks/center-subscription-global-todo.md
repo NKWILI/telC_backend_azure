@@ -33,12 +33,12 @@ Companion to `tasks/center-subscription-global-plan.md`.
 
 ## Phase 3: Trial, subscription, and seats
 
-- [ ] Write `tasks/phases/03-center-subscriptions-plan.md`
-- [ ] Human approves the specific plan
-- [ ] Create `feature/center-subscriptions`
-- [ ] Implement policy and subscription/seat APIs
-- [ ] Pass clock, state, and concurrency tests
-- [ ] Human approves merge
+- [x] Write `tasks/phases/03-center-subscriptions-plan.md`
+- [x] Human approves the specific plan
+- [x] Create `feature/center-subscriptions`
+- [x] Implement policy and subscription/seat APIs
+- [x] Pass clock, state, and concurrency tests
+- [x] Human approves merge
 
 ## Phase 4: Student activation
 
