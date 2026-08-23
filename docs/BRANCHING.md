@@ -46,6 +46,22 @@ git merge --no-ff feature/partnership-codes
 `--no-ff` keeps each phase as one revertible unit. A phase that goes wrong
 comes out with a single `git revert -m 1 <merge-sha>`.
 
+## Standing decision: one release, at the end (2026-08-23)
+
+Nothing ships to production until the whole center-subscription initiative
+works, Phase 1 through Phase 10. There is no partial rollout and no interim
+deploy.
+
+One consequence is deliberate and worth stating plainly, because it is easy to
+forget once it is buried in history: **`fix: stop truncating student refresh
+tokens at 72 bytes` sits on `dev`, not in production.** Until the release,
+spent student refresh tokens remain valid for their full seven-day lifetime,
+and replaying one raises no signal. The fix is written and tested; it is
+waiting on the release train by choice.
+
+If that calculus changes — a suspected token leak, or the release slipping
+further than expected — the hotfix lane below exists to ship it on its own.
+
 ## Cutting a release
 
 Only when every phase intended for the release is on `dev` and green:
