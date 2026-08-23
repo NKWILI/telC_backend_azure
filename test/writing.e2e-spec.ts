@@ -12,6 +12,7 @@ import { WritingController } from '../src/modules/writing/writing.controller';
 import { WritingService } from '../src/modules/writing/writing.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
@@ -88,6 +89,10 @@ describe('WritingController (e2e)', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue(guardThatRequiresAuth)
+      // Entitlement is StudentSubscriptionGuard's own spec to prove; this file
+      // is about the route behaving correctly for a student who may learn.
+      .overrideGuard(StudentSubscriptionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleFixture.createNestApplication();

@@ -12,12 +12,13 @@ import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 /** Served when the caller omits ?modelltest= — keeps existing clients working. */
 const DEFAULT_MODELLTEST = 1;
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { LesenService } from './lesen.service';
 import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
 import { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
 
 @ApiTags('Reading')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @Controller('api/reading')
 export class LesenController {
   constructor(private readonly lesenService: LesenService) {}

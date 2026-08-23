@@ -16,13 +16,14 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { EvaluationService } from './services';
 import { EvaluateSpeakingDto, SpeakingEvaluationResponseDto } from './dto';
 
 @ApiTags('Speaking')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @Controller('api/speaking')
 export class SpeakingController {
   private readonly logger = new Logger(SpeakingController.name);
@@ -53,6 +54,9 @@ export class SpeakingController {
         `transcript length: ${dto.transcript.length} chars`,
     );
 
-    return this.evaluationService.evaluateTranscript(dto.teilNumber, dto.transcript);
+    return this.evaluationService.evaluateTranscript(
+      dto.teilNumber,
+      dto.transcript,
+    );
   }
 }

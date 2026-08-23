@@ -13,6 +13,10 @@ import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
 @Module({
   imports: [CentersModule],
   providers: [StudentSubscriptionGuard],
-  exports: [StudentSubscriptionGuard],
+  // CentersModule is re-exported, not merely imported. Nest instantiates a
+  // guard named in `@UseGuards` from the *controller's* module, so every
+  // learning module has to be able to see SubscriptionPolicyService itself —
+  // importing it here only would leave the guard unconstructable there.
+  exports: [StudentSubscriptionGuard, CentersModule],
 })
 export class SubscriptionAccessModule {}

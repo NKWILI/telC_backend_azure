@@ -7,6 +7,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { SpeakingService } from './services/speaking.service';
 import type { TeilListItemDto, SessionHistoryItemDto } from './dto';
@@ -15,7 +16,7 @@ import type { TeilListItemDto, SessionHistoryItemDto } from './dto';
  * Catalog endpoints for Sprechen: list of Teils and session history.
  * GET /api/speaking/teils, GET /api/speaking/sessions
  */
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @Controller('api/speaking')
 export class SpeakingCatalogController {
   constructor(private readonly speakingService: SpeakingService) {}

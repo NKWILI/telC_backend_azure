@@ -5,10 +5,11 @@ import { SpeakingService } from './services/speaking.service';
 import { GeminiService } from './services/gemini.service';
 import { EvaluationService } from './services/evaluation.service';
 import { AuthModule } from '../auth/auth.module';
+import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
 import { RoomModule } from './room/room.module';
 
 @Module({
-  imports: [AuthModule, RoomModule],
+  imports: [AuthModule, SubscriptionAccessModule, RoomModule],
   controllers: [SpeakingController, SpeakingCatalogController],
   providers: [SpeakingService, GeminiService, EvaluationService],
   exports: [SpeakingService, GeminiService, EvaluationService],

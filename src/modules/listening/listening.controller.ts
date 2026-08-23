@@ -22,6 +22,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { ListeningService } from './listening.service';
@@ -34,7 +35,7 @@ import { SubmitListeningResponseDto } from './dto/submit-listening-response.dto'
 @ApiTags('Listening (Hören)')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @Controller('api/listening')
 export class ListeningController {
   constructor(private readonly listeningService: ListeningService) {}

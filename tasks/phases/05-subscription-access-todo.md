@@ -20,9 +20,9 @@ Companion to `tasks/phases/05-subscription-access-plan.md`.
 
 ## Task 2: Apply to the learning controllers
 
-- [ ] lesen, listening, modelltests, speaking, speaking-catalog, sprachbausteine, writing
-- [ ] Enumeration test so a later controller cannot ship without the guard
-- [ ] Commit the green increment
+- [x] lesen, listening, modelltests, speaking, speaking-catalog, sprachbausteine, writing
+- [x] Enumeration test so a later controller cannot ship without the guard
+- [x] Commit the green increment
 
 ## Task 2b: Close the speaking room entrance
 

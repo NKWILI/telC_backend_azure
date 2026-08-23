@@ -5,6 +5,7 @@ import { App } from 'supertest/types';
 import { SprachbausteineController } from '../src/modules/sprachbausteine/sprachbausteine.controller';
 import { SprachbausteineService } from '../src/modules/sprachbausteine/sprachbausteine.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 const exerciseResponse = {
@@ -41,6 +42,10 @@ describe('SprachbausteineController (e2e)', () => {
           return true;
         },
       })
+      // Entitlement is StudentSubscriptionGuard's own spec to prove; this file
+      // is about the route behaving correctly for a student who may learn.
+      .overrideGuard(StudentSubscriptionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleFixture.createNestApplication();

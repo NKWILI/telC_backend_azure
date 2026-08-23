@@ -5,6 +5,7 @@ import { App } from 'supertest/types';
 import { ListeningController } from '../src/modules/listening/listening.controller';
 import { ListeningService } from '../src/modules/listening/listening.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 import { PrismaService } from '../src/shared/services/prisma.service';
 
@@ -59,6 +60,10 @@ describe('Listening API scoring and answer security (e2e)', () => {
           return true;
         },
       })
+      // Entitlement is StudentSubscriptionGuard's own spec to prove; this file
+      // is about the route behaving correctly for a student who may learn.
+      .overrideGuard(StudentSubscriptionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleRef.createNestApplication();

@@ -9,6 +9,7 @@ import { WritingCorrectionService } from './writing-correction.service';
 import { GrokService } from './services/grok.service';
 import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
 import { AuthModule } from '../auth/auth.module';
+import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
 import { SpeakingModule } from '../speaking/speaking.module';
 import { GeminiService } from '../speaking/services/gemini.service';
 
@@ -19,7 +20,7 @@ import { GeminiService } from '../speaking/services/gemini.service';
  * Provider is selected by MODEL_PROVIDER env var: 'grok' uses GrokService, anything else (incl. unset) uses GeminiService.
  */
 @Module({
-  imports: [AuthModule, SpeakingModule],
+  imports: [AuthModule, SubscriptionAccessModule, SpeakingModule],
   controllers: [WritingController],
   providers: [
     WritingService,
