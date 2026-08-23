@@ -97,6 +97,23 @@ pooler rather than Postgres. `test/jest-integration-setup.ts` refuses to run if
 Neon branches expire. Recreate one and update `.env.test` when the suite
 cannot connect; nothing is lost when a branch is deleted.
 
+## Running the API for manual testing
+
+`.env` holds the production connection string, and NestJS reads it by default.
+Variables already set in the environment take precedence, which is what keeps
+manual testing off the real database.
+
+```powershell
+npm run start:testdb          # loads .env.test, serves on 3001
+```
+
+Windows PowerShell 5.1 has no `&&`, so the bash idiom
+`set -a && . ./.env.test && set +a` does not work there. The script exists so
+nobody has to remember that. It refuses to start if `.env.test` resolves to the
+production host.
+
+Point the Bruno collection at `http://localhost:3001`.
+
 ## Migrations
 
 `npm start` runs `prisma migrate deploy`, so any pending migration applies on

@@ -26,7 +26,8 @@
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:migrate-from-supabase": "node scripts/migrate-supabase-to-neon.mjs"
+    "db:migrate-from-supabase": "node scripts/migrate-supabase-to-neon.mjs",
+    "start:testdb": "powershell -ExecutionPolicy Bypass -File ./scripts/start-dev-testdb.ps1"
   },
   "dependencies": {
     "@google/genai": "^1.40.0",
