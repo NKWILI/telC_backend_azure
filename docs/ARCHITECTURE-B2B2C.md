@@ -96,7 +96,7 @@ Pricing is computed on the backend. A client never sends an amount.
 ### 3. Center provisions a student — Phase 4
 
 ```
-POST /api/centers/me/students                     { firstName, lastName, phone, email? }
+POST /api/centers/me/students                     { firstName, lastName, email, phone? }
   → seat check and insert in one Serializable transaction
   → Student(center_id = <from the token>, no password, unverified)
 
@@ -178,13 +178,13 @@ answered before the phase that depends on it.
 
 | # | Question | Needed before |
 |---|---|---|
-| 1 | Activation-key lifetime (7 days recommended) | Phase 4 |
-| 2 | Does removing a student free a paid seat immediately, or at the next billing period? | Phase 4 |
+| ~~1~~ | **Resolved:** activation keys live 7 days | — |
+| ~~2~~ | **Resolved:** removing a student frees the seat immediately | — |
 | 3 | Existing students: assign to an internal center, keep as legacy, or migrate? | Phase 5 |
 | 4 | Guest mode: keep a restricted demo or remove it? | Phase 5 |
 | 5 | Logo storage: the API takes an HTTPS URL and stores no binary. If centers must upload, this needs an object store. | when upload is wanted |
 | 6 | Reminder channel: email only, or email plus WhatsApp? | Phase 8 |
 | 7 | Paid AI quota | Phase 9 |
 | 8 | Notch Pay merchant readiness | Phase 7 |
-| 9 | **Is a student's email required, or is phone enough?** Email is unreliable in-market, but without it a student who forgets their password has no self-service recovery. Center-mediated recovery (re-issue an activation key) is the alternative. | Phase 4 |
+| ~~9~~ | **Resolved:** name and email required, phone/WhatsApp optional | — |
 | 10 | **What does a student see when their center is blocked?** Decision 3 says an in-product offer to continue — its wording and destination are unspecified, and it is the moment a churned center becomes a B2C opportunity. | Phase 5 |
