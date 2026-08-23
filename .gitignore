@@ -61,3 +61,5 @@ tasks/phases/*
 
 # Bruno: share the collection, never a filled-in environment
 bruno/environments/*.local.bru
+!tasks/phases/03-center-subscriptions-plan.md
+!tasks/phases/03-center-subscriptions-todo.md
