@@ -25,16 +25,24 @@ activates; it does not enforce.
 | Activation keys live **7 days** | 2026-08-23 |
 | Removing a student **frees its seat immediately** | 2026-08-23 |
 | A provisioned student needs a **name and email**; phone optional | 2026-08-23 |
+| Email is marked **verified**, and a welcome email is sent | 2026-08-23 |
+| The key goes to the **center only**; activations are logged with IP | 2026-08-23 |
+| An email already in use is **refused with a specific message** | 2026-08-23 |
 | The trial starts at the **first student activation**, exactly once | global assumption 6 |
 | A center sees **everything** about its own students | `ARCHITECTURE-B2B2C.md` |
 | Over the seat limit blocks **new provisioning only** | Phase 3 |
 
 ## The property that must survive every future change
 
-**The center never learns the student's password.** It creates the account; the
-student sets the credential when they redeem the key. A center that could sign
-in as its students could read their work, take their assessments, and impersonate
-them to Lerniqo. Every test in this phase should be read against that.
+**The center never learns a password the student chose.** It creates the
+account; the student sets the credential when redeeming the key.
+
+Stated precisely, because the weaker form is the true one: a center that holds
+the key can redeem it itself and set a password, and can re-mint a key whenever
+it likes. Delegated provisioning always carries that — the provisioner can take
+the account. What this phase guarantees is that the center never *learns* a
+credential the student chose, and that every activation is logged so taking an
+account leaves a trace.
 
 ## Data model
 
@@ -47,6 +55,10 @@ model Student {
   activation_key_hash    String?
   activation_key_expires DateTime?
   activated_at           DateTime?
+  /// Where the activation came from. A center holds the key and can therefore
+  /// redeem it itself, so this is the audit trail that makes an impersonation
+  /// visible after the fact.
+  activated_ip           String?
 }
 ```
 
@@ -254,27 +266,50 @@ review; report changes, non-changes, concerns and evidence.
 | Provisioned account is logged into before activation | Medium | Null `password_hash` refuses login; needs an explicit test |
 | Email collides with an existing independent student | Medium | See open question 3 |
 
-## Open questions
+## Resolved 2026-08-23
 
-1. **Is a provisioned student's email verified?** The center vouched for it,
-   which argues for `email_verified: true` and no verification email. But then
-   nobody has proven the address works, and password reset depends on it.
-   *Recommendation: mark verified, and let the first reset prove the address.*
+1. **A provisioned student's email is marked verified, and a welcome email is
+   sent at provisioning.** The email gates nothing. It exists to prove the
+   address works, to surface a typo to the center immediately through a bounce,
+   and to start a direct relationship with the student on day one — which is
+   what the churn strategy in `ARCHITECTURE-B2B2C.md` depends on. Marking
+   verified keeps self-service password reset available; without it, every
+   forgotten password becomes a support request routed through the center.
 
-2. **Is the activation key emailed to the student, or only shown to the center?**
-   The plan assumes the center hands it over in person. Emailing it as well
-   costs little and covers a student who loses the paper.
-   *Recommendation: return it to the center only, in this phase.*
+2. **The activation key goes to the center only, and every activation is
+   logged with its IP and timestamp.**
 
-3. **What if the email already belongs to an independent student?** Attach that
-   existing account to the center, or refuse?
-   *Recommendation: refuse with a distinct code. Silently attaching someone
-   else's account to a center would be a takeover.*
+   This phase should be honest about what that costs. A center holding the key
+   can redeem it, set a password itself, and sign in as that student — and it
+   can re-mint a key at any time, so revoking does not prevent it. The property
+   is therefore *the center does not learn a password the student chose*, not
+   *the center cannot impersonate*.
 
-4. **May a center see a student's actual submissions**, or only scores and
-   progress? `ARCHITECTURE-B2B2C.md` records "everything", so this phase assumes
-   full visibility — worth confirming before the list endpoint decides what to
-   return.
+   Only emailing the key exclusively to the student would close that, and it
+   would make activation depend on email deliverability, which is the exact
+   dependency the key model exists to avoid in a Douala classroom. Google
+   Classroom and Canvas carry the same limitation for the same reason: with
+   delegated provisioning the provisioner can always take the account. The
+   industry answer is an audit trail rather than prevention, which is why
+   activation records where it came from.
+
+3. **An email that already belongs to a student is refused, with a specific
+   message.** Attaching is never an option — it would hand a school control of a
+   stranger's account and history without their consent. The specific message
+   does let a center probe which addresses have Lerniqo accounts, but centers
+   are hand-onboarded paying partners rather than anonymous callers, and an
+   admin who cannot tell a typo from a collision cannot act on the error.
+
+4. **What a center may see of a student's work is deferred to the monitoring
+   endpoints**, and does not block this phase. Phase 4 returns roster data —
+   name, email, activation state, seat — and no learning content.
+
+   The decision, when it is taken, is about these columns specifically:
+   `WritingAttempt.content` (the full essay), `WritingAttempt.feedback` and
+   `corrected_text`, and `TeilTranscript.transcript_text` and
+   `conversation_history` (a full record of the student speaking). Decision 1 in
+   `ARCHITECTURE-B2B2C.md` currently says a center sees everything; that was
+   agreed before those columns were named.
 
 ## Verification
 
