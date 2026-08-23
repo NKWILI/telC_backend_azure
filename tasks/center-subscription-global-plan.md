@@ -329,6 +329,11 @@ Lint currently runs with `--fix`; before using it, the detailed phase plan must 
 7. **Paid AI quota:** unlimited with cost monitoring, per-seat allocation, or paid add-on? Resolve before Phase 9.
 8. **Notch Pay merchant readiness:** confirm approved business account, test/live API keys, webhook secret/signature contract, and enabled Cameroon channels before Phase 7.
 
+
+9. **Student email requirement:** is a student's email required, or is phone (WhatsApp) enough? Email is unreliable in-market, but without it a student who forgets their password has no self-service recovery; center-mediated recovery via a re-issued activation key is the alternative. Resolve before Phase 4.
+10. **Blocked-student experience:** what a student sees when their center stops paying. Agreed to be an in-product offer to continue rather than outbound marketing; the wording and destination are unspecified. Resolve before Phase 5.
+
+See `docs/ARCHITECTURE-B2B2C.md` for the agreed model these questions sit inside.
 ## Global Definition of Done
 
 - Each phase has an approved specific plan and a short-lived branch.
