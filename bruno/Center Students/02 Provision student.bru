@@ -1,0 +1,59 @@
+meta {
+  name: 02 Provision student
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/centers/me/students
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+body:json {
+  {
+    "firstName": "Awa",
+    "lastName": "Mbarga",
+    "email": "{{studentEmail}}",
+    "phone": "+237690000000"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.activated: eq false
+}
+
+script:post-response {
+  bru.setEnvVar("studentId", res.body.id);
+  bru.setEnvVar("activationKey", res.body.activationKey);
+}
+
+docs {
+  Set a fresh `studentEmail` before each run. An address already in use is
+  refused, deliberately.
+
+  `activationKey` is returned HERE AND ONLY HERE. Only its hash is stored, so it
+  cannot be recovered afterwards — a student who loses it needs a new one from
+  `05 Re-issue activation key`. The post-response script captures it for
+  `Student Activation / 01`.
+
+  The account has no password yet. The center creates it; only the student sets
+  the credential. Confirm the response carries no password field at all.
+
+  Checks worth doing by hand:
+
+  - the same email twice          -> 409 STUDENT_EMAIL_ALREADY_EXISTS.
+    Attaching would hand this school a stranger existing account.
+  - a fourth student on a trial   -> 403 SEAT_LIMIT_REACHED (trial is 3 seats)
+  - `"password": "hunter2"`       -> 400. A center must never set a password.
+  - `"centerId": "other-center"`  -> 400. Ownership comes from the token only.
+  - `"activatedAt": "2026-01-01"` -> 400
+
+  Those last three are the security boundary: the DTO allowlist rejects them
+  before any handler runs.
+}

@@ -1,0 +1,32 @@
+meta {
+  name: 06 Revoke activation key
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/centers/me/students/{{studentId}}/activation-key
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.revoked: eq true
+}
+
+docs {
+  Cancels an outstanding key without removing the student — for a key handed to
+  the wrong person, or a student who is not going to start after all.
+
+  Afterwards, `Student Activation / 01` with that key must fail.
+
+  The seat stays occupied. Revoking a key is not the same as removing the
+  student; use `07 Remove student` to free the seat. Check
+  `Center Subscription / 02 Get usage` before and after to confirm `seatsUsed`
+  is unchanged.
+}

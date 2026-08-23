@@ -1,0 +1,43 @@
+meta {
+  name: 04 Update student
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/centers/me/students/{{studentId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+body:json {
+  {
+    "firstName": "Awa-Marie",
+    "phone": "+237690000001"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.firstName: eq Awa-Marie
+}
+
+docs {
+  Name and phone only. Try each of these one at a time — every one must be
+  400 VALIDATION_ERROR:
+
+      { "email": "attacker@example.com" }
+      { "password": "hunter2" }
+      { "centerId": "other-center" }
+      { "activatedAt": "2026-01-01" }
+
+  Email is identity here, not a profile field. A center changing a student
+  email would redirect that student password reset to an address the center
+  controls, which is account takeover with extra steps.
+
+  An empty body `{}` returns 400 rather than performing a no-op write.
+}
