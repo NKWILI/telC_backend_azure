@@ -72,5 +72,5 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 
 ## Checkpoint B
 
-- [ ] Manual pass through Bruno
-- [ ] Human approves merge to `dev`; do not push or merge automatically
+- [x] Manual pass through Bruno
+- [x] Human approves merge to `dev` (2026-08-23); do not push or merge automatically
