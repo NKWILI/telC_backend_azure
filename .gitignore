@@ -63,3 +63,5 @@ tasks/phases/*
 bruno/environments/*.local.bru
 !tasks/phases/03-center-subscriptions-plan.md
 !tasks/phases/03-center-subscriptions-todo.md
+!tasks/phases/04-student-activation-plan.md
+!tasks/phases/04-student-activation-todo.md
