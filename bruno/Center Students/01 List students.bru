@@ -1,0 +1,41 @@
+meta {
+  name: 01 List students
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/students?page=1&pageSize=20
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  pageSize: 20
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Run `Center Auth / 03 Login` first — this needs a live `accessToken`.
+
+  Empty on a fresh center. Come back after `02 Provision student`.
+
+  Checks worth doing by hand:
+
+  - no Authorization header -> 401
+  - a STUDENT access token  -> 401
+  - `pageSize=5000`         -> 400. The cap is 100, so one request cannot pull
+    an entire roster and a dashboard refresh cannot become an unbounded query.
+
+  The response must never contain a password hash, an activation key hash or a
+  reset token. The view is built field by field rather than spread from the row,
+  so a column added later cannot leak here. Confirm that still holds.
+}

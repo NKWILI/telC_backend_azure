@@ -1,0 +1,60 @@
+meta {
+  name: 01 Activate
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/student-activations
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "key": "{{activationKey}}",
+    "password": "a-student-password",
+    "deviceId": "student-device-1",
+    "deviceName": "Android"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Public, and deliberately unauthenticated — a student arrives with a key and no
+  account they can yet sign into. The key IS the credential, which is why this is
+  the one public endpoint carrying a tight per-address rate limit.
+
+  Run `Center Students / 02 Provision student` first; it captures
+  `activationKey` for you.
+
+  Returns an ordinary student token pair. From here the student is a normal
+  Lerniqo user who happens to belong to a center.
+
+  The checks that matter:
+
+  - RUN IT TWICE. The second must fail with 400 ACTIVATION_KEY_INVALID. The key
+    is consumed by a predicated update, so a replay matches zero rows.
+
+  - `"studentId": "someone-else"` or `"centerId": "a-center"` -> 400. The key
+    alone decides which account is activated; a caller cannot name one.
+
+  - a password under 8 characters -> 400. Activation must not be a weaker door
+    into an account than registration is.
+
+  THE TRIAL CLOCK starts here, on the FIRST activation in a center. Check
+  `Center Subscription / 01 Get subscription` before and after:
+
+      before   status TRIAL_PENDING, trialStartedAt null
+      after    status TRIAL,         trialEndsAt = +30 days
+
+  Then provision and activate a SECOND student and check again. The timestamps
+  must be unchanged — a second student does not buy the center another thirty
+  days.
+
+  The password set here belongs to the student. Their center never learns it,
+  and cannot re-key the account now that it is active.
+}

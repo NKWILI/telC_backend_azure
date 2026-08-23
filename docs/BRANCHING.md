@@ -126,8 +126,45 @@ interactive transactions, so a Serializable test run through it measures the
 pooler rather than Postgres. `test/jest-integration-setup.ts` refuses to run if
 `DIRECT_URL` points at the production host.
 
-Neon branches expire. Recreate one and update `.env.test` when the suite
-cannot connect; nothing is lost when a branch is deleted.
+### Recreating the scratch branch
+
+Neon branches expire, and the integration suite simply stops connecting when
+one does. Nothing else breaks: `npm test` and `npm run test:e2e` need no
+database at all, so only the layer that catches concurrency bugs goes quiet.
+
+1. Neon console -> your project -> Branches -> New branch.
+2. Copy the pooled connection string, then toggle **Connection pooling off**
+   and copy the direct one.
+3. Put both in `.env.test` as `DATABASE_URL` and `DIRECT_URL`. The only
+   difference between them is `-pooler` in the host.
+4. Apply the schema and run the suite:
+
+```powershell
+npx prisma migrate deploy
+npm run test:integration
+```
+
+The suites create everything they need and clean up after themselves, so an
+empty branch works with no seeding.
+
+A local `postgres:16` container would remove the expiry problem, and is a fine
+fallback. The reason to prefer a Neon branch while building the
+concurrency-heavy phases is that it runs the same engine and settings as
+production, so a Serializable result there is the result you will get live.
+Docker is very probably identical — and "very probably" is the thing these
+tests exist to eliminate.
+
+### What this layer has actually caught
+
+Three phases, three defects that no mocked test could have found. Worth knowing
+before anyone decides the suite is optional:
+
+- a `DriverAdapterError` carrying no Prisma `code`, so the Serializable retry
+  had never once fired for the condition it exists for;
+- a migration backfill that had to be shown to cover pre-existing rows, since
+  the whole no-missing-row design rests on it;
+- a retry budget of two, which answered 503 to a real user whenever two
+  requests collided and both lost the retry.
 
 ## Running the API for manual testing
 

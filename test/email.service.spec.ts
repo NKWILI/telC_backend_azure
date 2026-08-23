@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 jest.mock('resend', () => ({
   Resend: jest.fn().mockImplementation(() => ({
     emails: { send: jest.fn().mockResolvedValue({}) },
@@ -227,6 +227,7 @@ describe('EmailService', () => {
         'center password reset',
         (s) => s.sendCenterPasswordResetEmail('a@b.co', '123456'),
       ],
+      ['student welcome', (s) => s.sendStudentWelcomeEmail('a@b.co', 'Awa')],
     ];
 
     it.each(cases)('%s is branded and complete', async (_name, sendIt) => {
@@ -270,5 +271,46 @@ describe('EmailService', () => {
         );
       },
     );
+  });
+  describe('student welcome email', () => {
+    const config = {
+      RESEND_API_KEY: 'key',
+      EMAIL_FROM: 'noreply@lerniqo.tech',
+      FRONTEND_URL: 'https://www.lerniqo.example',
+      VITRINE_URL: 'https://www.lerniqo.example',
+    };
+
+    it('never carries an activation key', async () => {
+      const service = new EmailService(makeConfig(config));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendStudentWelcomeEmail('awa@example.com', 'Awa');
+      const arg = send.mock.calls[0][0];
+
+      // The key goes to the center, in person. An emailed key would make
+      // activation depend on deliverability, which is what the key model
+      // exists to avoid.
+      expect(`${arg.html}${arg.text}`).not.toMatch(/token=|key=|[0-9a-f]{32}/i);
+    });
+
+    it('tells the student their school does not know their password', async () => {
+      const service = new EmailService(makeConfig(config));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendStudentWelcomeEmail('awa@example.com', 'Awa');
+
+      expect(send.mock.calls[0][0].html).toMatch(
+        /Passwort wählst nur du selbst/i,
+      );
+    });
+
+    it('greets without a name when none is supplied', async () => {
+      const service = new EmailService(makeConfig(config));
+      const send = (service as any).resend.emails.send as jest.Mock;
+
+      await service.sendStudentWelcomeEmail('awa@example.com', '  ');
+
+      expect(send.mock.calls[0][0].html).not.toMatch(/Hallo\s+,/);
+    });
   });
 });

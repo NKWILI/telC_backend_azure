@@ -33,6 +33,25 @@ model Student {
   password_reset_token       String?
   password_reset_expires     DateTime?
 
+  /// WhatsApp number. Optional, and the channel that actually reaches people
+  /// in-market — email deliverability is the weaker of the two, which matters
+  /// for renewal reminders and for reaching a student whose center lapses.
+  phone String?
+
+  /// One-time key a center hands to a student, hashed at rest exactly like the
+  /// verification and reset tokens above. The raw key is shown to the center
+  /// once, at generation, and cannot be recovered afterwards.
+  activation_key_hash    String?
+  activation_key_expires DateTime?
+  /// When the student redeemed their key and chose a password. Distinguishes a
+  /// provisioned-but-unused account from a real user, which reminders and any
+  /// churn analysis need.
+  activated_at           DateTime?
+  /// Where that redemption came from. A center holds the key and can therefore
+  /// redeem it itself, so this is the audit trail that makes an impersonation
+  /// visible after the fact rather than preventing it.
+  activated_ip           String?
+
   /// The center that provisioned this student, and the seat-counting boundary.
   /// Nullable: students who predate the center model, and any future
   /// independent student, simply have none.
@@ -45,6 +64,7 @@ model Student {
   oauth_accounts  OAuthAccount[]
 
   @@index([center_id])
+  @@index([activation_key_hash])
 
   @@index([email])
   @@map("students")

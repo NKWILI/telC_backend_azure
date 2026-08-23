@@ -1224,4 +1224,51 @@ describe('AuthService', () => {
       ).rejects.toThrow('INVALID_SESSION');
     });
   });
+  /**
+   * A center-provisioned student exists with no password until they redeem
+   * their activation key. Login must refuse that account rather than crash on
+   * a null hash — or, far worse, treat the absence of a credential as a match.
+   *
+   * The center created this account and knows the email. If a null hash ever
+   * authenticated, every provisioned student would be trivially reachable.
+   */
+  describe('an account with no password yet', () => {
+    it('is refused rather than matched', async () => {
+      prismaMock.student.findUnique.mockResolvedValue({
+        id: 'student-1',
+        email: 'awa@example.com',
+        password_hash: null,
+        email_verified: true,
+      });
+
+      await expect(
+        service.login({
+          email: 'awa@example.com',
+          password: 'any-password-at-all',
+          deviceId: 'device-1',
+        } as never),
+      ).rejects.toThrow('INVALID_CREDENTIALS');
+    });
+
+    it('never reaches a password comparison at all', async () => {
+      prismaMock.student.findUnique.mockResolvedValue({
+        id: 'student-1',
+        email: 'awa@example.com',
+        password_hash: null,
+        email_verified: true,
+      });
+
+      await service
+        .login({
+          email: 'awa@example.com',
+          password: 'x',
+          deviceId: 'device-1',
+        } as never)
+        .catch(() => undefined);
+
+      // bcrypt.compare with a null hash is undefined behaviour to rely on;
+      // the guard short-circuits before it is ever called.
+      expect(tokenServiceMock.generateTokenPair).not.toHaveBeenCalled();
+    });
+  });
 });

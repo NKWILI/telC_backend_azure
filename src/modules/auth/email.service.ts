@@ -212,6 +212,46 @@ export class EmailService {
     });
   }
 
+  /**
+   * Sent when a center provisions a student.
+   *
+   * It gates nothing — the student activates with the key their school hands
+   * them, not from here. It exists to prove the address works, so a typo comes
+   * back as a bounce the center can fix rather than silence, and so the
+   * student has heard from Lerniqo directly from day one.
+   *
+   * It deliberately carries no activation key: the key goes to the center.
+   */
+  async sendStudentWelcomeEmail(to: string, firstName: string): Promise<void> {
+    const greeting = firstName?.trim()
+      ? `Hallo ${firstName.trim()},`
+      : 'Hallo,';
+
+    await this.send(to, {
+      subject: 'Deine Sprachschule hat dich zu Lerniqo hinzugefügt',
+      preheader:
+        'Dein Zugang zu Lerniqo wurde von deiner Sprachschule angelegt.',
+      heading: 'Willkommen bei Lerniqo',
+      paragraphs: [
+        greeting,
+        'deine Sprachschule hat für dich ein Lerniqo-Konto angelegt.',
+        'Du erhältst deinen persönlichen Aktivierungscode direkt von deiner Sprachschule. Damit legst du dein eigenes Passwort fest und startest.',
+      ],
+      notice:
+        'Dein Passwort wählst nur du selbst — deine Sprachschule kennt es nicht. Wenn du nicht weißt, worum es geht, wende dich an deine Sprachschule.',
+      text: [
+        'Willkommen bei Lerniqo',
+        '',
+        greeting,
+        '',
+        'deine Sprachschule hat für dich ein Lerniqo-Konto angelegt.',
+        'Deinen persönlichen Aktivierungscode erhältst du direkt von deiner Sprachschule.',
+        '',
+        'Dein Passwort wählst nur du selbst.',
+      ].join('\n'),
+    });
+  }
+
   async sendPasswordResetEmail(to: string, rawCode: string): Promise<void> {
     await this.send(to, {
       subject: 'Dein Lerniqo-Code zum Zurücksetzen des Passworts',

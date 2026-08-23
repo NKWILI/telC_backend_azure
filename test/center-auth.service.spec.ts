@@ -484,6 +484,33 @@ describe('CenterAuthService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps retrying a conflict rather than giving up after one attempt', async () => {
+      const errorLog = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const conflict = Object.assign(new Error('TransactionWriteConflict'), {
+        name: 'DriverAdapterError',
+      });
+      // Two conflicts in a row must still succeed. With a single retry, a
+      // second collision answered 503 to a real user on a busy center.
+      prisma.$transaction
+        .mockRejectedValueOnce(conflict)
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce(async (callback: (client: any) => unknown) =>
+          callback(tx),
+        );
+
+      const result = await service.login({
+        email: 'manager@example.com',
+        password: 'correct-password',
+        deviceId: 'browser-1',
+      });
+
+      expect(result.accessToken).toBe('center-access-token');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+      errorLog.mockRestore();
+    });
+
     it('returns 503 and logs the cause when transaction retries are exhausted', async () => {
       const conflict = Object.assign(new Error('serialization conflict'), {
         code: 'P2034',
@@ -505,7 +532,9 @@ describe('CenterAuthService', () => {
       expect((error as ServiceUnavailableException).getStatus()).toBe(503);
       expect((error as Error).message).toBe('CENTER_SESSION_RETRY_EXHAUSTED');
       expect((error as ServiceUnavailableException).cause).toBe(conflict);
-      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+      // Every attempt is spent before giving up. 503 means the database really
+      // is too contended, not that the loop was too impatient.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(4);
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('retry attempts exhausted'),
         expect.stringContaining('serialization conflict'),

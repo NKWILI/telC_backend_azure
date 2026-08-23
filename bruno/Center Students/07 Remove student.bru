@@ -1,0 +1,37 @@
+meta {
+  name: 07 Remove student
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{baseUrl}}/api/centers/me/students/{{studentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.removed: eq true
+}
+
+docs {
+  Frees the seat immediately. Check `Center Subscription / 02 Get usage` before
+  and after — `seatsUsed` drops by one, and the seat is usable again straight
+  away.
+
+  This UNLINKS rather than deletes. The account, the password the student chose,
+  and every attempt they ever submitted survive; only the tie to this center is
+  cut. Deleting would destroy a person work because an administrator tidied a
+  roster.
+
+  To confirm, look the row up directly in the database afterwards: it is still
+  there, with `center_id` NULL and `password_hash` intact.
+
+  Afterwards the student no longer appears in `01 List students`, and
+  `03 Get student` answers 404 — the center genuinely cannot reach them any more.
+}

@@ -1,0 +1,37 @@
+meta {
+  name: 05 Re-issue activation key
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/centers/me/students/{{studentId}}/activation-key
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 201
+}
+
+script:post-response {
+  bru.setEnvVar("activationKey", res.body.activationKey);
+}
+
+docs {
+  For a student who lost their key or whose key expired. The previous key stops
+  working the moment this succeeds — verify that by keeping the old value and
+  trying it in `Student Activation / 01`.
+
+  The check that matters: run this AFTER the student has activated. It must fail
+  with 404 STUDENT_NOT_FOUND_OR_ALREADY_ACTIVE.
+
+  That refusal is load-bearing. Re-keying a live account would let the center
+  redeem the new key, set a password, and take the account from its owner. A
+  center legitimately holds keys for accounts nobody has claimed yet; this is
+  the line that stops it reaching one that has been.
+}

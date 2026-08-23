@@ -7,6 +7,11 @@ import { CenterProfileController } from './center-profile.controller';
 import { CenterProfileService } from './center-profile.service';
 import { CenterSubscriptionController } from './center-subscription.controller';
 import { CenterSubscriptionService } from './center-subscription.service';
+import { CenterStudentsController } from './center-students.controller';
+import { CenterStudentsService } from './center-students.service';
+import { StudentActivationController } from './student-activation.controller';
+import { StudentActivationService } from './student-activation.service';
+import { StudentProvisioningService } from './student-provisioning.service';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CentersService } from './centers.service';
@@ -17,6 +22,8 @@ import { CentersService } from './centers.service';
     CenterAuthController,
     CenterProfileController,
     CenterSubscriptionController,
+    CenterStudentsController,
+    StudentActivationController,
   ],
   providers: [
     CentersService,
@@ -24,6 +31,9 @@ import { CentersService } from './centers.service';
     CenterProfileService,
     CenterSubscriptionService,
     SubscriptionPolicyService,
+    StudentProvisioningService,
+    StudentActivationService,
+    CenterStudentsService,
     CenterAuthGuard,
     CenterExceptionFilter,
   ],

@@ -10,70 +10,70 @@ Companion to `tasks/phases/04-student-activation-plan.md`.
 
 ## Task 1: Activation schema
 
-- [ ] Add activation_key_hash, activation_key_expires, activated_at to Student
-- [ ] Additive migration; existing students unaffected
-- [ ] Prisma validate and build pass
-- [ ] Commit the green increment
+- [x] Add activation_key_hash, activation_key_expires, activated_at to Student
+- [x] Additive migration; existing students unaffected
+- [x] Prisma validate and build pass
+- [x] Commit the green increment
 
 ## Task 2: Provisioning with seat enforcement
 
-- [ ] Write seat-limit and concurrency tests first
-- [ ] Count and insert inside one Serializable transaction
-- [ ] Store only the key hash; return the raw key once
-- [ ] Created student has no password
-- [ ] Commit the green increment
+- [x] Write seat-limit and concurrency tests first
+- [x] Count and insert inside one Serializable transaction
+- [x] Store only the key hash; return the raw key once
+- [x] Created student has no password
+- [x] Commit the green increment
 
 ## Task 3: Activation and the trial trigger
 
-- [ ] Write replay, expiry and trial-start tests first
-- [ ] Consume the key with one predicated update
-- [ ] Student sets their own password
-- [ ] First activation starts the trial; a second must not move it
-- [ ] Commit the green increment
+- [x] Write replay, expiry and trial-start tests first
+- [x] Consume the key with one predicated update
+- [x] Student sets their own password
+- [x] First activation starts the trial; a second must not move it
+- [x] Commit the green increment
 
 ## Checkpoint A
 
-- [ ] Seat concurrency and the trial trigger both proven
-- [ ] Full suite green, build exit 0
-- [ ] Human review before endpoints exist
+- [x] Seat concurrency and the trial trigger both proven
+- [x] Full suite green, build exit 0
+- [x] Human review before endpoints exist
 
 ## Task 4: Center student endpoints
 
-- [ ] Write contract tests first
-- [ ] List, get, patch, delete, mint key, revoke key
-- [ ] Another center's student returns 404, never 403
-- [ ] PATCH rejects email, password, center_id, activated_at
-- [ ] DELETE unlinks and frees the seat; the account survives
-- [ ] Commit the green increment
+- [x] Write contract tests first
+- [x] List, get, patch, delete, mint key, revoke key
+- [x] Another center's student returns 404, never 403
+- [x] PATCH rejects email, password, center_id, activated_at
+- [x] DELETE unlinks and frees the seat; the account survives
+- [x] Commit the green increment
 
 ## Task 5: Public activation endpoint
 
-- [ ] Write contract tests first
-- [ ] Strict DTO, IP rate limiting, generic failure messages
-- [ ] Commit the green increment
+- [x] Write contract tests first
+- [x] Strict DTO, IP rate limiting, generic failure messages
+- [x] Commit the green increment
 
 ## Task 6: Integration tests
 
-- [ ] Concurrent provisioning at the last seat: one wins
-- [ ] Concurrent activation of one key: one wins
-- [ ] Trial starts once and does not move
-- [ ] Unlinking preserves the student and their sessions
-- [ ] Commit the green increment
+- [x] Concurrent provisioning at the last seat: one wins
+- [x] Concurrent activation of one key: one wins
+- [x] Trial starts once and does not move
+- [x] Unlinking preserves the student and their sessions
+- [x] Commit the green increment
 
 ## Task 7: Bruno collection
 
-- [ ] Center Students folder covering the full flow
-- [ ] Student Activation request
-- [ ] Document the manual checks the suites cannot make
-- [ ] Commit the green increment
+- [x] Center Students folder covering the full flow
+- [x] Student Activation request
+- [x] Document the manual checks the suites cannot make
+- [x] Commit the green increment
 
 ## Task 8: Gates and review
 
-- [ ] Unit, e2e, integration, build and lint by exit code
-- [ ] Code-quality and security review
-- [ ] Report changes, non-changes, concerns and evidence
+- [x] Unit, e2e, integration, build and lint by exit code
+- [x] Code-quality and security review
+- [x] Report changes, non-changes, concerns and evidence
 
 ## Checkpoint B
 
-- [ ] Manual pass through Bruno
-- [ ] Human approves merge to `dev`; do not push or merge automatically
+- [x] Manual pass through Bruno
+- [x] Human approves merge to `dev` (2026-08-24); do not push or merge automatically

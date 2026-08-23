@@ -488,6 +488,22 @@ export class AuthService {
     };
   }
 
+  /**
+   * Issues a normal student session for an account that already exists.
+   *
+   * Used by center-managed activation, where the account was created by a
+   * center and the student has just set their own password. Deliberately a
+   * thin public door onto the existing private path, so an activated student
+   * gets byte-for-byte the same session shape as a registered one.
+   */
+  async issueSessionForStudent(
+    studentId: string,
+    deviceId: string,
+    deviceName?: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    return this.issueTokenPairForDevice(studentId, deviceId, deviceName);
+  }
+
   private async issueTokenPairForDevice(
     studentId: string,
     deviceId: string,

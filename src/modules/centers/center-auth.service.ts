@@ -29,7 +29,22 @@ import {
 } from './dto/center-auth-response.dto';
 
 const MAX_ACTIVE_CENTER_DEVICES = 3;
-const SESSION_TRANSACTION_ATTEMPTS = 2;
+/**
+ * Four attempts rather than two.
+ *
+ * With a single retry, two requests that conflict can both lose their retry as
+ * well and one of them answers 503 — which showed up as an intermittent
+ * failure under load and would reach a real user on a busy center. Serializable
+ * conflicts are expected here, not exceptional, so the loop needs enough room
+ * to absorb a couple of them.
+ */
+const SESSION_TRANSACTION_ATTEMPTS = 4;
+/**
+ * Retrying instantly puts the same two losers back into the same collision.
+ * A short randomised pause separates them, so the second attempt is contending
+ * with far less than the first.
+ */
+const SESSION_RETRY_BASE_BACKOFF_MS = 25;
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_VERIFIED_RESPONSE = { message: 'email verified' } as const;
 const PASSWORD_RESET_RESPONSE = {
@@ -571,6 +586,7 @@ export class CenterAuthService {
           );
         }
         lastConflict = error;
+        await this.pauseBeforeRetry(attempt);
       }
     }
 
@@ -721,6 +737,17 @@ export class CenterAuthService {
     const stored = Buffer.from(storedHash);
     return (
       candidate.length === stored.length && timingSafeEqual(candidate, stored)
+    );
+  }
+
+  /**
+   * Exponential with jitter. The jitter matters more than the growth: without
+   * it, two conflicting requests wake at the same instant and collide again.
+   */
+  private async pauseBeforeRetry(attempt: number): Promise<void> {
+    const ceiling = SESSION_RETRY_BASE_BACKOFF_MS * 2 ** attempt;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.random() * ceiling),
     );
   }
 
