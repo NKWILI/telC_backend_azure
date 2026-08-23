@@ -76,4 +76,4 @@ Companion to `tasks/phases/04-student-activation-plan.md`.
 ## Checkpoint B
 
 - [x] Manual pass through Bruno
-- [ ] Human approves merge to `dev`; do not push or merge automatically
+- [x] Human approves merge to `dev` (2026-08-24); do not push or merge automatically
