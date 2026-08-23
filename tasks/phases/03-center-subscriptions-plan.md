@@ -2,6 +2,7 @@
 
 Companion todo: `tasks/phases/03-center-subscriptions-todo.md`
 Model it implements: `docs/ARCHITECTURE-B2B2C.md`
+Revised 2026-08-23 after the eight decisions below were taken.
 
 ## Goal
 
@@ -20,6 +21,19 @@ Pricing, checkout, Notch Pay, webhooks, renewal reminders, the scheduler, the
 student-facing guard, and student provisioning. Phase 3 exposes two read
 endpoints and a policy service; it changes no learning behaviour.
 
+## Decisions taken before planning (2026-08-23)
+
+| # | Decision |
+|---|---|
+| 1 | Grace applies **only** after a paid period lapses. An expired trial goes straight to `BLOCKED`. |
+| 2 | The subscription row is created **with the center**, inside the registration transaction. |
+| 3 | Being over the seat limit blocks **new provisioning only**. Existing students are unaffected. |
+| 4 | Buying during a trial does not cut it short: `paid_until = max(now, trial_ends_at) + 30 days`. |
+| 5 | There is no `CANCELLED` state. Not paying is the only exit. |
+| 6 | A period is a fixed **30 days**, not a calendar month. |
+| 7 | The seat limit always reads `subscription.seats` — 3 at creation, 10+ once paid. |
+| 8 | The trial starts at the first student **activation** (Phase 4), so `TRIAL_PENDING` may last indefinitely. |
+
 ## The central decision: status is derived, never stored
 
 A `status` column would have to be kept correct by a scheduled job. When that
@@ -31,22 +45,26 @@ So the table stores only **facts with timestamps**, and the effective status is
 computed on read:
 
 ```
-cancelled_at set                            → CANCELLED
-trial_started_at is null                    → TRIAL_PENDING
-now < trial_ends_at                         → TRIAL
-paid_until set and now < paid_until         → ACTIVE
-now < (paid_until ?? trial_ends_at) + 7d    → GRACE_PERIOD
-otherwise                                   → BLOCKED
+trial_started_at is null                 → TRIAL_PENDING
+now < trial_ends_at                      → TRIAL
+paid_until set and now < paid_until      → ACTIVE
+paid_until set and now < paid_until + 7d → GRACE_PERIOD
+otherwise                                → BLOCKED
 ```
 
-Grace is derived too, not stored: `graceEndsAt = periodEnd + GRACE_PERIOD_DAYS`.
+Grace exists so a paying customer whose transfer is late keeps service. A trial
+user owes nothing and has nothing to be late with, so an expired trial goes
+straight to `BLOCKED` — which also keeps "30-day trial" literally true rather
+than quietly meaning 37.
+
+`graceEndsAt` is derived as well, and is null whenever there is no paid period.
 A stored copy is one more value that can disagree with the timestamps it came
 from.
 
 A scheduler may still exist later for *reminders*, but access will never depend
-on it having run. This directly addresses the global plan's risk row
-*"Subscription scheduler runs late — access guard derives effective status from
-authoritative timestamps."*
+on it having run. This closes the global plan's risk row *"Subscription
+scheduler runs late — access guard derives effective status from authoritative
+timestamps."*
 
 ## Seats
 
@@ -56,10 +74,17 @@ nothing to drift.
 
 ```
 used  = COUNT(students WHERE center_id = X)
-limit = TRIAL_PENDING | TRIAL → 3
-        ACTIVE | GRACE_PERIOD → subscription.seats   (minimum 10)
-        BLOCKED | CANCELLED   → 0 new provisions
+limit = subscription.seats        (3 at creation, 10+ once paid)
 ```
+
+The limit always comes from the column, never from a constant chosen by status.
+One place to read from, no branch in the seat logic, and extending one school to
+five trial students becomes a data change rather than a code change.
+
+**Being over the limit blocks new provisioning only.** Existing students keep
+working while the subscription is otherwise valid. A school dropping from ten
+seats to five does not knock five students out of their course, and nobody has
+to decide which five.
 
 Phase 3 exposes and tests this accounting. Phase 4 enforces it inside the
 provisioning transaction.
@@ -81,7 +106,6 @@ model CenterSubscription {
   trial_started_at DateTime?
   trial_ends_at    DateTime?
   paid_until       DateTime?
-  cancelled_at     DateTime?
 
   created_at       DateTime   @default(now())
   updated_at       DateTime   @default(now()) @updatedAt
@@ -99,10 +123,19 @@ guarantee rather than a convention.
 unlike `CenterUser`, which uses `Restrict` so a center cannot be deleted out
 from under its owner.
 
-**Nothing sets `trial_started_at` in this phase.** Per global assumption 6, the
-trial starts on the first successful student activation, which is Phase 4. Every
-center created here sits at `TRIAL_PENDING`, and the transition is Phase 4's to
-make.
+**The row is created with the center, inside the existing registration
+transaction.** Every center then provably has exactly one subscription,
+`GET /subscription` is a plain read, and there is no permanent "missing row"
+branch to reason about. Existing centers are backfilled by the migration.
+
+**Periods are a fixed 30 days**, not calendar months. A payment on 31 January
+runs to 2 March. No month-end clamping, no leap-year branch, and with manual
+monthly payment nobody is anchored to a billing date.
+
+**Nothing sets `trial_started_at` in this phase.** The trial starts on the first
+successful student activation, which is Phase 4. Every center created here sits
+at `TRIAL_PENDING`, possibly forever if none of its students ever activate —
+which is intended: the clock starts when value starts.
 
 ## API
 
@@ -144,11 +177,10 @@ names another center.
 ## Boundary and security rules
 
 - Both endpoints sit behind `CenterAuthGuard`. Ownership comes from the token.
-- A center with no subscription row must still get a coherent answer — treat a
-  missing row as `TRIAL_PENDING` rather than 404, so a center created before
-  this migration is not broken.
+- Every center has a row by construction; a missing one is a bug, not a
+  supported state.
 - `SubscriptionPolicyService` is the only place subscription rules exist.
-  Controllers, guards and later jobs call it; none of them re-implement it.
+  Controllers, guards and later jobs call it; none re-implement it.
 - All comparisons use a single injected "now", so tests are deterministic and a
   request cannot straddle two clock reads.
 - Read-only phase: no endpoint here mutates a subscription.
@@ -159,53 +191,60 @@ names another center.
 | Abuse | Control |
 |---|---|
 | Center reads another center's subscription | Both queries scoped by signed `centerId`; no id accepted from input |
-| Student token reaches a center endpoint | `CenterAuthGuard` (Phase 1) rejects tokens without `actorType` |
+| Student token reaches a center endpoint | `CenterAuthGuard` rejects tokens without `actorType` |
 | Expired trial keeps working because a job did not run | Status derived from timestamps on every read |
-| Clock skew grants an extra day | One injected clock; boundary tests at exactly the expiry instant |
+| Clock skew grants an extra day | One injected clock; boundary tests at the exact expiry instant |
 | Seat count drifts from reality | Seats are counted, never stored |
-| Two concurrent provisions exceed the limit | Phase 4 concern; Phase 3 provides the counting primitive and tests it |
+| Two concurrent provisions exceed the limit | Phase 4 concern; Phase 3 provides and tests the counting primitive |
 | Center deleted leaves an orphan subscription | `onDelete: Cascade` |
+| A failed registration leaves a center with no subscription | Both inserts share one transaction |
 
 ## Tasks
 
-### Task 1: Subscription schema and migration
+### Task 1: Schema, migration, and creation at registration
 
-**Description:** Add `CenterSubscription` and `CenterPlan`, plus an additive
-migration. No behaviour yet.
+**Description:** Add `CenterSubscription` and `CenterPlan`, a migration that
+backfills every existing center, and a third insert in the Phase 1 registration
+transaction.
 
 **Acceptance criteria:**
-- One subscription per center enforced by a unique constraint.
-- Migration is additive and touches no existing table.
+- One subscription per center, enforced by a unique constraint.
+- The migration backfills every existing center; none is left without a row.
+- Registering a center creates its subscription in the same transaction, so a
+  failed registration leaves no orphan.
+- Phase 1 registration tests stay green unchanged.
 - `prisma validate` and the production build pass.
 
-**Verification:** `npx prisma validate`; `npm run build; "exit: $LASTEXITCODE"`
+**Verification:** `npx prisma validate`; `npm test -- centers.service.spec`; `npm run build; "exit: $LASTEXITCODE"`
 
-**Dependencies:** none · **Scope:** S · **Files:** `prisma/schema.prisma`, one migration
+**Dependencies:** none · **Scope:** M · **Files:** `prisma/schema.prisma`, one migration, `centers.service.ts`, its spec
 
 ### Task 2: SubscriptionPolicyService
 
-**Description:** The one authority. Takes a subscription record (or null) and a
-clock, returns effective status, `graceEndsAt`, and `studentsMayLearn`.
+**Description:** The one authority. Takes a subscription record and a clock,
+returns effective status, `graceEndsAt`, and `studentsMayLearn`.
 
 **Acceptance criteria:**
-- Every state reachable and covered: `TRIAL_PENDING`, `TRIAL`, `ACTIVE`, `GRACE_PERIOD`, `BLOCKED`, `CANCELLED`.
-- A null subscription resolves to `TRIAL_PENDING`, not an error.
-- Boundary tests at exactly `trial_ends_at`, exactly `paid_until`, and exactly the grace instant.
+- Every state covered: `TRIAL_PENDING`, `TRIAL`, `ACTIVE`, `GRACE_PERIOD`, `BLOCKED`.
+- An expired trial resolves to `BLOCKED`, never `GRACE_PERIOD`.
+- `graceEndsAt` is null whenever there is no paid period.
+- Boundary tests at exactly `trial_ends_at`, exactly `paid_until`, and exactly `paid_until + 7d`.
 - `studentsMayLearn` is true for `TRIAL`, `ACTIVE`, `GRACE_PERIOD` only.
 
 **Verification:** `npm test -- subscription-policy.service.spec`
 
-**Dependencies:** 1 · **Scope:** M · **Files:** `subscription-policy.service.ts` + spec
+**Dependencies:** 1 · **Scope:** M
 
 ### Task 3: Seat accounting
 
-**Description:** Count students by `center_id` and resolve the limit from
-effective status. Read-only.
+**Description:** Count students by `center_id` and read the limit from the
+column. Read-only.
 
 **Acceptance criteria:**
 - `seatsUsed` counts only students of that center.
-- Limit is 3 while trial, `subscription.seats` when paid, 0 when blocked or cancelled.
+- The limit always reads `subscription.seats`, with no status-dependent branch.
 - `seatsAvailable` never returns negative — an over-limit center reports 0.
+- Being over the limit is reported, not punished: existing students unaffected.
 
 **Verification:** `npm test -- center-subscription.service.spec`
 
@@ -222,7 +261,6 @@ effective status. Read-only.
 **Acceptance criteria:**
 - Guarded; unauthenticated returns 401.
 - Response matches the documented shape; no internal ids or raw rows leak.
-- A center with no subscription row gets `TRIAL_PENDING`, not 404.
 
 **Verification:** `npm test -- center-subscription.controller.spec`
 
@@ -231,20 +269,20 @@ effective status. Read-only.
 ### Task 5: `GET /api/centers/me/usage`
 
 **Acceptance criteria:**
-- Returns used, limit, available, status, scoped to the signed center.
+- Returns used, limit, available and status, scoped to the signed center.
 - A second center's students never appear in the count.
-
-**Verification:** same spec
 
 **Dependencies:** 3, 4 · **Scope:** S
 
 ### Task 6: Integration tests against real Postgres
 
 **Description:** Extend the existing integration suite. The unit tests prove we
-call Prisma correctly; only this proves the constraint and the counting hold.
+call Prisma correctly; only this proves the constraint, the backfill and the
+counting hold.
 
 **Acceptance criteria:**
 - The unique constraint rejects a second subscription for one center.
+- Registering a center yields exactly one subscription row.
 - Seat counting is correct with students spread across two centers.
 - Deleting a center cascades its subscription away.
 
@@ -273,18 +311,18 @@ call Prisma correctly; only this proves the constraint and the counting hold.
 |---|---|---|
 | Access rules re-implemented in a guard later | High | One service; Phase 5 must call it, not copy it |
 | Timezone handling makes expiry off by hours | Medium | Store and compare UTC only; boundary tests assert the exact instant |
-| `ACTIVE` is unreachable until Phase 7, so untested in practice | Medium | Unit tests construct it directly; integration seeds a paid row by hand |
-| Centers created before this migration have no subscription | Medium | Null resolves to `TRIAL_PENDING`; asserted in tests |
+| `ACTIVE` unreachable until Phase 7, so untested in practice | Medium | Unit tests construct it directly; integration seeds a paid row by hand |
+| Centers created before this migration have no subscription | Medium | The migration backfills them; an integration test asserts none is left without one |
+| Registration regresses while gaining a third insert | Medium | Phase 1 registration tests must stay green unchanged |
 
 ## Open questions
 
-None blocking. The three that gated this phase were resolved on 2026-08-23:
-activation keys live 7 days, removing a student frees its seat immediately, and
-a provisioned student needs a name and email with phone optional.
+None blocking. The three that gated Phase 4 and the eight above were resolved on
+2026-08-23.
 
 One to confirm during review: **should `GET /subscription` be reachable while
-`BLOCKED`?** Global assumption 7 says a blocked center keeps dashboard access
-for profile, billing and renewal — which implies yes, and this plan assumes yes.
+`BLOCKED`?** Global assumption 7 says a blocked center keeps dashboard access for
+profile, billing and renewal — which implies yes, and this plan assumes yes.
 
 ## Verification
 

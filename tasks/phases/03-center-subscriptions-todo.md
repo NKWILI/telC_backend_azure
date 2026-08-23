@@ -6,12 +6,15 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 
 - [x] Resolve the three questions that blocked this phase
 - [x] Record the build order (Phase 2 deferred to the end)
+- [x] Human approves the eight design decisions
 - [ ] Human approves this specific plan
 - [ ] Create `feature/center-subscriptions` from `dev`
 
 ## Task 1: Subscription schema
 
 - [ ] Add `CenterSubscription` and `CenterPlan` with a unique `center_id`
+- [ ] Create the row inside the Phase 1 registration transaction
+- [ ] Backfill every existing center in the migration
 - [ ] Additive migration, no existing table touched
 - [ ] Prisma validate and production build pass
 - [ ] Commit the green increment
@@ -20,14 +23,14 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 
 - [ ] Write state and boundary tests first
 - [ ] Derive effective status from timestamps only
-- [ ] Cover TRIAL_PENDING, TRIAL, ACTIVE, GRACE_PERIOD, BLOCKED, CANCELLED
-- [ ] Null subscription resolves to TRIAL_PENDING
+- [ ] Cover TRIAL_PENDING, TRIAL, ACTIVE, GRACE_PERIOD, BLOCKED
+- [ ] An expired trial resolves to BLOCKED, never GRACE_PERIOD
 - [ ] Commit the green increment
 
 ## Task 3: Seat accounting
 
 - [ ] Write counting tests first
-- [ ] Count students by center_id; resolve the limit from status
+- [ ] Count students by center_id; read the limit from subscription.seats
 - [ ] seatsAvailable never negative
 - [ ] Commit the green increment
 
@@ -41,7 +44,7 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 
 - [ ] Write controller contract tests first
 - [ ] Add the endpoint, DTO and Swagger responses
-- [ ] Missing subscription returns TRIAL_PENDING, not 404
+- [ ] Response leaks no internal ids or raw rows
 - [ ] Commit the green increment
 
 ## Task 5: GET /api/centers/me/usage
@@ -54,6 +57,7 @@ Companion to `tasks/phases/03-center-subscriptions-plan.md`.
 ## Task 6: Integration tests
 
 - [ ] Unique constraint rejects a second subscription
+- [ ] Registering a center yields exactly one subscription row
 - [ ] Seat counting correct across two centers
 - [ ] Deleting a center cascades the subscription
 - [ ] Commit the green increment
