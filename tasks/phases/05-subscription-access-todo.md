@@ -4,24 +4,30 @@ Companion to `tasks/phases/05-subscription-access-plan.md`.
 
 ## Approval gate
 
-- [ ] Human answers the three open questions
-- [ ] Human approves this specific plan
+- [x] Human answers the three open questions
+- [x] Human approves this specific plan
 - [ ] Create `feature/subscription-access` from `dev`
 
 ## Task 1: StudentSubscriptionGuard
 
-- [ ] Write state and failure tests first
-- [ ] Call SubscriptionPolicyService; no date arithmetic in the guard
-- [ ] TRIAL, ACTIVE, GRACE_PERIOD pass; TRIAL_PENDING and BLOCKED refuse
-- [ ] A student with no center_id passes
-- [ ] 403 SUBSCRIPTION_INACTIVE, distinct from 401
-- [ ] A database failure is 503, never a silent pass
-- [ ] Commit the green increment
+- [x] Write state and failure tests first
+- [x] Call SubscriptionPolicyService; no date arithmetic in the guard
+- [x] TRIAL, ACTIVE, GRACE_PERIOD pass; TRIAL_PENDING and BLOCKED refuse
+- [x] A student with no center_id passes
+- [x] 403 SUBSCRIPTION_INACTIVE, distinct from 401
+- [x] A database failure is 503, never a silent pass
+- [x] Commit the green increment
 
 ## Task 2: Apply to the learning controllers
 
 - [ ] lesen, listening, modelltests, speaking, speaking-catalog, sprachbausteine, writing
 - [ ] Enumeration test so a later controller cannot ship without the guard
+- [ ] Commit the green increment
+
+## Task 2b: Close the speaking room entrance
+
+- [ ] JwtAuthGuard + subscription on POST /api/speaking/rooms
+- [ ] GET /rooms/:roomId stays public; guest join still works without a token
 - [ ] Commit the green increment
 
 ## Task 3: Report status on refresh and login
