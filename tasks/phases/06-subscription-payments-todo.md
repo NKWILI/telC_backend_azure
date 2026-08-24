@@ -5,30 +5,30 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 ## Approval gate
 
 - [x] Human answers the four opening questions
-- [ ] Human approves this specific plan
-- [ ] Create `feature/subscription-payments` from `dev`
+- [x] Human approves this specific plan
+- [x] Create `feature/subscription-payments` from `dev`
 
 ## Task 1: Billing terms on Center
 
-- [ ] Migration adds unit_price_xaf (4800) and min_seats (10)
-- [ ] Backfill covers pre-existing centers, proven against real Postgres
-- [ ] Commit the green increment
+- [x] Migration adds unit_price_xaf (4800) and min_seats (10)
+- [x] Backfill covers pre-existing centers, proven against real Postgres
+- [x] Commit the green increment
 
 ## Task 2: PricingService
 
-- [ ] quote(center, seats) returns integers only
-- [ ] Refuses below min_seats
-- [ ] Refuses below current student count, with a distinct code
-- [ ] Reads terms from the center, not a constant
-- [ ] A partner center at 4,500 quotes 45,000 for 10 seats
-- [ ] Commit the green increment
+- [x] quote(center, seats) returns integers only
+- [x] Refuses below min_seats
+- [x] Refuses below current student count, with a distinct code
+- [x] Reads terms from the center, not a constant
+- [x] A partner center at 4,500 quotes 45,000 for 10 seats
+- [x] Commit the green increment
 
 ## Task 3: POST /subscription/quote
 
-- [ ] Own center only
-- [ ] Client-supplied unitPrice / amount / total rejected
-- [ ] Reachable while blocked
-- [ ] Commit the green increment
+- [x] Own center only
+- [x] Client-supplied unitPrice / amount / total rejected
+- [x] Reachable while blocked
+- [x] Commit the green increment
 
 ## Checkpoint A
 
@@ -38,37 +38,37 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 4: Payment model and idempotent creation
 
-- [ ] Concurrent requests with one key create exactly one row (real Postgres)
-- [ ] Same key, different body: 409, first record unchanged
-- [ ] Same key, same body: returns the original
-- [ ] Amount recomputed server-side at creation
-- [ ] paid_until and seats untouched
-- [ ] Commit the green increment
+- [x] Concurrent requests with one key create exactly one row (real Postgres)
+- [x] Same key, different body: 409, first record unchanged
+- [x] Same key, same body: returns the original
+- [x] Amount recomputed server-side at creation
+- [x] paid_until and seats untouched
+- [x] Commit the green increment
 
 ## Task 5: Reading payments
 
-- [ ] Another center's payment is 404, never 403
-- [ ] History paginated with a capped page size
-- [ ] Commit the green increment
+- [x] Another center's payment is 404, never 403
+- [x] History paginated with a capped page size
+- [x] Commit the green increment
 
 ## Task 6: Blocked-center reachability
 
-- [ ] All four routes answer while BLOCKED
-- [ ] center-blocked-surface.spec.ts extended to pin them
-- [ ] Commit the green increment
+- [x] All four routes answer while BLOCKED
+- [x] center-blocked-surface.spec.ts extended to pin them
+- [x] Commit the green increment
 
 ## Task 7: Bruno
 
-- [ ] Quote and pay end to end
-- [ ] The attempts that must fail: client amount, below minimum, below student
+- [x] Quote and pay end to end
+- [x] The attempts that must fail: client amount, below minimum, below student
       count, replayed key
-- [ ] Commit the green increment
+- [x] Commit the green increment
 
 ## Task 8: Gates and review
 
-- [ ] Unit, e2e, integration, build and lint by exit code
-- [ ] Code-quality and security review
-- [ ] Report changes, non-changes, concerns and evidence
+- [x] Unit, e2e, integration, build and lint by exit code
+- [x] Code-quality and security review
+- [x] Report changes, non-changes, concerns and evidence
 
 ## Checkpoint B
 

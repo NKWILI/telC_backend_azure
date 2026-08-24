@@ -1,0 +1,45 @@
+meta {
+  name: 03 Payment history
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/payments?page=1&pageSize=20
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  pageSize: 20
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  This center's payments, newest first.
+
+  Use it to confirm the idempotency behaviour in `02 Create payment`: after
+  sending the same key twice, there is exactly ONE row here, not two.
+
+  ## Checks
+
+  - `?pageSize=5000` -> 400. Capped at 100, so a dashboard refresh cannot turn
+    into an unbounded query over a long history.
+  - `?page=0` -> 400.
+  - No Authorization header -> 401.
+
+  ## Scoping
+
+  There is no route that lists another center's payments. The center comes
+  from the token, never from the query string — try adding
+  `?centerId=someone-else` and note that it changes nothing, because the
+  parameter does not exist and is rejected by the global pipe.
+}

@@ -461,4 +461,28 @@ export class RateLimitService {
       },
     ]);
   }
+
+  /**
+   * Rate limit for POST /api/payments.
+   *
+   * Keyed on the center rather than the IP, because the caller is
+   * authenticated and the resource being protected is that center's own row
+   * count. Every payment creates a durable record, and a new idempotency key
+   * makes a new one, so without a ceiling a signed-in center can grow the
+   * table without bound — the idempotency index prevents duplicates of one
+   * intent, not a flood of distinct ones.
+   *
+   * Twenty an hour is far above any honest use. A center pays monthly, and
+   * even a person clicking through several failed attempts stays well inside
+   * it.
+   */
+  checkPaymentCreateLimit(centerId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:payments:create:center:${centerId}`,
+        max: 20,
+        ttlSeconds: 60 * 60,
+      },
+    ]);
+  }
 }

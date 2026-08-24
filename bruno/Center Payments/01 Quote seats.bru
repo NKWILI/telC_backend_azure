@@ -1,0 +1,79 @@
+meta {
+  name: 01 Quote seats
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/centers/me/subscription/quote
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+body:json {
+  {
+    "seats": 10
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.unitPriceXaf: eq 4800
+  res.body.amountXaf: eq 48000
+}
+
+docs {
+  What 10 seats would cost. Run `Center Auth / 03 Login` first.
+
+  Standard pricing is 4,800 XAF a seat with a minimum of 10, so the smallest
+  order is 48,000 XAF. A partner center pays 4,500 and quotes 45,000 for the
+  same 10 seats — the difference comes from that center's own billing terms,
+  not from anything in this request.
+
+  ## The checks that matter
+
+  THE PRICE IS NOT AN INPUT. Every one of these must return 400
+  VALIDATION_ERROR, not a quote:
+
+  - `{"seats": 10, "unitPriceXaf": 1}`
+  - `{"seats": 10, "amountXaf": 1}`
+  - `{"seats": 10, "amount": 1}`
+  - `{"seats": 10, "total": 1}`
+  - `{"seats": 10, "currency": "EUR"}`
+  - `{"seats": 10, "centerId": "some-other-center"}`
+
+  They are REFUSED, not ignored. Quietly dropping an `amount` would leave a
+  client believing it had set the price.
+
+  ## The two floors
+
+  - `{"seats": 9}` -> 400 SEATS_BELOW_MINIMUM, with `requiredSeats: 10`
+  - with 12 students provisioned, `{"seats": 10}` -> 400
+    SEATS_BELOW_STUDENT_COUNT, with `requiredSeats: 12`
+
+  Two different problems needing two different actions, so they carry
+  different codes. `requiredSeats` is the number to send next; without it a
+  center can only guess.
+
+  To see the second one, provision students past 10 first via
+  `Center Students / 02 Provision student`.
+
+  ## Also worth trying
+
+  - `{"seats": "10"}` -> 400. A JSON body has real numbers; a string seat
+    count is a client bug worth reporting rather than silently repairing.
+  - `{"seats": 20000}` -> 400 SEATS_ABOVE_MAXIMUM. The cap exists because
+    amount_xaf is a 32-bit integer, and around 447,000 seats the total would
+    overflow the column rather than fail cleanly.
+
+  ## While BLOCKED
+
+  This still works. Finding out what you owe is the first step of paying, and
+  a blocked center that cannot take it never comes back. Block the center per
+  `Subscription Access / 00 How to block and restore` and re-run — you still
+  get a quote.
+}

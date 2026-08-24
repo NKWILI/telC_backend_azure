@@ -1,0 +1,48 @@
+meta {
+  name: 04 Read one payment
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/payments/{{paymentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  One payment. `{{paymentId}}` is captured for you by `02 Create payment`.
+
+  ## The check that matters
+
+  ANOTHER CENTER'S PAYMENT ANSWERS 404, NEVER 403.
+
+  To see it: register a second center, log in as it, and request the first
+  center's `paymentId`. You get 404 PAYMENT_NOT_FOUND.
+
+  403 would mean "this exists but is not yours", which is itself an answer —
+  it lets someone confirm an id by probing. 404 says nothing either way. The
+  student routes follow the same rule, deliberately.
+
+  ## Other checks
+
+  - a made-up id -> 404, identical response. Indistinguishable from the case
+    above, which is the point.
+  - no Authorization header -> 401.
+  - a STUDENT access token -> 401. The center verifier refuses student tokens.
+
+  ## What you are looking at
+
+  `status` is PENDING and will stay PENDING for the whole of this phase.
+  `unitPriceXaf` and `amountXaf` are snapshots taken when the payment was
+  created, not a live lookup — if the center's contracted price changes next
+  year, this record still says what was agreed today.
+}

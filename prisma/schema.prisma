@@ -110,7 +110,20 @@ model Center {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
+  /// The contracted price per seat per month, in whole XAF. Standard is 4,800;
+  /// a consumed partnership code copies its contracted price here (Phase 2),
+  /// which is what makes the terms a snapshot rather than a lookup — editing a
+  /// code later cannot silently change an existing agreement.
+  ///
+  /// Integer, not decimal: XAF has no minor units, so there is nothing for a
+  /// fractional part to mean and nothing for a rounding error to hide in.
+  unit_price_xaf Int @default(4800)
+  /// The fewest seats a paid plan may buy. The real floor is
+  /// max(min_seats, students already provisioned), enforced in pricing.
+  min_seats      Int @default(10)
+
   users        CenterUser[]
+  payments     Payment[]
   students     Student[]
   subscription CenterSubscription?
 
@@ -145,6 +158,51 @@ model CenterSubscription {
   center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
 
   @@map("center_subscriptions")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+/// A center's intent to pay for seats.
+///
+/// Nothing here grants access. Only a verified provider event may move
+/// `paid_until` (Phase 7), which is why `SUCCEEDED` exists in the enum from
+/// the start but is never written in this phase — Phase 7 needs somewhere to
+/// put a verified result without another migration.
+model Payment {
+  id        String        @id @default(uuid())
+  center_id String
+  seats     Int
+
+  /// Both snapshotted at creation. A price change next year must not rewrite
+  /// what a center agreed to this year, so these are copies rather than a
+  /// join back to the center's current terms.
+  unit_price_xaf Int
+  amount_xaf     Int
+
+  status PaymentStatus @default(PENDING)
+
+  /// Supplied by the client and claimed atomically by the unique index below.
+  /// The index is the concurrency control: two simultaneous requests race to
+  /// insert, one wins, and the loser is answered from the row that won.
+  idempotency_key String
+  /// Fingerprint of the request the key was first used with. A replay carrying
+  /// the same key but different seats is a different intent wearing the same
+  /// name, and is refused rather than handed the original record.
+  request_hash    String
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+
+  @@unique([center_id, idempotency_key])
+  @@index([center_id, created_at])
+  @@map("payments")
 }
 
 model CenterUser {

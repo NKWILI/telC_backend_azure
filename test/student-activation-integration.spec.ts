@@ -10,6 +10,8 @@ import { CenterStudentsService } from '../src/modules/centers/center-students.se
 import { StudentActivationService } from '../src/modules/centers/student-activation.service';
 import { StudentProvisioningService } from '../src/modules/centers/student-provisioning.service';
 import { TokenCryptoService } from '../src/modules/auth/token-crypto.service';
+import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 
 const prisma = new PrismaService();
 const tokenCrypto = new TokenCryptoService({
@@ -31,10 +33,15 @@ const provisioning = new StudentProvisioningService(
   tokenCrypto,
   emailService as never,
 );
+// The real entitlement service, against the real database. Passing nothing
+// here left it undefined, and because activation reports the subscription on a
+// best-effort path, the failure was swallowed into a warning on every run —
+// noise that would have hidden a genuine one.
 const activation = new StudentActivationService(
   prisma,
   tokenCrypto,
   authService as never,
+  new StudentEntitlementService(prisma, new SubscriptionPolicyService()),
 );
 const students = new CenterStudentsService(prisma, tokenCrypto);
 
