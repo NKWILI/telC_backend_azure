@@ -127,7 +127,8 @@
       "<rootDir>/test/center-subscription-integration",
       "<rootDir>/test/student-activation-integration",
       "<rootDir>/test/subscription-access-integration",
-      "<rootDir>/test/center-billing-terms-integration"
+      "<rootDir>/test/center-billing-terms-integration",
+      "<rootDir>/test/payments-integration"
     ]
   }
 }

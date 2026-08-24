@@ -38,12 +38,12 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 4: Payment model and idempotent creation
 
-- [ ] Concurrent requests with one key create exactly one row (real Postgres)
-- [ ] Same key, different body: 409, first record unchanged
-- [ ] Same key, same body: returns the original
-- [ ] Amount recomputed server-side at creation
-- [ ] paid_until and seats untouched
-- [ ] Commit the green increment
+- [x] Concurrent requests with one key create exactly one row (real Postgres)
+- [x] Same key, different body: 409, first record unchanged
+- [x] Same key, same body: returns the original
+- [x] Amount recomputed server-side at creation
+- [x] paid_until and seats untouched
+- [x] Commit the green increment
 
 ## Task 5: Reading payments
 
