@@ -35,6 +35,7 @@ import {
   PaymentResponseDto,
 } from './dto/payments.dto';
 import { CenterAuthGuard } from './guards/center-auth.guard';
+import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { PaymentsService } from './payments.service';
 
 /** Long enough for a uuid or a nanoid, short enough not to be a payload. */
@@ -60,7 +61,10 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 @UseFilters(CenterExceptionFilter)
 @UseGuards(CenterAuthGuard)
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly rateLimitService: RateLimitService,
+  ) {}
 
   @Post('api/payments')
   @ApiOperation({
@@ -86,6 +90,12 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentResponseDto> {
+    // Keyed on the center, not the IP: the caller is authenticated, and what
+    // needs protecting is this center's own row count. The idempotency index
+    // stops duplicates of ONE intent; nothing stops a flood of distinct ones,
+    // because a fresh key is a fresh payment by design.
+    await this.rateLimitService.checkPaymentCreateLimit(centerUser.centerId);
+
     return this.payments.create(
       centerUser,
       dto.seats,

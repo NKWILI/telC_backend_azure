@@ -20,6 +20,7 @@ export class CreatePaymentDto {
   })
   @IsInt()
   @Min(1)
+  @Max(MAX_SEATS)
   seats: number;
 }
 

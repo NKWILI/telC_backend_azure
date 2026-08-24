@@ -66,9 +66,9 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 8: Gates and review
 
-- [ ] Unit, e2e, integration, build and lint by exit code
-- [ ] Code-quality and security review
-- [ ] Report changes, non-changes, concerns and evidence
+- [x] Unit, e2e, integration, build and lint by exit code
+- [x] Code-quality and security review
+- [x] Report changes, non-changes, concerns and evidence
 
 ## Checkpoint B
 

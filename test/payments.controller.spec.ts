@@ -1,10 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-import { ConflictException, INestApplication } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  INestApplication,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PaymentsController } from '../src/modules/centers/payments.controller';
 import { PaymentsService } from '../src/modules/centers/payments.service';
+import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
@@ -30,6 +36,7 @@ const aPayment = {
 describe('PaymentsController', () => {
   let app: INestApplication<App>;
   let payments: Record<string, jest.Mock>;
+  let rateLimit: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     payments = {
@@ -43,9 +50,16 @@ describe('PaymentsController', () => {
       }),
     };
 
+    rateLimit = {
+      checkPaymentCreateLimit: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module = await Test.createTestingModule({
       controllers: [PaymentsController],
-      providers: [{ provide: PaymentsService, useValue: payments }],
+      providers: [
+        { provide: PaymentsService, useValue: payments },
+        { provide: RateLimitService, useValue: rateLimit },
+      ],
     })
       .overrideGuard(CenterAuthGuard)
       .useValue({
@@ -104,6 +118,27 @@ describe('PaymentsController', () => {
       ['an absurdly long key', 'k'.repeat(256)],
     ])('refuses %s', async (_case, key) => {
       await pay({ seats: 10 }, key).expect(400);
+      expect(payments.create).not.toHaveBeenCalled();
+    });
+
+    it('is rate limited per center', async () => {
+      // Every call creates a durable row, and a fresh key makes a fresh one.
+      // The idempotency index stops duplicates of ONE intent; it does nothing
+      // about a flood of distinct ones.
+      await pay({ seats: 10 }, 'key-1').expect(201);
+
+      expect(rateLimit.checkPaymentCreateLimit).toHaveBeenCalledWith(
+        signedIdentity.centerId,
+      );
+    });
+
+    it('does not record a payment once the limit is reached', async () => {
+      rateLimit.checkPaymentCreateLimit.mockRejectedValue(
+        new HttpException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS),
+      );
+
+      await pay({ seats: 10 }, 'key-1').expect(429);
+
       expect(payments.create).not.toHaveBeenCalled();
     });
 

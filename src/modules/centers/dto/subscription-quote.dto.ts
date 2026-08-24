@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Min } from 'class-validator';
+import { IsInt, Max, Min } from 'class-validator';
 import { MAX_SEATS } from '../pricing.service';
 
 /**
@@ -24,6 +24,7 @@ export class SubscriptionQuoteRequestDto {
   // string seat count is a client bug worth reporting rather than repairing.
   @IsInt()
   @Min(1)
+  @Max(MAX_SEATS)
   seats: number;
 }
 
