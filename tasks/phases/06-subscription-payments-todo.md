@@ -16,12 +16,12 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 2: PricingService
 
-- [ ] quote(center, seats) returns integers only
-- [ ] Refuses below min_seats
-- [ ] Refuses below current student count, with a distinct code
-- [ ] Reads terms from the center, not a constant
-- [ ] A partner center at 4,500 quotes 45,000 for 10 seats
-- [ ] Commit the green increment
+- [x] quote(center, seats) returns integers only
+- [x] Refuses below min_seats
+- [x] Refuses below current student count, with a distinct code
+- [x] Reads terms from the center, not a constant
+- [x] A partner center at 4,500 quotes 45,000 for 10 seats
+- [x] Commit the green increment
 
 ## Task 3: POST /subscription/quote
 
