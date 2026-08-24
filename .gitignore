@@ -73,3 +73,5 @@ bruno/environments/*.local.bru
 .bruno-local-backup/
 !tasks/phases/05-subscription-access-plan.md
 !tasks/phases/05-subscription-access-todo.md
+!tasks/phases/06-subscription-payments-plan.md
+!tasks/phases/06-subscription-payments-todo.md
