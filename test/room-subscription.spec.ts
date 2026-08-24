@@ -17,6 +17,7 @@ import { StudentEntitlementService } from '../src/shared/services/student-entitl
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { ValkeyService } from '../src/shared/services/valkey.service';
+import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 
 const ROOM_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -28,35 +29,31 @@ describe('speaking rooms and the subscription', () => {
   let tokenService: any;
 
   const entitledStudent = () =>
-    prisma.student.findUnique.mockResolvedValue({
-      center_id: 'center-1',
-      center: {
-        subscription: {
-          plan: 'PAID',
-          seats: 10,
-          trial_started_at: null,
-          trial_ends_at: null,
-          paid_until: daysFromNow(30),
-        },
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        center_id: 'center-1',
+        plan: 'PAID',
+        seats: 10,
+        trial_started_at: null,
+        trial_ends_at: null,
+        paid_until: daysFromNow(30),
       },
-    });
+    ]);
 
   const blockedStudent = () =>
-    prisma.student.findUnique.mockResolvedValue({
-      center_id: 'center-1',
-      center: {
-        subscription: {
-          plan: 'PAID',
-          seats: 10,
-          trial_started_at: null,
-          trial_ends_at: null,
-          paid_until: daysFromNow(-8), // lapsed, and past the 7-day grace
-        },
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        center_id: 'center-1',
+        plan: 'PAID',
+        seats: 10,
+        trial_started_at: null,
+        trial_ends_at: null,
+        paid_until: daysFromNow(-8),
       },
-    });
+    ]);
 
   beforeEach(async () => {
-    prisma = { student: { findUnique: jest.fn() }, deviceSession: {} };
+    prisma = { $queryRaw: jest.fn(), deviceSession: {} };
     tokenService = {
       verifyAccessToken: jest.fn().mockReturnValue({
         type: 'access',
@@ -108,6 +105,10 @@ describe('speaking rooms and the subscription', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
+    // The filter main.ts installs globally. Without it these tests would
+    // assert a response shape the real server never sends: the filter rewrites
+    // error bodies, and on some paths it drops fields the client depends on.
+    app.useGlobalFilters(new AuthExceptionFilter());
     await app.init();
   });
 
@@ -166,7 +167,7 @@ describe('speaking rooms and the subscription', () => {
         .get(`/api/speaking/rooms/${ROOM_ID}`)
         .expect(200);
 
-      expect(prisma.student.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
   });
 

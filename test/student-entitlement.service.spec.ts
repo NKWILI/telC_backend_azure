@@ -5,26 +5,31 @@ import { SubscriptionPolicyService } from '../src/modules/centers/subscription-p
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysFromNow = (days: number) => new Date(Date.now() + days * DAY_MS);
 
+/**
+ * One flat row, because the lookup is a single LEFT JOIN rather than a nested
+ * Prisma select. The nested version reads as one query and issues three.
+ */
 const withSubscription = (overrides: Record<string, unknown>) => ({
   center_id: 'center-1',
-  center: {
-    subscription: {
-      plan: 'TRIAL',
-      seats: 3,
-      trial_started_at: null,
-      trial_ends_at: null,
-      paid_until: null,
-      ...overrides,
-    },
-  },
+  plan: 'TRIAL',
+  seats: 3,
+  trial_started_at: null,
+  trial_ends_at: null,
+  paid_until: null,
+  ...overrides,
 });
 
 describe('StudentEntitlementService', () => {
   let prisma: any;
   let service: StudentEntitlementService;
 
+  /** The query returns an array; these helpers keep that detail in one place. */
+  const givenRow = (row: unknown): void => {
+    prisma.$queryRaw.mockResolvedValue(row ? [row] : []);
+  };
+
   beforeEach(() => {
-    prisma = { student: { findUnique: jest.fn() } };
+    prisma = { $queryRaw: jest.fn() };
     service = new StudentEntitlementService(
       prisma,
       new SubscriptionPolicyService(),
@@ -32,7 +37,7 @@ describe('StudentEntitlementService', () => {
   });
 
   it('reports a live trial', async () => {
-    prisma.student.findUnique.mockResolvedValue(
+    givenRow(
       withSubscription({
         trial_started_at: daysFromNow(-3),
         trial_ends_at: daysFromNow(27),
@@ -46,9 +51,7 @@ describe('StudentEntitlementService', () => {
   });
 
   it('reports a block once a paid period lapses beyond grace', async () => {
-    prisma.student.findUnique.mockResolvedValue(
-      withSubscription({ paid_until: daysFromNow(-8) }),
-    );
+    givenRow(withSubscription({ paid_until: daysFromNow(-8) }));
 
     await expect(service.forStudent('student-1')).resolves.toMatchObject({
       status: 'BLOCKED',
@@ -57,9 +60,7 @@ describe('StudentEntitlementService', () => {
   });
 
   it('reports when grace ends, so a client can say what is about to happen', async () => {
-    prisma.student.findUnique.mockResolvedValue(
-      withSubscription({ paid_until: daysFromNow(-2) }),
-    );
+    givenRow(withSubscription({ paid_until: daysFromNow(-2) }));
 
     const entitlement = await service.forStudent('student-1');
 
@@ -69,10 +70,7 @@ describe('StudentEntitlementService', () => {
 
   describe('students no center governs', () => {
     it('reports NONE rather than blocked for a student with no center', async () => {
-      prisma.student.findUnique.mockResolvedValue({
-        center_id: null,
-        center: null,
-      });
+      givenRow({ center_id: null, plan: null });
 
       // NONE is distinct from BLOCKED on purpose. A client must be able to
       // tell "you have no school" from "your school stopped paying", because
@@ -85,7 +83,7 @@ describe('StudentEntitlementService', () => {
     });
 
     it('reports NONE when the student row is gone', async () => {
-      prisma.student.findUnique.mockResolvedValue(null);
+      givenRow(null);
 
       await expect(service.forStudent('student-1')).resolves.toMatchObject({
         status: 'NONE',
@@ -95,10 +93,7 @@ describe('StudentEntitlementService', () => {
   });
 
   it('fails closed when a center somehow has no subscription row', async () => {
-    prisma.student.findUnique.mockResolvedValue({
-      center_id: 'center-1',
-      center: { subscription: null },
-    });
+    givenRow({ center_id: 'center-1', plan: null });
 
     await expect(service.forStudent('student-1')).resolves.toMatchObject({
       status: 'BLOCKED',
@@ -107,7 +102,7 @@ describe('StudentEntitlementService', () => {
   });
 
   it('lets a database failure surface, rather than inventing an answer', async () => {
-    prisma.student.findUnique.mockRejectedValue(new Error('connection lost'));
+    prisma.$queryRaw.mockRejectedValue(new Error('connection lost'));
 
     // The caller decides what an outage means: the guard turns it into a 503,
     // and login omits the field rather than refusing a valid sign-in.
@@ -117,12 +112,12 @@ describe('StudentEntitlementService', () => {
   });
 
   it('costs one query', async () => {
-    prisma.student.findUnique.mockResolvedValue(
-      withSubscription({ paid_until: daysFromNow(30) }),
-    );
+    givenRow(withSubscription({ paid_until: daysFromNow(30) }));
 
     await service.forStudent('student-1');
 
-    expect(prisma.student.findUnique).toHaveBeenCalledTimes(1);
+    // One statement, not one Prisma call. A nested `select` would satisfy the
+    // latter while issuing three round trips.
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 });

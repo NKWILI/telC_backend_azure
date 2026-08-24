@@ -41,10 +41,7 @@ describe('StudentSubscriptionGuard', () => {
   const studentRow = (
     centerId: string | null,
     sub: CenterSubscriptionRecord | null,
-  ) => ({
-    center_id: centerId,
-    center: centerId ? { subscription: sub } : null,
-  });
+  ) => ({ center_id: centerId, ...(sub ?? { plan: null }) });
 
   const contextFor = (student: unknown): ExecutionContext => {
     request = { student };
@@ -57,7 +54,7 @@ describe('StudentSubscriptionGuard', () => {
 
   beforeEach(() => {
     prisma = {
-      student: { findUnique: jest.fn() },
+      $queryRaw: jest.fn(),
     };
     policy = new SubscriptionPolicyService();
     // The real entitlement service, not a mock: these tests are about the
@@ -72,7 +69,7 @@ describe('StudentSubscriptionGuard', () => {
     centerId: string | null,
     sub: CenterSubscriptionRecord | null,
   ) => {
-    prisma.student.findUnique.mockResolvedValue(studentRow(centerId, sub));
+    prisma.$queryRaw.mockResolvedValue([studentRow(centerId, sub)]);
   };
 
   describe('states that may learn', () => {
@@ -193,11 +190,11 @@ describe('StudentSubscriptionGuard', () => {
       const context = authenticated({ deviceId: 'device-1' });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(prisma.student.findUnique).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
 
     it('admits when the student row is gone; identity is not this guard to police', async () => {
-      prisma.student.findUnique.mockResolvedValue(null);
+      prisma.$queryRaw.mockResolvedValue([]);
 
       await expect(
         guard.canActivate(authenticated({ studentId: 'student-1' })),
@@ -218,7 +215,7 @@ describe('StudentSubscriptionGuard', () => {
     });
 
     it('answers 503 when the database is unreachable, never a silent pass', async () => {
-      prisma.student.findUnique.mockRejectedValue(new Error('connection lost'));
+      prisma.$queryRaw.mockRejectedValue(new Error('connection lost'));
 
       const error = await guard
         .canActivate(authenticated({ studentId: 'student-1' }))
@@ -248,17 +245,24 @@ describe('StudentSubscriptionGuard', () => {
 
       await guard.canActivate(authenticated({ studentId: 'student-1' }));
 
-      expect(prisma.student.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     });
 
-    it('reads the subscription in that same query, not a second one', async () => {
+    it('joins the subscription in, rather than fetching it separately', async () => {
       givenStudent('center-1', subscription({ paid_until: daysFromNow(30) }));
 
       await guard.canActivate(authenticated({ studentId: 'student-1' }));
 
-      const [args] = prisma.student.findUnique.mock.calls[0];
-      expect(args.where).toEqual({ id: 'student-1' });
-      expect(args.select.center.select.subscription).toBeDefined();
+      // The SQL is asserted because the Prisma-shaped version of this lookup
+      // passed a "one call" check while issuing three statements: students,
+      // then centers, then center_subscriptions. Counting calls cannot see
+      // that; the join can only be checked by looking at the query.
+      const [sql, param] = prisma.$queryRaw.mock.calls[0];
+      const text = Array.isArray(sql) ? sql.join('?') : String(sql);
+
+      expect(text).toMatch(/LEFT JOIN\s+center_subscriptions/i);
+      expect(text).not.toMatch(/\bFROM\s+centers\b/i);
+      expect(param).toBe('student-1');
     });
 
     it('leaves the decision on the request for handlers to report', async () => {

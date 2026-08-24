@@ -71,21 +71,21 @@ gate never ran it. Worth fixing before Checkpoint B.
 
 ## Task 7: Gates and review
 
-- [ ] Unit, e2e, integration, build and lint by exit code
-- [ ] Code-quality and security review
-- [ ] Report changes, non-changes, concerns and evidence
+- [x] Unit, e2e, integration, build and lint by exit code
+- [x] Code-quality and security review
+- [x] Report changes, non-changes, concerns and evidence
 
 Deferred from the Checkpoint A review (findings 6-9):
 
-- [ ] Measure the per-request entitlement query before optimising it.
+- [x] Measure the per-request entitlement query before optimising it.
       ValkeyService already caches session revocation and the same pattern
       fits, but the plan says measure first.
-- [ ] `SubscriptionStatusDto.status` is typed `string`. Swagger documents six
+- [x] `SubscriptionStatusDto.status` is typed `string`. Swagger documents six
       values while the type accepts any of them plus everything else.
-- [ ] Activation does not report status. `issueSessionForStudent` returns bare
+- [x] Activation does not report status. `issueSessionForStudent` returns bare
       tokens, so a student activating -- the moment a trial actually starts --
       gets no `subscription`, while login, verify-email and reset do.
-- [ ] No test registers `AuthExceptionFilter` around a 403 from the guard. On
+- [x] No test registers `AuthExceptionFilter` around a 403 from the guard. On
       `/api/auth/*` that filter collapses object payloads and drops extras, so
       `subscriptionStatus` would vanish. Learning routes take the pass-through
       branch and are fine today; applying this guard to an auth route later

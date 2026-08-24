@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { StudentEntitlementStatus } from '../../../shared/services/student-entitlement.service';
 
 /**
  * Reported on login and refresh so a client knows where it stands before its
@@ -20,7 +21,10 @@ export class SubscriptionStatusDto {
     description:
       'NONE means no center governs this student, which is distinct from BLOCKED: one has no school, the other has a school that stopped paying.',
   })
-  status: string;
+  // The service's own union, not a copy of it. Listing the six values here
+  // would let the documented contract and the produced value drift apart, and
+  // the enum above is the only place they must be repeated.
+  status: StudentEntitlementStatus;
 
   @ApiProperty({
     example: true,

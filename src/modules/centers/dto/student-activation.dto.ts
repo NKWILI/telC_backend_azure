@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 import { MaxUtf8Bytes, Trim } from './center-validation.decorators';
+import { SubscriptionStatusDto } from '../../auth/dto/subscription-status.dto';
 
 /**
  * The public activation body.
@@ -51,4 +52,11 @@ export class ActivateStudentDto {
 export class StudentTokenPairDto {
   @ApiProperty() accessToken: string;
   @ApiProperty() refreshToken: string;
+
+  @ApiPropertyOptional({
+    type: SubscriptionStatusDto,
+    description:
+      'Where the student stands, reported here as it is on login and refresh. This is the request that starts the trial, so the expected value is TRIAL — a client that has to call again to learn that has been told the same thing twice.',
+  })
+  subscription?: SubscriptionStatusDto;
 }

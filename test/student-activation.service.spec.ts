@@ -21,6 +21,7 @@ describe('StudentActivationService', () => {
   let tx: any;
   let tokenCrypto: any;
   let authService: any;
+  let entitlement: any;
   let service: StudentActivationService;
 
   beforeEach(() => {
@@ -43,7 +44,49 @@ describe('StudentActivationService', () => {
         refreshToken: 'student-refresh-token',
       }),
     };
-    service = new StudentActivationService(prisma, tokenCrypto, authService);
+    entitlement = {
+      forStudent: jest.fn().mockResolvedValue({
+        status: 'TRIAL',
+        studentsMayLearn: true,
+        graceEndsAt: null,
+      }),
+    };
+    service = new StudentActivationService(
+      prisma,
+      tokenCrypto,
+      authService,
+      entitlement,
+    );
+  });
+
+  describe('reporting the subscription', () => {
+    it('reports the trial it just started', async () => {
+      // This request IS what starts the trial. A client that has to call again
+      // to find that out has been told the same thing twice.
+      await expect(activate()).resolves.toMatchObject({
+        subscription: { status: 'TRIAL', studentsMayLearn: true },
+      });
+    });
+
+    it('reads the entitlement after the trial has been started, not before', async () => {
+      await activate();
+
+      // Called at all, and with this student. Read before the transaction it
+      // would report TRIAL_PENDING — the state the activation just ended.
+      expect(entitlement.forStudent).toHaveBeenCalledWith('student-1');
+      expect(tx.centerSubscription.updateMany).toHaveBeenCalled();
+    });
+
+    it('still activates when the entitlement cannot be read', async () => {
+      entitlement.forStudent.mockRejectedValue(new Error('connection lost'));
+
+      // The key is spent and the password is set; failing here would leave a
+      // student unable to activate with a key that no longer works.
+      const result = await activate();
+
+      expect(result.accessToken).toBe('student-access-token');
+      expect(result.subscription).toBeUndefined();
+    });
   });
 
   const activate = (over: Record<string, unknown> = {}) =>
