@@ -5,14 +5,14 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 ## Approval gate
 
 - [x] Human answers the four opening questions
-- [ ] Human approves this specific plan
-- [ ] Create `feature/subscription-payments` from `dev`
+- [x] Human approves this specific plan
+- [x] Create `feature/subscription-payments` from `dev`
 
 ## Task 1: Billing terms on Center
 
-- [ ] Migration adds unit_price_xaf (4800) and min_seats (10)
-- [ ] Backfill covers pre-existing centers, proven against real Postgres
-- [ ] Commit the green increment
+- [x] Migration adds unit_price_xaf (4800) and min_seats (10)
+- [x] Backfill covers pre-existing centers, proven against real Postgres
+- [x] Commit the green increment
 
 ## Task 2: PricingService
 
