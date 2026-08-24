@@ -57,11 +57,11 @@ gate never ran it. Worth fixing before Checkpoint B.
 
 ## Task 5: Integration proof
 
-- [ ] Learns during TRIAL, refused once trial_ends_at passes, no job run
-- [ ] GRACE_PERIOD still learns
-- [ ] Moving paid_until backwards blocks on the next request
-- [ ] A student with no center is unaffected
-- [ ] Commit the green increment
+- [x] Learns during TRIAL, refused once trial_ends_at passes, no job run
+- [x] GRACE_PERIOD still learns
+- [x] Moving paid_until backwards blocks on the next request
+- [x] A student with no center is unaffected
+- [x] Commit the green increment
 
 ## Task 6: Bruno
 
