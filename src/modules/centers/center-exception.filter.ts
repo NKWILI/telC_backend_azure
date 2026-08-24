@@ -68,9 +68,24 @@ export class CenterExceptionFilter implements ExceptionFilter {
 
       if (typeof body.message === 'string') {
         const code = body.message;
+
+        // Extras are carried through, not discarded. A refusal is only useful
+        // if the detail that makes it actionable survives the rewrite:
+        // `requiredSeats` is the number a center must send next, and
+        // `subscriptionStatus` is what lets a dashboard say which state to
+        // fix. Rebuilding the body from `message` alone silently dropped both.
+        //
+        // Nest's own `statusCode` and `error` are removed rather than echoed,
+        // so a response never carries two different values for `error`.
+        const extra = { ...body };
+        delete extra.message;
+        delete extra.statusCode;
+        delete extra.error;
+
         response.status(status).json({
           error: code,
           message: CENTER_ERROR_MESSAGES[code] || code,
+          ...extra,
         });
         return;
       }
