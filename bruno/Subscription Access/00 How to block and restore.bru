@@ -1,0 +1,88 @@
+meta {
+  name: 00 How to block and restore
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/subscription
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+docs {
+  READ THIS FIRST. It is the instructions for the rest of the folder, and it
+  doubles as a working request so you can see the state you are about to change.
+
+  Nothing in this folder waits 30 days. Status is computed from timestamps on
+  every read — there is no stored status and no job — so moving a date IS the
+  state change, and the very next request answers differently.
+
+  ## Setup, once
+
+  1. `Center Auth / 03 Login`      -> captures {{accessToken}} for the center
+  2. `Center Students / 02 Provision student` -> captures {{activationKey}}
+  3. `Student Activation / 01 Activate`       -> the student sets a password,
+     AND this is what starts the trial clock for the center
+  4. `Subscription Access / 01 Student login` -> captures the student tokens
+
+  After step 3 this request returns TRIAL with `studentsMayLearn: true`.
+
+  ## To block them
+
+  Run this against the test database — the one in `.env.test`, which is what
+  `npm run start:testdb` serves. Never the production one.
+
+  ```sql
+  -- Blocked: a paid period that lapsed more than 7 days ago, so it is past
+  -- grace. Use -2 days instead of -8 to see GRACE_PERIOD, where they still
+  -- learn.
+  UPDATE center_subscriptions
+     SET plan = 'PAID',
+         paid_until = now() - interval '8 days',
+         trial_started_at = NULL,
+         trial_ends_at = NULL
+   WHERE center_id = '<your center id>';
+  ```
+
+  `trial_*` are cleared because payment is checked first: a center that
+  converted mid-trial is judged on what it paid for, so leaving a live trial in
+  place would keep them on TRIAL and nothing would appear to happen.
+
+  Get the center id from this request's own response, or:
+
+  ```sql
+  SELECT c.id, c.name FROM centers c ORDER BY c.created_at DESC LIMIT 5;
+  ```
+
+  ## To restore them
+
+  ```sql
+  UPDATE center_subscriptions
+     SET paid_until = now() + interval '30 days'
+   WHERE center_id = '<your center id>';
+  ```
+
+  Re-run `02 Learn` immediately. No restart, no re-login, no cache to clear.
+  The student's existing access token keeps working, because the check happens
+  on every request rather than at login — which is the whole point of Phase 5.
+
+  ## Expected results
+
+  | Request | Entitled | Blocked |
+  |---|---|---|
+  | 02 Learn                    | 200 | 403 SUBSCRIPTION_INACTIVE |
+  | 03 Refresh                  | 201 | 201, reporting BLOCKED |
+  | 04 Create speaking room     | 201 | 403 SUBSCRIPTION_INACTIVE |
+  | 05 Center provisions        | 201 | 403 SUBSCRIPTION_INACTIVE |
+  | 06 Center reads subscription| 200 | 200 |
+
+  The last two rows are the interesting pair. A blocked center cannot hand out
+  new access, but keeps its whole dashboard — because the thing it most needs
+  to do is pay, and locking it out of the page that leads there makes that less
+  likely, not more.
+}

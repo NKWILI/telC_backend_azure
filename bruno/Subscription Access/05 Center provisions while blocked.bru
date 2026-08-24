@@ -1,0 +1,54 @@
+meta {
+  name: 05 Center provisions while blocked
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/centers/me/students
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+body:json {
+  {
+    "firstName": "Blocked",
+    "lastName": "Attempt",
+    "email": "blocked-attempt@example.com",
+    "phone": "+237690000001"
+  }
+}
+
+docs {
+  Uses the CENTER token ({{accessToken}}), not the student one.
+
+  A blocked center cannot grant new access. Provisioning a student and minting
+  an activation key are the only two center routes that stop.
+
+  - entitled center -> 201
+  - blocked center  -> 403 SUBSCRIPTION_INACTIVE, `subscriptionStatus: BLOCKED`
+
+  The same applies to `Center Students / 05 Issue activation key`: a key IS
+  access, so re-issuing one to a blocked center would hand out exactly what the
+  block withholds.
+
+  ## The state that must NOT refuse: TRIAL_PENDING
+
+  Register a brand-new center and try this BEFORE any student activates.
+
+  It must return 201.
+
+  That center has `studentsMayLearn: false` — the trial has not started, because
+  the clock starts at the first activation. If provisioning followed that flag,
+  a new center could never create the student whose activation starts its
+  trial, and onboarding would deadlock on itself for every customer. So
+  provisioning has its own rule: everything except BLOCKED is allowed.
+
+  This is the single easiest thing to break later by "simplifying" the two
+  checks into one. `06 Center dashboard while blocked` and the test file
+  `test/center-blocked-surface.spec.ts` both exist to catch it.
+}

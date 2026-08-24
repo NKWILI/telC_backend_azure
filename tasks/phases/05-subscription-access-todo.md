@@ -65,9 +65,9 @@ gate never ran it. Worth fixing before Checkpoint B.
 
 ## Task 6: Bruno
 
-- [ ] Requests showing a student blocked and restored
-- [ ] Document how to move paid_until rather than waiting 30 days
-- [ ] Commit the green increment
+- [x] Requests showing a student blocked and restored
+- [x] Document how to move paid_until rather than waiting 30 days
+- [x] Commit the green increment
 
 ## Task 7: Gates and review
 

@@ -1,0 +1,58 @@
+meta {
+  name: 06 Center dashboard while blocked
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/students
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The half of the design that is easy to break later, so it is worth checking
+  by hand at least once.
+
+  With the center BLOCKED, every one of these must still answer 200:
+
+  | Request | |
+  |---|---|
+  | `GET /api/centers/me/students`         | this one |
+  | `GET /api/centers/me/students/{id}`    | Center Students / 03 |
+  | `PATCH /api/centers/me/students/{id}`  | Center Students / 04 |
+  | `DELETE /api/centers/me/students/{id}` | Center Students / 06 |
+  | `GET /api/centers/me`                  | Center Profile / 01 |
+  | `PATCH /api/centers/me`                | Center Profile / 02 |
+  | `GET /api/centers/me/subscription`     | Center Subscription / 01 |
+  | `GET /api/centers/me/usage`            | Center Subscription / 02 |
+
+  Only `POST /students` and `POST /students/{id}/activation-key` refuse.
+
+  ## Why so permissive
+
+  The one thing a lapsed center most needs to do is pay. Locking it out of the
+  dashboard makes that less likely, not more — the subscription page is
+  literally the page that explains the block and leads to the fix, and the
+  profile holds the billing contact details someone may need to correct first.
+
+  Removal stays open for the same reason: refusing it would trap a center above
+  the seat count it is trying to get back down to before paying.
+
+  The pressure belongs on creating NEW access, not on the door to paying.
+
+  ## If one of these ever returns 403
+
+  Someone has moved CenterSubscriptionGuard to the class level. That change
+  looks like hardening and is a revenue bug. `test/center-blocked-surface.spec
+  .ts` pins all eleven routes so it fails in CI first, but this request is how
+  you would notice by hand.
+}
