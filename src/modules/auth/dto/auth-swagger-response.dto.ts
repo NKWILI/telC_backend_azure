@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { SubscriptionStatusDto } from './subscription-status.dto';
 
 export class AuthStudentDto {
   @ApiProperty({ format: 'uuid' })
@@ -31,6 +32,13 @@ export class AuthTokenResponseDto {
 
   @ApiProperty({ type: AuthStudentDto })
   student: AuthStudentDto;
+
+  @ApiPropertyOptional({
+    type: SubscriptionStatusDto,
+    description:
+      'Where the student stands, so a client knows before its first learning call rather than discovering a block through a 403. Absent if the subscription could not be read; that never fails the sign-in.',
+  })
+  subscription?: SubscriptionStatusDto;
 }
 
 export class MessageResponseDto {

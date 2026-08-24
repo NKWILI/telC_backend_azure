@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
+import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
 import {
   SubscriptionPolicyService,
   type CenterSubscriptionRecord,
@@ -59,7 +60,12 @@ describe('StudentSubscriptionGuard', () => {
       student: { findUnique: jest.fn() },
     };
     policy = new SubscriptionPolicyService();
-    guard = new StudentSubscriptionGuard(prisma, policy);
+    // The real entitlement service, not a mock: these tests are about the
+    // guard agreeing with the actual rule, and a mocked lookup would prove
+    // only that the guard calls something.
+    guard = new StudentSubscriptionGuard(
+      new StudentEntitlementService(prisma, policy),
+    );
   });
 
   const givenStudent = (

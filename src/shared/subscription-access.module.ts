@@ -1,22 +1,27 @@
 import { Module } from '@nestjs/common';
-import { CentersModule } from '../modules/centers/centers.module';
+import { SubscriptionPolicyService } from '../modules/centers/subscription-policy.service';
+import { StudentEntitlementService } from './services/student-entitlement.service';
 import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
 
 /**
- * Carries `StudentSubscriptionGuard` to the learning modules.
+ * Carries subscription enforcement to the modules that need it: the learning
+ * controllers get the guard, and `AuthModule` gets the entitlement service so
+ * login and refresh can report a status.
  *
- * It exists so `lesen`, `listening` and the rest import one small thing rather
- * than the whole of `CentersModule` — they need a guard, not the center
- * dashboard. `PrismaModule` is global, so the guard's other dependency needs
- * no import here.
+ * It provides `SubscriptionPolicyService` directly rather than importing
+ * `CentersModule`, which would be the obvious wiring and is the wrong one:
+ * `CentersModule` imports `AuthModule`, so `AuthModule` importing this would
+ * close a cycle. Providing the class here keeps the graph acyclic. The policy
+ * is a pure, stateless class, so a second instance behaves identically — and
+ * "one authority" was always about one implementation of the rule, not one
+ * object. `PrismaModule` is global, so it needs no import.
  */
 @Module({
-  imports: [CentersModule],
-  providers: [StudentSubscriptionGuard],
-  // CentersModule is re-exported, not merely imported. Nest instantiates a
-  // guard named in `@UseGuards` from the *controller's* module, so every
-  // learning module has to be able to see SubscriptionPolicyService itself —
-  // importing it here only would leave the guard unconstructable there.
-  exports: [StudentSubscriptionGuard, CentersModule],
+  providers: [
+    SubscriptionPolicyService,
+    StudentEntitlementService,
+    StudentSubscriptionGuard,
+  ],
+  exports: [StudentSubscriptionGuard, StudentEntitlementService],
 })
 export class SubscriptionAccessModule {}

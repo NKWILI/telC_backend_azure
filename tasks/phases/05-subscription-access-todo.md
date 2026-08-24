@@ -39,9 +39,9 @@ gate never ran it. Worth fixing before Checkpoint B.
 
 ## Task 3: Report status on refresh and login
 
-- [ ] Refresh still succeeds when blocked
-- [ ] Response carries effective status and studentsMayLearn
-- [ ] Commit the green increment
+- [x] Refresh still succeeds when blocked
+- [x] Response carries effective status and studentsMayLearn
+- [x] Commit the green increment
 
 ## Checkpoint A
 

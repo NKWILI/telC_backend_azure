@@ -20,6 +20,10 @@ import { RegisterRequestDto } from './dto/register-request.dto';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 import { ValkeyService } from '../../shared/services/valkey.service';
+import {
+  StudentEntitlementService,
+  type StudentEntitlement,
+} from '../../shared/services/student-entitlement.service';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -54,7 +58,33 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly googleService: GoogleService,
     @Optional() private readonly valkeyService?: ValkeyService,
+    @Optional()
+    private readonly entitlementService?: StudentEntitlementService,
   ) {}
+
+  /**
+   * Reads the student's entitlement for reporting, never for enforcement.
+   *
+   * Failure is swallowed on purpose. This field exists so a client can explain
+   * itself before its first learning call; refusing a valid sign-in because a
+   * subscription row could not be read would trade a working login for a
+   * cosmetic detail. StudentSubscriptionGuard is what actually refuses access,
+   * and it answers a read failure with 503 rather than letting it pass.
+   */
+  private async readEntitlement(
+    studentId: string,
+  ): Promise<StudentEntitlement | undefined> {
+    if (!this.entitlementService) return undefined;
+
+    try {
+      return await this.entitlementService.forStudent(studentId);
+    } catch (error) {
+      this.logger.warn(
+        `could not read entitlement for ${studentId}: ${(error as Error).message}`,
+      );
+      return undefined;
+    }
+  }
 
   /**
    * Create device session
@@ -476,6 +506,8 @@ export class AuthService {
 
     await this.updateStudentLastSeen(student.id);
 
+    const subscription = await this.readEntitlement(student.id);
+
     return {
       ...tokens,
       student: {
@@ -485,6 +517,7 @@ export class AuthService {
         email: student.email ?? '',
         emailVerified: true,
       },
+      ...(subscription ? { subscription } : {}),
     };
   }
 

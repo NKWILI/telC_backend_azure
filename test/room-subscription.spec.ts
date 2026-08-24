@@ -13,6 +13,7 @@ import { TurnCredentialsService } from '../src/modules/speaking/room/turn-creden
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
+import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { ValkeyService } from '../src/shared/services/valkey.service';
@@ -92,6 +93,7 @@ describe('speaking rooms and the subscription', () => {
         // The real guards. Overriding them would test nothing.
         JwtAuthGuard,
         StudentSubscriptionGuard,
+        StudentEntitlementService,
         SubscriptionPolicyService,
         { provide: PrismaService, useValue: prisma },
         { provide: TokenService, useValue: tokenService },

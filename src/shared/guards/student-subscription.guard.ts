@@ -5,36 +5,16 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { PrismaService } from '../services/prisma.service';
 import {
-  SubscriptionPolicyService,
-  type CenterSubscriptionRecord,
-  type SubscriptionDecision,
-} from '../../modules/centers/subscription-policy.service';
+  StudentEntitlementService,
+  type StudentEntitlement,
+} from '../services/student-entitlement.service';
 
 /** What this guard reads and writes. `JwtAuthGuard` sets `student`. */
 interface SubscriptionRequest {
   student?: { studentId?: string };
-  subscription?: SubscriptionDecision;
+  subscription?: StudentEntitlement;
 }
-
-/** Selected in one query, so enforcing a subscription costs one round trip. */
-const SUBSCRIPTION_SELECT = {
-  center_id: true,
-  center: {
-    select: {
-      subscription: {
-        select: {
-          plan: true,
-          seats: true,
-          trial_started_at: true,
-          trial_ends_at: true,
-          paid_until: true,
-        },
-      },
-    },
-  },
-} as const;
 
 /**
  * Refuses learning to a student whose center is not entitled to it.
@@ -47,13 +27,13 @@ const SUBSCRIPTION_SELECT = {
  *
  * The check runs on every request rather than at login. A student blocked on
  * Monday must not keep working until their token happens to expire on Friday.
+ *
+ * Whether they may learn is `StudentEntitlementService`'s question, not this
+ * guard's. All that belongs here is turning its answer into an HTTP one.
  */
 @Injectable()
 export class StudentSubscriptionGuard implements CanActivate {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly policy: SubscriptionPolicyService,
-  ) {}
+  constructor(private readonly entitlement: StudentEntitlementService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<SubscriptionRequest>();
@@ -66,16 +46,10 @@ export class StudentSubscriptionGuard implements CanActivate {
       return true;
     }
 
-    let student: {
-      center_id: string | null;
-      center: { subscription: CenterSubscriptionRecord | null } | null;
-    } | null;
+    let entitlement: StudentEntitlement;
 
     try {
-      student = await this.prisma.student.findUnique({
-        where: { id: studentId },
-        select: SUBSCRIPTION_SELECT,
-      });
+      entitlement = await this.entitlement.forStudent(studentId);
     } catch {
       // Never a 403 here: a database outage is not a statement about this
       // student's entitlement, and dressing it up as one would tell a paying
@@ -83,43 +57,20 @@ export class StudentSubscriptionGuard implements CanActivate {
       throw new ServiceUnavailableException('SUBSCRIPTION_CHECK_UNAVAILABLE');
     }
 
-    // No row, or no center: nobody's subscription governs this student. That
-    // covers everyone who predates the center model and anyone a center has
-    // since removed, who must keep the account they already had.
-    if (!student?.center_id) {
-      return true;
-    }
-
-    const subscription = student.center?.subscription;
-
-    // Every center is created with a subscription row, so its absence is a
-    // data fault rather than a state. Fail closed: the student does belong to
-    // a center, and no row means nothing authorises the access.
-    if (!subscription) {
-      throw this.inactive('BLOCKED');
-    }
-
-    const decision = this.policy.evaluate(subscription);
-
-    if (!decision.studentsMayLearn) {
-      throw this.inactive(decision.status);
+    if (!entitlement.studentsMayLearn) {
+      // The status travels with the refusal on purpose. A client that only
+      // knows "forbidden" can do nothing but show an error, whereas one that
+      // knows the center stopped paying can offer the student a way to carry
+      // on themselves.
+      throw new ForbiddenException({
+        message: 'SUBSCRIPTION_INACTIVE',
+        subscriptionStatus: entitlement.status,
+      });
     }
 
     // Handlers that want to warn a student their grace period is running out
     // can read this instead of asking again.
-    request.subscription = decision;
+    request.subscription = entitlement;
     return true;
-  }
-
-  /**
-   * The status travels with the refusal on purpose. A client that only knows
-   * "forbidden" can do nothing but show an error, whereas one that knows the
-   * center stopped paying can offer the student a way to carry on themselves.
-   */
-  private inactive(subscriptionStatus: string): ForbiddenException {
-    return new ForbiddenException({
-      message: 'SUBSCRIPTION_INACTIVE',
-      subscriptionStatus,
-    });
   }
 }
