@@ -45,7 +45,8 @@ export class CorrectionDto {
   corrected: string;
 
   @ApiProperty({
-    example: "Das Verb 'gehen' muss in der ersten Person konjugiert werden: 'ich gehe'.",
+    example:
+      "Das Verb 'gehen' muss in der ersten Person konjugiert werden: 'ich gehe'.",
   })
   @IsString()
   explanation: string;
@@ -74,11 +75,16 @@ export class SpeakingEvaluationResponseDto {
   @Type(() => CorrectionDto)
   corrections: CorrectionDto[];
 
-  @ApiProperty({ example: 'Der Schüler spricht klar und verwendet abwechslungsreiche Ausdrücke.' })
+  @ApiProperty({
+    example:
+      'Der Schüler spricht klar und verwendet abwechslungsreiche Ausdrücke.',
+  })
   @IsString()
   strengths: string;
 
-  @ApiProperty({ example: 'Die Verbkonjugation sollte noch verbessert werden.' })
+  @ApiProperty({
+    example: 'Die Verbkonjugation sollte noch verbessert werden.',
+  })
   @IsString()
   areas_for_improvement: string;
 }

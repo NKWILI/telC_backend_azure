@@ -28,7 +28,10 @@ const FAKE_EXERCISE = {
     ],
     callToAction:
       'Vereinbaren Sie einen Besichtigungstermin oder fordern Sie weitere Informationen an:',
-    contact: { name: 'CenterBüros GmbH', lines: ['Neuer Wall 120', '50160 Köln'] },
+    contact: {
+      name: 'CenterBüros GmbH',
+      lines: ['Neuer Wall 120', '50160 Köln'],
+    },
   },
   taskInstructions:
     'Sie arbeiten in einem Übersetzerbüro. Ihr Chef möchte größere Büroräume mieten.',
@@ -263,8 +266,7 @@ describe('WritingCorrectionService', () => {
 
       await service.runCorrection(jobData);
 
-      const promptSent =
-        mockModelService.generateTextResponse.mock.calls[0][0];
+      const promptSent = mockModelService.generateTextResponse.mock.calls[0][0];
       for (const bp of FAKE_EXERCISE.bulletPoints) {
         expect(promptSent).toContain(bp);
       }

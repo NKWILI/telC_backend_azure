@@ -12,13 +12,20 @@ export class WritingExerciseStimulus {
   @ApiProperty({ example: 'Büroräume in Neubaukomplex zu vermieten!' })
   heading: string;
 
-  @ApiPropertyOptional({ example: 'In unserem neu gebauten Bürogebäude sind noch Räume frei' })
+  @ApiPropertyOptional({
+    example: 'In unserem neu gebauten Bürogebäude sind noch Räume frei',
+  })
   body?: string;
 
-  @ApiPropertyOptional({ type: [String], example: ['zentrale Lage', 'Kaffeeküche'] })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['zentrale Lage', 'Kaffeeküche'],
+  })
   features?: string[];
 
-  @ApiPropertyOptional({ example: 'Vereinbaren Sie einen Besichtigungstermin...' })
+  @ApiPropertyOptional({
+    example: 'Vereinbaren Sie einen Besichtigungstermin...',
+  })
   callToAction?: string;
 
   @ApiPropertyOptional({ type: WritingExerciseContact })
@@ -26,10 +33,16 @@ export class WritingExerciseStimulus {
 }
 
 export class WritingExerciseDto {
-  @ApiProperty({ description: 'Exercise UUID', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  @ApiProperty({
+    description: 'Exercise UUID',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   id: string;
 
-  @ApiProperty({ description: 'Always 1 for TELC B1+ Beruf (one writing task)', example: 1 })
+  @ApiProperty({
+    description: 'Always 1 for TELC B1+ Beruf (one writing task)',
+    example: 1,
+  })
   part: number;
 
   @ApiProperty({ example: 'E-Mail / Brief' })
@@ -49,14 +62,18 @@ export class WritingExerciseDto {
 
   @ApiProperty({
     description: 'Main task instructions shown to the student',
-    example: 'Sie arbeiten in einem Übersetzerbüro. Schreiben Sie einen Brief...',
+    example:
+      'Sie arbeiten in einem Übersetzerbüro. Schreiben Sie einen Brief...',
   })
   taskInstructions: string;
 
   @ApiProperty({
     description: 'Required content points the student must address',
     type: [String],
-    example: ['Beschreiben Sie Ihr Unternehmen.', 'Was für Räume brauchen Sie?'],
+    example: [
+      'Beschreiben Sie Ihr Unternehmen.',
+      'Was für Räume brauchen Sie?',
+    ],
   })
   bulletPoints: string[];
 

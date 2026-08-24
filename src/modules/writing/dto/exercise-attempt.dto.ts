@@ -26,13 +26,21 @@ export class ExerciseAttemptDto {
   @ApiProperty({ description: 'Attempt UUID' })
   id: string;
 
-  @ApiPropertyOptional({ description: 'ISO 8601 completion or creation timestamp' })
+  @ApiPropertyOptional({
+    description: 'ISO 8601 completion or creation timestamp',
+  })
   date?: string;
 
-  @ApiPropertyOptional({ description: 'Human-readable date label (Heute / Gestern / dd.mm.yyyy)' })
+  @ApiPropertyOptional({
+    description: 'Human-readable date label (Heute / Gestern / dd.mm.yyyy)',
+  })
   dateLabel?: string;
 
-  @ApiPropertyOptional({ description: 'Overall score 0–100', minimum: 0, maximum: 100 })
+  @ApiPropertyOptional({
+    description: 'Overall score 0–100',
+    minimum: 0,
+    maximum: 100,
+  })
   score?: number;
 
   @ApiPropertyOptional({ description: 'AI feedback in German' })
@@ -44,7 +52,9 @@ export class ExerciseAttemptDto {
   @ApiPropertyOptional({ description: "The student's original submitted text" })
   originalText?: string;
 
-  @ApiPropertyOptional({ description: 'AI-rewritten corrected version of the text' })
+  @ApiPropertyOptional({
+    description: 'AI-rewritten corrected version of the text',
+  })
   correctedText?: string;
 
   @ApiPropertyOptional({

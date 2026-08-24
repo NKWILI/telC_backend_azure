@@ -14,9 +14,12 @@ export class RoomService {
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + 2 * 60 * 60 * 1000);
 
-    const expiryTimer = setTimeout(() => {
-      this.deleteRoom(roomId, 'expired');
-    }, 2 * 60 * 60 * 1000);
+    const expiryTimer = setTimeout(
+      () => {
+        this.deleteRoom(roomId, 'expired');
+      },
+      2 * 60 * 60 * 1000,
+    );
 
     const room: Room = {
       roomId,
@@ -61,7 +64,10 @@ export class RoomService {
     this.logger.log(JSON.stringify({ event: 'host.joined', roomId, socketId }));
   }
 
-  startGracePeriod(roomId: string, onExpire: (guestSocketId: string | null) => void): void {
+  startGracePeriod(
+    roomId: string,
+    onExpire: (guestSocketId: string | null) => void,
+  ): void {
     const room = this.rooms.get(roomId);
     if (!room || room.status === 'ended') return;
 
@@ -84,7 +90,9 @@ export class RoomService {
     room.guest = { displayName, socketId };
     room.status = room.hostSocketId ? 'active' : 'waiting';
 
-    this.logger.log(JSON.stringify({ event: 'guest.joined', roomId, socketId, displayName }));
+    this.logger.log(
+      JSON.stringify({ event: 'guest.joined', roomId, socketId, displayName }),
+    );
   }
 
   removeGuest(roomId: string): void {

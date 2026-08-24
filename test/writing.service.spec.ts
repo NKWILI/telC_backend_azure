@@ -29,7 +29,10 @@ const FAKE_EXERCISE = {
     ],
     callToAction:
       'Vereinbaren Sie einen Besichtigungstermin oder fordern Sie weitere Informationen an:',
-    contact: { name: 'CenterBüros GmbH', lines: ['Neuer Wall 120', '50160 Köln'] },
+    contact: {
+      name: 'CenterBüros GmbH',
+      lines: ['Neuer Wall 120', '50160 Köln'],
+    },
   },
   task_instructions:
     'Sie arbeiten in einem Übersetzerbüro. Ihr Chef möchte größere Büroräume mieten.',
@@ -81,7 +84,9 @@ describe('WritingService', () => {
 
   describe('getExercise', () => {
     it('returns mapped WritingExerciseDto from DB row', async () => {
-      mockPrismaService.writingExercise.findUnique.mockResolvedValue(FAKE_EXERCISE);
+      mockPrismaService.writingExercise.findUnique.mockResolvedValue(
+        FAKE_EXERCISE,
+      );
 
       const result = await service.getExercise('uuid-exercise-1');
 
@@ -97,7 +102,9 @@ describe('WritingService', () => {
     it('throws NotFoundException when exercise not in DB', async () => {
       mockPrismaService.writingExercise.findUnique.mockResolvedValue(null);
 
-      await expect(service.getExercise('unknown-id')).rejects.toThrow(NotFoundException);
+      await expect(service.getExercise('unknown-id')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws NotFoundException for empty id', async () => {
@@ -158,7 +165,8 @@ describe('WritingService', () => {
 
       await service.getSessions('student-1');
 
-      const callArg = mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
+      const callArg =
+        mockPrismaService.writingAttempt.findMany.mock.calls[0][0];
       expect(callArg.where).not.toHaveProperty('exercise_id');
     });
   });
@@ -200,7 +208,10 @@ describe('WritingService', () => {
       mockPrismaService.writingExercise.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.submit('student-1', { exerciseId: 'unknown', content: 'Some text' }),
+        service.submit('student-1', {
+          exerciseId: 'unknown',
+          content: 'Some text',
+        }),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -211,7 +222,10 @@ describe('WritingService', () => {
       });
 
       await expect(
-        service.submit('student-1', { exerciseId: 'uuid-exercise-1', content: '' }),
+        service.submit('student-1', {
+          exerciseId: 'uuid-exercise-1',
+          content: '',
+        }),
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
@@ -220,10 +234,15 @@ describe('WritingService', () => {
         id: 'uuid-exercise-1',
         modelltest_id: null,
       });
-      mockPrismaService.writingAttempt.create.mockRejectedValue(new Error('DB error'));
+      mockPrismaService.writingAttempt.create.mockRejectedValue(
+        new Error('DB error'),
+      );
 
       await expect(
-        service.submit('student-1', { exerciseId: 'uuid-exercise-1', content: 'Text' }),
+        service.submit('student-1', {
+          exerciseId: 'uuid-exercise-1',
+          content: 'Text',
+        }),
       ).rejects.toThrow(UnprocessableEntityException);
 
       expect(mockQueue.add).not.toHaveBeenCalled();

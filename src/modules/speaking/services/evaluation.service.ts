@@ -162,7 +162,9 @@ Also provide:
         areas_for_improvement: p.areas_for_improvement ?? '',
       };
     } catch (error) {
-      this.logger.error(`Failed to parse evaluation response: ${(error as Error).message}`);
+      this.logger.error(
+        `Failed to parse evaluation response: ${(error as Error).message}`,
+      );
       this.logger.debug(`Raw response: ${response}`);
       throw new Error('EVALUATION_PARSE_FAILED');
     }

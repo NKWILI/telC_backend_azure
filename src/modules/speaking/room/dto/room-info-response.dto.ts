@@ -7,7 +7,9 @@ export class RoomInfoResponseDto {
   @ApiProperty({ enum: ['waiting', 'active'] })
   status: 'waiting' | 'active';
 
-  @ApiProperty({ description: 'Whether the host WebSocket is currently connected' })
+  @ApiProperty({
+    description: 'Whether the host WebSocket is currently connected',
+  })
   hasHost: boolean;
 
   @ApiProperty({ description: 'Whether a guest is already in the room' })

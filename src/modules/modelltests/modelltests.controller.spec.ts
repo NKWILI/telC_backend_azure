@@ -15,7 +15,10 @@ describe('ModelltestsController', () => {
   });
 
   it('is protected by JwtAuthGuard at the controller level', () => {
-    const guards = Reflect.getMetadata('__guards__', ModelltestsController) as unknown[];
+    const guards = Reflect.getMetadata(
+      '__guards__',
+      ModelltestsController,
+    ) as unknown[];
     expect(guards).toBeDefined();
     expect(guards).toContain(JwtAuthGuard);
   });

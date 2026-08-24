@@ -91,7 +91,9 @@ describe('TurnCredentialsService', () => {
   });
 
   it('defaults TTL to 3600 when not configured', () => {
-    const svc = new TurnCredentialsService(makeConfig({ TURN_ENABLED: 'false' }));
+    const svc = new TurnCredentialsService(
+      makeConfig({ TURN_ENABLED: 'false' }),
+    );
 
     const res = svc.getIceServers('abc');
 
@@ -99,7 +101,9 @@ describe('TurnCredentialsService', () => {
   });
 
   it('always includes at least one STUN server', () => {
-    const svc = new TurnCredentialsService(makeConfig({ TURN_ENABLED: 'false' }));
+    const svc = new TurnCredentialsService(
+      makeConfig({ TURN_ENABLED: 'false' }),
+    );
 
     const res = svc.getIceServers('abc');
 

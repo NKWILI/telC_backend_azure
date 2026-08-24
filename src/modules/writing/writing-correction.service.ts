@@ -145,12 +145,12 @@ export class WritingCorrectionService {
       ? this.formatExerciseForPrompt(exercise)
       : '';
     const pointsCount = exercise?.bulletPoints?.length ?? 0;
-    const pointsAddressedSchema = pointsCount > 0
-      ? `\n- "points_addressed" (integer 0-${pointsCount}): how many of the ${pointsCount} required bullet points the student addressed in their text`
-      : '';
-    const pointsAddressedExample = pointsCount > 0
-      ? `\n  "points_addressed": 3,`
-      : '';
+    const pointsAddressedSchema =
+      pointsCount > 0
+        ? `\n- "points_addressed" (integer 0-${pointsCount}): how many of the ${pointsCount} required bullet points the student addressed in their text`
+        : '';
+    const pointsAddressedExample =
+      pointsCount > 0 ? `\n  "points_addressed": 3,` : '';
 
     return `You are an expert German B1 writing corrector for telc Schreiben tasks.
 Evaluate the following student text against the exercise brief. Provide a single JSON object (no markdown, no extra text) with:
@@ -200,9 +200,7 @@ ${content}
     parts.push(`\n${exercise.taskInstructions}`);
     if (exercise.bulletPoints?.length) {
       parts.push('Required points the student MUST address:');
-      exercise.bulletPoints.forEach((bp, i) =>
-        parts.push(`${i + 1}. ${bp}`),
-      );
+      exercise.bulletPoints.forEach((bp, i) => parts.push(`${i + 1}. ${bp}`));
     }
     if (exercise.closingReminder) parts.push(`\n${exercise.closingReminder}`);
     return parts.join('\n') + '\n';

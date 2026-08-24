@@ -37,18 +37,20 @@ function makeClient(id: string, roomId?: string) {
 
 describe('RoomGateway', () => {
   let gateway: RoomGateway;
-  let roomService: jest.Mocked<Pick<
-    RoomService,
-    | 'getRoom'
-    | 'verifyHostToken'
-    | 'setHost'
-    | 'setGuest'
-    | 'deleteRoom'
-    | 'removeGuest'
-    | 'startGracePeriod'
-    | 'getRoomBySocketId'
-    | 'getAllRooms'
-  >>;
+  let roomService: jest.Mocked<
+    Pick<
+      RoomService,
+      | 'getRoom'
+      | 'verifyHostToken'
+      | 'setHost'
+      | 'setGuest'
+      | 'deleteRoom'
+      | 'removeGuest'
+      | 'startGracePeriod'
+      | 'getRoomBySocketId'
+      | 'getAllRooms'
+    >
+  >;
   let mockTo: jest.Mock;
 
   beforeEach(async () => {
@@ -65,10 +67,7 @@ describe('RoomGateway', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RoomGateway,
-        { provide: RoomService, useValue: roomService },
-      ],
+      providers: [RoomGateway, { provide: RoomService, useValue: roomService }],
     }).compile();
 
     gateway = module.get<RoomGateway>(RoomGateway);
@@ -109,21 +108,36 @@ describe('RoomGateway', () => {
         roomService.verifyHostToken.mockReturnValue(true);
         const client = makeClient(HOST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Host', hostToken: HOST_TOKEN });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Host',
+          hostToken: HOST_TOKEN,
+        });
 
-        expect(roomService.setHost).toHaveBeenCalledWith(ROOM_ID, HOST_SOCKET_ID);
+        expect(roomService.setHost).toHaveBeenCalledWith(
+          ROOM_ID,
+          HOST_SOCKET_ID,
+        );
         expect(client.data.roomId).toBe(ROOM_ID);
       });
 
       it('emits guest-joined to host when a guest is already in the room (RC-01)', () => {
-        const room = makeRoom({ guest: { displayName: 'Anna', socketId: GUEST_SOCKET_ID } });
+        const room = makeRoom({
+          guest: { displayName: 'Anna', socketId: GUEST_SOCKET_ID },
+        });
         roomService.getRoom.mockReturnValue(room);
         roomService.verifyHostToken.mockReturnValue(true);
         const client = makeClient(HOST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Host', hostToken: HOST_TOKEN });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Host',
+          hostToken: HOST_TOKEN,
+        });
 
-        expect(client.emit).toHaveBeenCalledWith('guest-joined', { displayName: 'Anna' });
+        expect(client.emit).toHaveBeenCalledWith('guest-joined', {
+          displayName: 'Anna',
+        });
       });
 
       it('does NOT emit guest-joined when no guest in room', () => {
@@ -132,20 +146,32 @@ describe('RoomGateway', () => {
         roomService.verifyHostToken.mockReturnValue(true);
         const client = makeClient(HOST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Host', hostToken: HOST_TOKEN });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Host',
+          hostToken: HOST_TOKEN,
+        });
 
-        expect(client.emit).not.toHaveBeenCalledWith('guest-joined', expect.anything());
+        expect(client.emit).not.toHaveBeenCalledWith(
+          'guest-joined',
+          expect.anything(),
+        );
       });
     });
 
     describe('guest path (no token or wrong token)', () => {
       it('emits room-full when a guest is already in the room (RC-02)', () => {
-        const room = makeRoom({ guest: { displayName: 'Other', socketId: 'other-socket' } });
+        const room = makeRoom({
+          guest: { displayName: 'Other', socketId: 'other-socket' },
+        });
         roomService.getRoom.mockReturnValue(room);
         roomService.verifyHostToken.mockReturnValue(false);
         const client = makeClient(GUEST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Anna' });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Anna',
+        });
 
         expect(client.emit).toHaveBeenCalledWith('room-full', {});
         expect(roomService.setGuest).not.toHaveBeenCalled();
@@ -157,9 +183,16 @@ describe('RoomGateway', () => {
         roomService.verifyHostToken.mockReturnValue(false);
         const client = makeClient(GUEST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Anna' });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Anna',
+        });
 
-        expect(roomService.setGuest).toHaveBeenCalledWith(ROOM_ID, 'Anna', GUEST_SOCKET_ID);
+        expect(roomService.setGuest).toHaveBeenCalledWith(
+          ROOM_ID,
+          'Anna',
+          GUEST_SOCKET_ID,
+        );
         expect(client.data.roomId).toBe(ROOM_ID);
       });
 
@@ -171,10 +204,15 @@ describe('RoomGateway', () => {
         const hostEmit = jest.fn();
         mockTo.mockReturnValue({ emit: hostEmit });
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Anna' });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Anna',
+        });
 
         expect(mockTo).toHaveBeenCalledWith(HOST_SOCKET_ID);
-        expect(hostEmit).toHaveBeenCalledWith('guest-joined', { displayName: 'Anna' });
+        expect(hostEmit).toHaveBeenCalledWith('guest-joined', {
+          displayName: 'Anna',
+        });
       });
 
       it('stores guest silently when host is not yet connected (RC-01)', () => {
@@ -183,7 +221,10 @@ describe('RoomGateway', () => {
         roomService.verifyHostToken.mockReturnValue(false);
         const client = makeClient(GUEST_SOCKET_ID);
 
-        gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Anna' });
+        gateway.handleJoinRoom(client, {
+          roomId: ROOM_ID,
+          displayName: 'Anna',
+        });
 
         expect(roomService.setGuest).toHaveBeenCalled();
         expect(mockTo).not.toHaveBeenCalled();
@@ -194,7 +235,10 @@ describe('RoomGateway', () => {
   // ─── offer ────────────────────────────────────────────────────────────────
 
   describe('handleOffer()', () => {
-    const offerPayload = { type: 'offer', sdp: 'v=0...' } as RTCSessionDescriptionInit;
+    const offerPayload = {
+      type: 'offer',
+      sdp: 'v=0...',
+    } as RTCSessionDescriptionInit;
 
     it('emits room-not-found when room does not exist (EDGE-02)', () => {
       roomService.getRoom.mockReturnValue(undefined);
@@ -245,7 +289,10 @@ describe('RoomGateway', () => {
   // ─── answer ───────────────────────────────────────────────────────────────
 
   describe('handleAnswer()', () => {
-    const answerPayload = { type: 'answer', sdp: 'v=0...' } as RTCSessionDescriptionInit;
+    const answerPayload = {
+      type: 'answer',
+      sdp: 'v=0...',
+    } as RTCSessionDescriptionInit;
 
     it('emits room-not-found when room does not exist (EDGE-02)', () => {
       roomService.getRoom.mockReturnValue(undefined);
@@ -281,14 +328,20 @@ describe('RoomGateway', () => {
       gateway.handleAnswer(client, { roomId: ROOM_ID, answer: answerPayload });
 
       expect(mockTo).toHaveBeenCalledWith(HOST_SOCKET_ID);
-      expect(hostEmit).toHaveBeenCalledWith('answer', { answer: answerPayload });
+      expect(hostEmit).toHaveBeenCalledWith('answer', {
+        answer: answerPayload,
+      });
     });
   });
 
   // ─── ice-candidate ────────────────────────────────────────────────────────
 
   describe('handleIceCandidate()', () => {
-    const candidate = { candidate: 'candidate:...', sdpMid: '0', sdpMLineIndex: 0 } as RTCIceCandidateInit;
+    const candidate = {
+      candidate: 'candidate:...',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    } as RTCIceCandidateInit;
 
     it('emits room-not-found when room does not exist (EDGE-02)', () => {
       roomService.getRoom.mockReturnValue(undefined);

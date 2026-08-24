@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
-import { IceServerDto, IceServersResponseDto } from './dto/ice-servers-response.dto';
+import {
+  IceServerDto,
+  IceServersResponseDto,
+} from './dto/ice-servers-response.dto';
 
 const DEFAULT_STUN_URLS = [
   'stun:stun.l.google.com:19302',
@@ -33,7 +36,8 @@ export class TurnCredentialsService {
       Number(this.config.get<string>('TURN_CREDENTIAL_TTL_SECONDS')) ||
       DEFAULT_TTL_SECONDS;
 
-    const stunUrls = this.parseList(this.config.get<string>('STUN_URLS')) ?? DEFAULT_STUN_URLS;
+    const stunUrls =
+      this.parseList(this.config.get<string>('STUN_URLS')) ?? DEFAULT_STUN_URLS;
     const iceServers: IceServerDto[] = stunUrls.map((urls) => ({ urls }));
 
     const enabled = this.config.get<string>('TURN_ENABLED') === 'true';
@@ -43,13 +47,22 @@ export class TurnCredentialsService {
     if (enabled && secret && turnUrls.length > 0) {
       const expiry = Math.floor(Date.now() / 1000) + ttlSeconds;
       const username = `${expiry}:${studentId}`;
-      const credential = createHmac('sha1', secret).update(username).digest('base64');
+      const credential = createHmac('sha1', secret)
+        .update(username)
+        .digest('base64');
 
       for (const urls of turnUrls) {
-        iceServers.push({ urls, username, credential, credentialType: 'password' });
+        iceServers.push({
+          urls,
+          username,
+          credential,
+          credentialType: 'password',
+        });
       }
     } else {
-      this.logger.warn('TURN disabled or unconfigured — returning STUN-only ICE servers');
+      this.logger.warn(
+        'TURN disabled or unconfigured — returning STUN-only ICE servers',
+      );
     }
 
     return { iceServers, ttlSeconds };
@@ -57,7 +70,10 @@ export class TurnCredentialsService {
 
   private parseList(value?: string): string[] | undefined {
     if (!value) return undefined;
-    const items = value.split(',').map((s) => s.trim()).filter(Boolean);
+    const items = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     return items.length > 0 ? items : undefined;
   }
 }

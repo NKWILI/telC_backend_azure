@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoomService } from '../src/modules/speaking/room/room.service';
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 describe('RoomService', () => {
   let service: RoomService;
@@ -192,7 +193,9 @@ describe('RoomService', () => {
     });
 
     it('is a no-op when room does not exist', () => {
-      expect(() => service.startGracePeriod('no-room', jest.fn())).not.toThrow();
+      expect(() =>
+        service.startGracePeriod('no-room', jest.fn()),
+      ).not.toThrow();
     });
 
     it('is a no-op when status is already "ended"', () => {
@@ -217,7 +220,10 @@ describe('RoomService', () => {
       const { roomId } = service.createRoom();
       service.setGuest(roomId, 'Anna', 'socket-guest-1');
       const room = service.getRoom(roomId)!;
-      expect(room.guest).toEqual({ displayName: 'Anna', socketId: 'socket-guest-1' });
+      expect(room.guest).toEqual({
+        displayName: 'Anna',
+        socketId: 'socket-guest-1',
+      });
     });
 
     it('status becomes "active" when host is already connected', () => {
@@ -241,7 +247,9 @@ describe('RoomService', () => {
     });
 
     it('is a no-op for an unknown roomId (does not throw)', () => {
-      expect(() => service.setGuest('unknown', 'Anna', 'socket-1')).not.toThrow();
+      expect(() =>
+        service.setGuest('unknown', 'Anna', 'socket-1'),
+      ).not.toThrow();
     });
   });
 

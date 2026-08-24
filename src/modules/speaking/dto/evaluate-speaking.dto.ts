@@ -9,7 +9,8 @@ export class EvaluateSpeakingDto {
   teilNumber: number;
 
   @ApiProperty({
-    example: 'Ich heiße Alain. Ich komme aus Kamerun und lerne seit zwei Jahren Deutsch.',
+    example:
+      'Ich heiße Alain. Ich komme aus Kamerun und lerne seit zwei Jahren Deutsch.',
     minLength: 10,
   })
   @IsString()

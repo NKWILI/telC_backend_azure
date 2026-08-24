@@ -2,7 +2,9 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { GuestBlockGuard } from '../src/shared/guards/guest-block.guard';
 import { AccessTokenPayload } from '../src/shared/interfaces/token-payload.interface';
 
-const makeContext = (student: AccessTokenPayload | undefined): ExecutionContext =>
+const makeContext = (
+  student: AccessTokenPayload | undefined,
+): ExecutionContext =>
   ({
     switchToHttp: () => ({
       getRequest: () => ({ student }),

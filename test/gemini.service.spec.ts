@@ -38,9 +38,13 @@ describe('GeminiService', () => {
 
   describe('generateTextResponse', () => {
     it('should return text from Gemini', async () => {
-      mockGenerateContent.mockResolvedValue({ text: 'Evaluation result in German.' });
+      mockGenerateContent.mockResolvedValue({
+        text: 'Evaluation result in German.',
+      });
 
-      const result = await service.generateTextResponse('Evaluate this transcript.');
+      const result = await service.generateTextResponse(
+        'Evaluate this transcript.',
+      );
 
       expect(result).toBe('Evaluation result in German.');
       expect(mockGenerateContent).toHaveBeenCalledWith(
@@ -59,7 +63,9 @@ describe('GeminiService', () => {
     it('should throw when Gemini call fails', async () => {
       mockGenerateContent.mockRejectedValue(new Error('Network error'));
 
-      await expect(service.generateTextResponse('test')).rejects.toThrow('Network error');
+      await expect(service.generateTextResponse('test')).rejects.toThrow(
+        'Network error',
+      );
     });
 
     it('should use the configured text model', async () => {

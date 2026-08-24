@@ -68,9 +68,7 @@ export class WritingService {
   async getExerciseByModelltest(
     modelltestNumber: number,
   ): Promise<WritingExerciseDto> {
-    let row: Awaited<
-      ReturnType<typeof this.prisma.writingExercise.findFirst>
-    >;
+    let row: Awaited<ReturnType<typeof this.prisma.writingExercise.findFirst>>;
     try {
       row = await this.prisma.writingExercise.findFirst({
         where: { modelltest: { number: modelltestNumber } },

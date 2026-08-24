@@ -18,7 +18,10 @@ export class JoinRoomDto {
   @MaxLength(100)
   displayName: string;
 
-  @ApiProperty({ required: false, description: 'Provided by the host only; omit for guests' })
+  @ApiProperty({
+    required: false,
+    description: 'Provided by the host only; omit for guests',
+  })
   @IsString()
   @IsOptional()
   hostToken?: string;
