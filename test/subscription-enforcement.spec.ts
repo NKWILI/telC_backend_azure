@@ -137,6 +137,13 @@ describe('subscription enforcement across learning controllers', () => {
       // StudentSubscriptionGuard reads request.student, which JwtAuthGuard
       // puts there. Reversed, it would see no student and wave everyone
       // through — a silent hole rather than a loud failure.
+      //
+      // Presence is asserted before order, because indexOf returns -1 for an
+      // absent guard and -1 is less than every real index: the comparison
+      // alone would pass for a controller that had no JwtAuthGuard at all,
+      // which is the exact case it is supposed to rule out.
+      expect(guards).toContain(JwtAuthGuard);
+      expect(guards).toContain(StudentSubscriptionGuard);
       expect(guards.indexOf(JwtAuthGuard)).toBeLessThan(
         guards.indexOf(StudentSubscriptionGuard),
       );
@@ -174,6 +181,40 @@ describe('subscription enforcement across learning controllers', () => {
     }
 
     expect(unenforced).toEqual([]);
+  });
+
+  /**
+   * The inverse mistake, which is the worse one: a route carrying
+   * StudentSubscriptionGuard but NOT JwtAuthGuard.
+   *
+   * That route looks protected and protects nothing. The guard reads
+   * `request.student`, which only JwtAuthGuard sets, and returns true when
+   * there is no student to check — so every caller, authenticated or not,
+   * passes straight through. A missing guard is at least visible; this one
+   * reads as defence in depth while being an open door.
+   */
+  it('never enforces entitlement on a route that does not establish identity', () => {
+    const identityless: string[] = [];
+
+    for (const controller of controllers) {
+      const methods = new Set([
+        ...controller.routeGuards.keys(),
+        ...(controller.guards.length > 0 ? ['<class>'] : []),
+      ]);
+
+      for (const method of methods) {
+        const guards = effectiveGuards(controller, method);
+
+        if (
+          guards.includes(StudentSubscriptionGuard) &&
+          !guards.includes(JwtAuthGuard)
+        ) {
+          identityless.push(`${controller.name}.${method}`);
+        }
+      }
+    }
+
+    expect(identityless).toEqual([]);
   });
 
   /**

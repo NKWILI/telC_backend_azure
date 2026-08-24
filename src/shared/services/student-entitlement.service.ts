@@ -89,13 +89,19 @@ export class StudentEntitlementService {
     // Every center is created with a subscription row, so its absence is a
     // data fault rather than a state. Fail closed: the student does belong to
     // a center, and no row means nothing authorises the access.
-    if (!row.plan) {
+    // Both columns are NOT NULL in the table, so either being null means the
+    // LEFT JOIN found nothing. Testing both together is what lets the compiler
+    // narrow them, rather than needing a cast to assert what the join implies.
+    if (row.plan === null || row.seats === null) {
       return { status: 'BLOCKED', studentsMayLearn: false, graceEndsAt: null };
     }
 
+    // No status depends on `seats`, but it is read from the row rather than
+    // defaulted: it costs nothing on a row already being fetched, and a
+    // fabricated 0 would read as a real seat count to whoever needs one next.
     const decision = this.policy.evaluate({
       plan: row.plan,
-      seats: row.seats ?? 0,
+      seats: row.seats,
       trial_started_at: row.trial_started_at,
       trial_ends_at: row.trial_ends_at,
       paid_until: row.paid_until,
