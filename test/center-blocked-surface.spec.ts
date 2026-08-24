@@ -3,6 +3,7 @@ import { CenterStudentsController } from '../src/modules/centers/center-students
 import { CenterProfileController } from '../src/modules/centers/center-profile.controller';
 import { CenterSubscriptionController } from '../src/modules/centers/center-subscription.controller';
 import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
+import { PaymentsController } from '../src/modules/centers/payments.controller';
 
 const guardsOn = (target: object): unknown[] =>
   (Reflect.getMetadata('__guards__', target) ?? []) as unknown[];
@@ -29,6 +30,40 @@ describe('what a blocked center can and cannot do', () => {
       expect(
         enforced(CenterStudentsController.prototype.issueActivationKey),
       ).toBe(true);
+    });
+  });
+
+  /**
+   * The road out. Every route a lapsed center walks to pay is here, and every
+   * one of them must stay open — a center that cannot pay never comes back,
+   * so a guard added to any of these is a revenue bug wearing the clothes of
+   * a security fix.
+   */
+  describe('kept: the whole path to paying', () => {
+    it('can still ask what seats would cost', () => {
+      expect(enforced(CenterSubscriptionController.prototype.quote)).toBe(
+        false,
+      );
+    });
+
+    it('can still record an intent to pay', () => {
+      expect(enforced(PaymentsController.prototype.create)).toBe(false);
+    });
+
+    it('can still read one of its payments', () => {
+      expect(enforced(PaymentsController.prototype.get)).toBe(false);
+    });
+
+    it('can still read its payment history', () => {
+      expect(enforced(PaymentsController.prototype.list)).toBe(false);
+    });
+
+    it('has no subscription guard at the class level either', () => {
+      // A guard on the class would cover all three at once, which is exactly
+      // how this would be broken in a single careless commit.
+      expect(guardsOn(PaymentsController)).not.toContain(
+        CenterSubscriptionGuard,
+      );
     });
   });
 

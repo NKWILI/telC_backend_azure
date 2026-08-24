@@ -53,16 +53,16 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 6: Blocked-center reachability
 
-- [ ] All four routes answer while BLOCKED
-- [ ] center-blocked-surface.spec.ts extended to pin them
-- [ ] Commit the green increment
+- [x] All four routes answer while BLOCKED
+- [x] center-blocked-surface.spec.ts extended to pin them
+- [x] Commit the green increment
 
 ## Task 7: Bruno
 
-- [ ] Quote and pay end to end
-- [ ] The attempts that must fail: client amount, below minimum, below student
+- [x] Quote and pay end to end
+- [x] The attempts that must fail: client amount, below minimum, below student
       count, replayed key
-- [ ] Commit the green increment
+- [x] Commit the green increment
 
 ## Task 8: Gates and review
 

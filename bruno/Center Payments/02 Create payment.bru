@@ -1,0 +1,91 @@
+meta {
+  name: 02 Create payment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/payments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+  Idempotency-Key: {{idempotencyKey}}
+}
+
+body:json {
+  {
+    "seats": 10
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("paymentId", res.getBody().id);
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.status: eq PENDING
+  res.body.amountXaf: eq 48000
+}
+
+docs {
+  Records an intent to pay. NO MONEY MOVES, and nothing is granted.
+
+  Check `Center Subscription / 01 Get subscription` before and after: `paidUntil`
+  is unchanged and `seats` is unchanged. Only a verified Notch Pay event may
+  move those, and that arrives in Phase 7. `status` stays PENDING because
+  nothing in this phase can advance it.
+
+  ## Set the key first
+
+  Put any unique value in `{{idempotencyKey}}` in the environment — a uuid is
+  the intended shape. Change it whenever you want a genuinely NEW payment.
+
+  ## The three things to try, in this order
+
+  1. SEND IT TWICE WITHOUT CHANGING ANYTHING.
+     Both return 201, and `id` is the SAME both times. A double-clicked button
+     is one intent, not two payments. Confirm with `03 Payment history`: one
+     row, not two.
+
+  2. SAME KEY, DIFFERENT SEATS. Change the body to `{"seats": 20}` and resend
+     with the same key -> 409 IDEMPOTENCY_KEY_REUSED.
+     Handing back the original would tell you that you had bought 20 seats
+     while the record says 10, and that disagreement would only surface when
+     reconciling against the provider.
+
+  3. NEW KEY, SAME SEATS -> a genuinely new payment with a new id. The key is
+     what identifies the attempt, not the body.
+
+  ## Without a key
+
+  Remove the `Idempotency-Key` header -> 400 IDEMPOTENCY_KEY_REQUIRED.
+
+  It is required rather than generated server-side on purpose: a key the
+  server invents makes every retry a fresh payment, which is precisely the
+  failure idempotency exists to prevent. Empty and whitespace-only keys are
+  refused for the same reason.
+
+  ## The price is not an input, here either
+
+  All of these -> 400:
+
+  - `{"seats": 10, "unitPriceXaf": 1}`
+  - `{"seats": 10, "amountXaf": 1}`
+  - `{"seats": 10, "status": "SUCCEEDED"}`
+
+  That last one matters most. Without it a client could ask for a payment that
+  claims to have already succeeded.
+
+  ## While BLOCKED
+
+  This works. It is the point of the whole road-out design: a lapsed center
+  must be able to pay. If this ever returns 403, someone has added
+  CenterSubscriptionGuard to the payments controller —
+  `test/center-blocked-surface.spec.ts` should have failed first.
+}
