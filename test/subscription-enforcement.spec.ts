@@ -2,6 +2,7 @@
 // runtime, so they cannot be named in static imports. A static list would
 // defeat the test, which exists to catch a controller nobody remembered.
 /* eslint-disable @typescript-eslint/no-require-imports */
+import { UseGuards } from '@nestjs/common';
 import { readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
@@ -45,12 +46,22 @@ function findControllerFiles(dir: string): string[] {
 
 interface DiscoveredController {
   name: string;
+  /** Guards from `@UseGuards` on the class itself. */
   guards: unknown[];
+  /** Guards on each handler, keyed by method name. */
+  routeGuards: Map<string, unknown[]>;
 }
 
+const guardsOn = (target: object): unknown[] =>
+  (Reflect.getMetadata('__guards__', target) ?? []) as unknown[];
+
 /**
- * Reads the guards Nest recorded from `@UseGuards` on the class itself.
- * Route-level guards live on the handler, so they deliberately do not appear.
+ * Reads the guards Nest recorded, both on the class and on every handler.
+ *
+ * Handlers are read deliberately rather than for completeness. Scanning only
+ * the class would miss a controller that applies JwtAuthGuard per-route — the
+ * shape AuthController and RoomController already use — so a new one written
+ * that way would slip past the very sweep meant to catch it.
  */
 function discoverControllers(): DiscoveredController[] {
   const found: DiscoveredController[] = [];
@@ -61,19 +72,37 @@ function discoverControllers(): DiscoveredController[] {
     for (const [name, value] of Object.entries(exported)) {
       if (typeof value !== 'function' || !name.endsWith('Controller')) continue;
 
-      const guards = (Reflect.getMetadata('__guards__', value) ??
-        []) as unknown[];
-      found.push({ name, guards });
+      const prototype = (value as { prototype: object }).prototype;
+      const routeGuards = new Map<string, unknown[]>();
+
+      for (const method of Object.getOwnPropertyNames(prototype)) {
+        if (method === 'constructor') continue;
+
+        const handler = (prototype as Record<string, unknown>)[method];
+        if (typeof handler !== 'function') continue;
+
+        const onHandler = guardsOn(handler);
+        if (onHandler.length > 0) routeGuards.set(method, onHandler);
+      }
+
+      found.push({ name, guards: guardsOn(value), routeGuards });
     }
   }
 
   return found;
 }
 
+/** Every guard protecting a route, whether declared on the class or the handler. */
+const effectiveGuards = (
+  controller: DiscoveredController,
+  method: string,
+): unknown[] => [
+  ...controller.guards,
+  ...(controller.routeGuards.get(method) ?? []),
+];
+
 describe('subscription enforcement across learning controllers', () => {
   const controllers = discoverControllers();
-
-  const guarded = controllers.filter((c) => c.guards.includes(JwtAuthGuard));
 
   it('discovers the controllers at all, so the sweep cannot pass vacuously', () => {
     expect(controllers.length).toBeGreaterThanOrEqual(
@@ -116,15 +145,90 @@ describe('subscription enforcement across learning controllers', () => {
 
   /**
    * The point of the whole file. A learning controller added next month with
-   * only JwtAuthGuard fails here rather than shipping unenforced.
+   * only JwtAuthGuard fails here rather than shipping unenforced — whether it
+   * declares that guard on the class or on each route.
    */
-  it('leaves no student-authenticated controller unenforced', () => {
-    const unenforced = guarded
-      .filter((c) => !c.guards.includes(StudentSubscriptionGuard))
-      .map((c) => c.name)
-      .filter((name) => !(name in EXEMPT));
+  it('leaves no student-authenticated route unenforced', () => {
+    const unenforced: string[] = [];
+
+    for (const controller of controllers) {
+      if (controller.name in EXEMPT) continue;
+
+      // Every route the controller actually exposes, plus a sentinel for a
+      // class-level declaration with no decorated handlers of its own.
+      const methods = new Set([
+        ...controller.routeGuards.keys(),
+        ...(controller.guards.length > 0 ? ['<class>'] : []),
+      ]);
+
+      for (const method of methods) {
+        const guards = effectiveGuards(controller, method);
+
+        if (
+          guards.includes(JwtAuthGuard) &&
+          !guards.includes(StudentSubscriptionGuard)
+        ) {
+          unenforced.push(`${controller.name}.${method}`);
+        }
+      }
+    }
 
     expect(unenforced).toEqual([]);
+  });
+
+  /**
+   * Guards against the sweep quietly going blind. If handler metadata ever
+   * stops being readable, routeGuards empties and the check above passes
+   * while testing nothing — so assert we can still see a known per-route case.
+   */
+  it('can see per-route guards, not only class-level ones', () => {
+    const room = controllers.find((c) => c.name === 'RoomController');
+
+    expect(room!.guards).toEqual([]);
+    expect(room!.routeGuards.get('createRoom')).toContain(
+      StudentSubscriptionGuard,
+    );
+  });
+
+  /**
+   * Proves the sweep above can fail, not merely that it passes today.
+   *
+   * Both real per-route controllers are exempt, so nothing else exercises that
+   * branch — without this, the per-route detection could be broken and every
+   * assertion here would stay green.
+   */
+  describe('the sweep would actually catch an offender', () => {
+    class UnenforcedController {
+      @UseGuards(JwtAuthGuard)
+      findAll() {}
+    }
+
+    class EnforcedController {
+      @UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
+      findAll() {}
+    }
+
+    const inspect = (cls: { prototype: { findAll: object } }) => {
+      const routeGuards = guardsOn(cls.prototype.findAll);
+      return {
+        authenticates: routeGuards.includes(JwtAuthGuard),
+        enforces: routeGuards.includes(StudentSubscriptionGuard),
+      };
+    };
+
+    it('flags a route that authenticates but does not enforce', () => {
+      expect(inspect(UnenforcedController)).toEqual({
+        authenticates: true,
+        enforces: false,
+      });
+    });
+
+    it('clears a route that does both', () => {
+      expect(inspect(EnforcedController)).toEqual({
+        authenticates: true,
+        enforces: true,
+      });
+    });
   });
 
   it('keeps every exemption deliberate', () => {

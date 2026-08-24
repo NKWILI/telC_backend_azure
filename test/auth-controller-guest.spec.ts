@@ -29,6 +29,7 @@ describe('AuthController.createGuestSession', () => {
       {} as never,
       tokenService,
       rateLimitService as never,
+      { forStudent: jest.fn() } as never,
     );
   });
 

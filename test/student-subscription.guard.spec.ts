@@ -174,8 +174,23 @@ describe('StudentSubscriptionGuard', () => {
       ).resolves.toBe(true);
     });
 
-    it('admits a guest token, which has no student to look up', async () => {
-      const context = authenticated({ isGuest: true, deviceId: 'device-1' });
+    it('admits a guest, who belongs to no center', async () => {
+      // A real guest token carries a real studentId (TokenService
+      // .generateGuestAccessToken), so the guard looks the row up like any
+      // other. Guests have no center, so they pass on that basis rather than
+      // by skipping the check.
+      givenStudent(null, null);
+      const context = authenticated({
+        studentId: 'guest-student-1',
+        deviceId: 'guest',
+        isGuest: true,
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+
+    it('skips the lookup only when a token names no student at all', async () => {
+      const context = authenticated({ deviceId: 'device-1' });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(prisma.student.findUnique).not.toHaveBeenCalled();

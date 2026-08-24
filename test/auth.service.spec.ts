@@ -97,6 +97,9 @@ describe('AuthService', () => {
       tokenCryptoMock,
       emailServiceMock,
       googleServiceMock,
+      // Reporting only. What it returns is auth-subscription-report.spec's
+      // subject; here it just has to exist so responses can be built.
+      { forStudent: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

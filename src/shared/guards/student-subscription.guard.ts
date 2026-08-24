@@ -39,9 +39,11 @@ export class StudentSubscriptionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<SubscriptionRequest>();
     const studentId = request.student?.studentId;
 
-    // A guest token names no student, so there is no center and no
-    // subscription to consult. Whether guests may reach a route at all is
-    // GuestBlockGuard's question, not this one.
+    // A token with no student names nobody to look up. Note this is not the
+    // guest case: a guest token does carry a real studentId, so guests are
+    // looked up like anyone else and pass because they have no center.
+    // Whether guests may reach a route at all is a separate question, and not
+    // one this guard answers.
     if (!studentId) {
       return true;
     }

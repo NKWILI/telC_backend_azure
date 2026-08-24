@@ -31,6 +31,7 @@ describe('AuthController.register rate limiting', () => {
       authService as never,
       {} as never,
       rateLimitService as never,
+      { forStudent: jest.fn() } as never,
     );
   });
 

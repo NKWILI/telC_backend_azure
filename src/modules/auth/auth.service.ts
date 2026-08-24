@@ -57,9 +57,11 @@ export class AuthService {
     private readonly tokenCrypto: TokenCryptoService,
     private readonly emailService: EmailService,
     private readonly googleService: GoogleService,
+    // Required, not optional. Optional injection would let a wiring mistake
+    // drop subscription reporting from every response with no error anywhere
+    // — the field would simply stop appearing, and nothing would say so.
+    private readonly entitlementService: StudentEntitlementService,
     @Optional() private readonly valkeyService?: ValkeyService,
-    @Optional()
-    private readonly entitlementService?: StudentEntitlementService,
   ) {}
 
   /**
@@ -74,8 +76,6 @@ export class AuthService {
   private async readEntitlement(
     studentId: string,
   ): Promise<StudentEntitlement | undefined> {
-    if (!this.entitlementService) return undefined;
-
     try {
       return await this.entitlementService.forStudent(studentId);
     } catch (error) {

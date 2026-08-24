@@ -11,7 +11,7 @@ import {
   Ip,
   Delete,
   Param,
-  Optional,
+  Logger,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
@@ -81,12 +81,15 @@ interface StudentResponseDto {
 )
 @Controller('api/auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly tokenService: TokenService,
     private readonly rateLimitService: RateLimitService,
-    @Optional()
-    private readonly entitlementService?: StudentEntitlementService,
+    // Required, for the same reason as in AuthService: optional injection
+    // would let a wiring mistake silently remove the field from every refresh.
+    private readonly entitlementService: StudentEntitlementService,
   ) {}
 
   /**
@@ -98,11 +101,15 @@ export class AuthController {
   private async readEntitlement(
     studentId: string,
   ): Promise<StudentEntitlement | undefined> {
-    if (!this.entitlementService) return undefined;
-
     try {
       return await this.entitlementService.forStudent(studentId);
-    } catch {
+    } catch (error) {
+      // Logged rather than swallowed. A subscription store that has stopped
+      // answering is worth knowing about, and this path would otherwise hide
+      // it completely: the refresh still succeeds, just without the field.
+      this.logger.warn(
+        `refresh: could not read entitlement for ${studentId}: ${(error as Error).message}`,
+      );
       return undefined;
     }
   }

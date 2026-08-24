@@ -65,7 +65,6 @@ describe('login and refresh report the subscription', () => {
       { generateToken: () => 'raw', hashToken: () => 'hashed' } as any,
       { sendVerificationEmail: jest.fn() } as any,
       { verifyIdToken: jest.fn() } as any,
-      undefined,
       entitlement,
     );
   });
