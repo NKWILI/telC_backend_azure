@@ -47,9 +47,9 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 5: Reading payments
 
-- [ ] Another center's payment is 404, never 403
-- [ ] History paginated with a capped page size
-- [ ] Commit the green increment
+- [x] Another center's payment is 404, never 403
+- [x] History paginated with a capped page size
+- [x] Commit the green increment
 
 ## Task 6: Blocked-center reachability
 
