@@ -124,6 +124,20 @@ subscription, calls `SubscriptionPolicyService`, and refuses when
 **Verification:** `npm test -- subscription-enforcement.spec`
 **Scope:** S · **Dependencies:** 1
 
+### Task 2b: Close the speaking room entrance
+
+**Description:** `POST /api/speaking/rooms` gains `JwtAuthGuard` and
+`StudentSubscriptionGuard`, per decision 2.
+
+**Acceptance criteria:**
+- Creating a room without a token is `401`.
+- A blocked student creating a room is `403 SUBSCRIPTION_INACTIVE`.
+- `GET /rooms/:roomId` stays public, and guest join over the socket still works
+  with no token — a test asserts this, because breaking it breaks the feature.
+
+**Verification:** `npm test -- room.controller.spec`
+**Scope:** S · **Dependencies:** 1
+
 ### Task 3: Report status on refresh
 
 **Description:** `POST /api/auth/refresh` keeps working for a blocked student but
@@ -193,38 +207,63 @@ documenting how to move `paid_until` to see it happen without waiting 30 days.
 | Guard re-derives dates and drifts from the policy | Guard calls the service; asserted by test |
 | Database failure silently grants access | Failure is 503, never a pass |
 | Client hides the UI instead of the server refusing | Server-side only; UI is not enforcement |
-| **Speaking WebSocket has no identity** | **Open question 3 — currently unenforceable** |
-| **Room creation is anonymous** | **Open question 2 — currently unenforceable** |
+| Room creation is anonymous | Task 2b adds `JwtAuthGuard` + subscription (decision 2) |
+| Speaking WebSocket has no identity | Gated at creation instead; guest anonymity is deliberate. Residual ≤2h, unrenewable (decision 3) |
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | A learning route is missed | High | Inventory above, plus an enumeration test |
-| The WebSocket path stays open | High | Open question 3; do not close the phase claiming complete enforcement while it is unresolved |
+| The WebSocket path stays open | Medium | Gated at room creation (Task 2b); residual bounded to one 2-hour unrenewable room, documented in decision 3 |
+| Task 2b breaks guest join by link | High | A test asserts an unauthenticated guest can still join; the guest was never meant to authenticate |
 | Guard adds a query to every learning request | Medium | One indexed lookup; measure before optimising |
 | Existing students without a center are locked out | High | They pass by design, and a test asserts it |
 
-## Open questions
+## Resolved decisions
 
-1. **Students with no center.** Existing users predate this model, and a removed
-   student has `center_id = null`. This plan lets them learn freely. The
-   alternative is to block them, which would lock out every current user the
-   moment this ships. *Recommendation: they pass. Global open question 3
-   (existing students) should be settled before Phase 10 regardless.*
+Settled 2026-08-24, before any code was written.
 
-2. **`POST /api/speaking/rooms` is anonymous.** Adding `JwtAuthGuard` is the only
-   way to enforce a subscription there, and it is a breaking change for any
-   client that creates rooms without a token. *Recommendation: add it, and
-   confirm the app already sends a token.*
+### 1. A student with no center passes
 
-3. **The speaking WebSocket has no authentication.** Enforcing there means
-   authenticating the socket — a token on the handshake, verified in
-   `handleConnection`, with the subscription checked at `join-room`. That is
-   real work and arguably its own task.
-   *Recommendation: decide explicitly. Either it is in scope for Phase 5, or
-   Phase 5 ships with a documented gap and it becomes a Phase 10 item. What it
-   must not be is unnoticed.*
+Existing users predate this model, and a removed student has `center_id = null`.
+Blocking them would lock every current user out of the product on the day this
+ships. They belong to no center, so no subscription governs them.
+
+Global open question 3 (what existing students eventually become) is unaffected
+and still due before Phase 10.
+
+### 2. `POST /api/speaking/rooms` gets `JwtAuthGuard` and the subscription guard
+
+Added as Task 2b. The breaking-change risk that made this a question turned out
+to be near zero, because the flow already requires a token one step later:
+
+```ts
+// room.controller.ts — already guarded today
+@Get('ice-servers')
+@UseGuards(JwtAuthGuard)
+```
+
+No WebRTC call completes without ICE servers, so a client that can finish a
+speaking session is already sending a token.
+
+### 3. The WebSocket is not authenticated, and does not need to be
+
+The guest is anonymous **by design**, not by omission. `GET /rooms/:roomId` is
+documented "public — no auth required", and `SPRECHEN_ROOM_PLAN.md` states that
+"roomId + hostToken together are the credentials". Someone practises with a
+partner who joins by link. **Authenticating the socket would break guest join.**
+
+Enforcement belongs at room creation instead — the host consumes the
+entitlement, the guest is a guest. Decision 2 puts it there.
+
+**Residual exposure, accepted and bounded:** a student blocked *while already in
+a room* keeps that room until it dies. `RoomService.createRoom` sets a hard
+`setTimeout` delete at 2 hours with no extension path, and rooms are in-memory,
+so the window is at most 2 hours and cannot be renewed. They cannot create
+another room.
+
+This is a documented boundary, not an unnoticed gap.
 
 ## Verification
 

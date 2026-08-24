@@ -5,6 +5,7 @@ import { RoomController } from '../src/modules/speaking/room/room.controller';
 import { RoomService } from '../src/modules/speaking/room/room.service';
 import { TurnCredentialsService } from '../src/modules/speaking/room/turn-credentials.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { Room } from '../src/modules/speaking/room/interfaces/room.interface';
 
 const VALID_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
@@ -49,6 +50,8 @@ describe('RoomController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
+      .overrideGuard(StudentSubscriptionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<RoomController>(RoomController);
@@ -60,7 +63,11 @@ describe('RoomController', () => {
 
   describe('createRoom()', () => {
     it('delegates to RoomService.createRoom() and returns the DTO', () => {
-      const dto = { roomId: VALID_UUID, hostToken: 'secret', expiresAt: EXPIRES_AT };
+      const dto = {
+        roomId: VALID_UUID,
+        hostToken: 'secret',
+        expiresAt: EXPIRES_AT,
+      };
       mockRoomService.createRoom.mockReturnValue(dto);
 
       const result = controller.createRoom();
@@ -74,7 +81,11 @@ describe('RoomController', () => {
 
   describe('getRoom()', () => {
     it('returns RoomInfoResponseDto for an existing waiting room', () => {
-      const room = makeRoom({ hostSocketId: null, guest: null, status: 'waiting' });
+      const room = makeRoom({
+        hostSocketId: null,
+        guest: null,
+        status: 'waiting',
+      });
       mockRoomService.getRoom.mockReturnValue(room);
 
       const result = controller.getRoom(VALID_UUID);
@@ -90,7 +101,11 @@ describe('RoomController', () => {
     });
 
     it('derives hasHost: true when hostSocketId is set', () => {
-      const room = makeRoom({ hostSocketId: 'socket-host-1', guest: null, status: 'waiting' });
+      const room = makeRoom({
+        hostSocketId: 'socket-host-1',
+        guest: null,
+        status: 'waiting',
+      });
       mockRoomService.getRoom.mockReturnValue(room);
 
       const result = controller.getRoom(VALID_UUID);
@@ -139,9 +154,14 @@ describe('RoomController', () => {
 
   describe('getIceServers()', () => {
     it('delegates to TurnCredentialsService with the studentId from the JWT', () => {
-      const dto = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], ttlSeconds: 3600 };
+      const dto = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        ttlSeconds: 3600,
+      };
       mockTurnService.getIceServers.mockReturnValue(dto);
-      const req = { student: { studentId: 'student-1', deviceId: 'd1' } } as any;
+      const req = {
+        student: { studentId: 'student-1', deviceId: 'd1' },
+      } as any;
 
       const result = controller.getIceServers(req);
 
@@ -150,7 +170,10 @@ describe('RoomController', () => {
     });
 
     it('falls back to "anonymous" when no studentId is present', () => {
-      mockTurnService.getIceServers.mockReturnValue({ iceServers: [], ttlSeconds: 3600 });
+      mockTurnService.getIceServers.mockReturnValue({
+        iceServers: [],
+        ttlSeconds: 3600,
+      });
       const req = { student: {} } as any;
 
       controller.getIceServers(req);

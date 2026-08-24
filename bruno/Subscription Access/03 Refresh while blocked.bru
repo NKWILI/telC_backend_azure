@@ -1,0 +1,68 @@
+meta {
+  name: 03 Refresh while blocked
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/auth/refresh
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "refreshToken": "{{studentRefreshToken}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("studentAccessToken", res.getBody().accessToken);
+    bru.setEnvVar("studentRefreshToken", res.getBody().refreshToken);
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Refresh KEEPS WORKING while blocked. That is a decision, not an oversight.
+
+  Blocking it would strand the student: their tokens would expire, they could
+  not get new ones, and the moment their center pays they would be locked out
+  of an account that is now perfectly valid. They keep a live session; the
+  learning routes are what refuse them.
+
+  ## Blocked response
+
+  ```json
+  {
+    "accessToken": "...",
+    "refreshToken": "...",
+    "subscription": { "status": "BLOCKED", "studentsMayLearn": false }
+  }
+  ```
+
+  201, with the bad news attached. A client that refreshes in the background
+  learns it is blocked here, rather than from a 403 on whatever the student
+  happened to tap next.
+
+  ## Refresh tokens are single use
+
+  Run this TWICE without re-running `01 Student login`.
+
+  The second attempt must fail with 401. The token rotates on every use and the
+  old one dies, so a stolen refresh token is only useful until the real client
+  next refreshes — at which point one of the two is caught.
+
+  The post-response script above captures the new pair, so a single run leaves
+  you in a working state. If you get an unexpected 401 here, that is usually
+  because you ran it twice; re-run `01 Student login`.
+
+  ## After restoring the subscription
+
+  Same request, and `subscription.status` follows the database immediately.
+  Nothing is cached between these two calls.
+}

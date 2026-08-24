@@ -26,6 +26,7 @@ import {
   ApiBadRequestResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { WritingService } from './writing.service';
@@ -37,7 +38,7 @@ import { SubmitWritingResponseDto } from './dto/submit-writing-response.dto';
 @ApiTags('Writing')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @Controller('api/writing')
 export class WritingController {
   constructor(

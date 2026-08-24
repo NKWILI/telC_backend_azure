@@ -1,0 +1,53 @@
+meta {
+  name: 04 Create speaking room
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/speaking/rooms
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentAccessToken}}
+}
+
+docs {
+  This route CHANGED in Phase 5, and it is the one most likely to surprise a
+  frontend developer.
+
+  It used to be anonymous — rate-limited, but with no idea who was calling.
+  A subscription cannot be enforced on a route that does not know the caller,
+  so it now requires a token and a live subscription.
+
+  The breaking-change risk turned out to be near zero: `GET
+  /api/speaking/rooms/ice-servers` already required a token, and no WebRTC call
+  completes without ICE servers. Any client that could finish a speaking
+  session was already sending one.
+
+  ## Checks
+
+  - entitled student -> 201 with `{ roomId, hostToken, expiresAt }`
+  - blocked student   -> 403 SUBSCRIPTION_INACTIVE
+  - NO Authorization header -> 401 (this is the part that changed)
+
+  ## The guest is still anonymous, on purpose
+
+  Run `GET {{baseUrl}}/api/speaking/rooms/<roomId>` with NO token at all. It
+  still returns 200.
+
+  That is not a hole. A student practises with a partner who joins by link and
+  may have no Lerniqo account — authenticating the socket or the lookup would
+  break the feature rather than secure it. The entitlement is spent by the HOST
+  when the room is created, which is what this request enforces.
+
+  ## The one gap, documented rather than hidden
+
+  A student blocked WHILE ALREADY IN a room keeps that room. Rooms are held in
+  memory and deleted by a hard two-hour timer with no extension, so the window
+  is at most two hours and cannot be renewed, and they cannot create another.
+  That boundary is written down in `tasks/phases/05-subscription-access-plan.md`
+  rather than left for someone to discover.
+}

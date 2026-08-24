@@ -190,6 +190,50 @@ describe('SubscriptionPolicyService', () => {
       expect(service.evaluate(record, NOW).studentsMayLearn).toBe(expected);
     });
 
+    it.each([
+      ['TRIAL_PENDING', subscription(), true],
+      [
+        'TRIAL',
+        subscription({
+          trial_started_at: at(-1 * DAY),
+          trial_ends_at: at(DAY),
+        }),
+        true,
+      ],
+      ['ACTIVE', subscription({ plan: 'PAID', paid_until: at(DAY) }), true],
+      [
+        'GRACE_PERIOD',
+        subscription({ plan: 'PAID', paid_until: at(-DAY) }),
+        true,
+      ],
+      [
+        'BLOCKED',
+        subscription({ plan: 'PAID', paid_until: at(-30 * DAY) }),
+        false,
+      ],
+    ])('%s → centerMayProvision %s', (_status, record, expected) => {
+      expect(service.evaluate(record, NOW).centerMayProvision).toBe(expected);
+    });
+
+    it('lets a brand-new center provision before anyone may learn', () => {
+      // TRIAL_PENDING is the state every center registers into, and the trial
+      // clock only starts when a student activates. If provisioning followed
+      // studentsMayLearn, a new center could never create the student whose
+      // activation starts its trial — onboarding would deadlock on itself.
+      const brandNew = service.evaluate(subscription(), NOW);
+
+      expect(brandNew.status).toBe('TRIAL_PENDING');
+      expect(brandNew.studentsMayLearn).toBe(false);
+      expect(brandNew.centerMayProvision).toBe(true);
+    });
+
+    it('stops provisioning only once blocked', () => {
+      const blocked = subscription({ plan: 'PAID', paid_until: at(-30 * DAY) });
+      const result = service.evaluate(blocked, NOW);
+
+      expect(result.centerMayProvision).toBe(result.status !== 'BLOCKED');
+    });
+
     it('agrees with its own status field, so callers can use either', () => {
       const record = subscription({ plan: 'PAID', paid_until: at(-DAY) });
       const result = service.evaluate(record, NOW);

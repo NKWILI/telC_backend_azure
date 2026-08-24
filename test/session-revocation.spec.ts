@@ -146,6 +146,7 @@ describe('session revocation', () => {
       authService,
       tokenService,
       {} as RateLimitService,
+      { forStudent: jest.fn() } as never,
     );
 
     await expect(
@@ -180,6 +181,7 @@ describe('session revocation', () => {
       authService,
       tokenService,
       {} as RateLimitService,
+      { forStudent: jest.fn() } as never,
     );
 
     await expect(

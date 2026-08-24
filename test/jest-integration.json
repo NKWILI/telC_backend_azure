@@ -17,6 +17,7 @@
     "^src/(.*)$": "<rootDir>/src/$1"
   },
   "testEnvironment": "node",
+  "maxWorkers": 1,
   "setupFiles": [
     "<rootDir>/test/jest-integration-setup.ts"
   ],

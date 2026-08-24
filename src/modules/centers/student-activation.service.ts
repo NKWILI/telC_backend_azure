@@ -1,6 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../shared/services/prisma.service';
+import {
+  StudentEntitlementService,
+  type StudentEntitlement,
+} from '../../shared/services/student-entitlement.service';
 import { AuthService } from '../auth/auth.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 
@@ -24,10 +28,13 @@ export interface ActivateStudentInput {
 
 @Injectable()
 export class StudentActivationService {
+  private readonly logger = new Logger(StudentActivationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenCrypto: TokenCryptoService,
     private readonly authService: AuthService,
+    private readonly entitlementService: StudentEntitlementService,
   ) {}
 
   /**
@@ -37,9 +44,11 @@ export class StudentActivationService {
    * The pre-reads exist only to separate "expired" from "unknown" for the
    * caller. The predicated update inside the transaction is the actual gate.
    */
-  async activate(
-    input: ActivateStudentInput,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  async activate(input: ActivateStudentInput): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    subscription?: StudentEntitlement;
+  }> {
     if (
       !input.password ||
       input.password.length < MIN_STUDENT_PASSWORD_LENGTH
@@ -118,10 +127,37 @@ export class StudentActivationService {
 
     // From here the student is an ordinary Lerniqo user who happens to belong
     // to a center, and gets the same session shape as any other.
-    return this.authService.issueSessionForStudent(
+    const tokens = await this.authService.issueSessionForStudent(
       student.id,
       input.deviceId,
       input.deviceName,
     );
+
+    // Read after the transaction, deliberately. Before it, the center is still
+    // TRIAL_PENDING — the state this very request has just ended — and the
+    // client would be handed the answer to the previous question.
+    const subscription = await this.readEntitlement(student.id);
+
+    return { ...tokens, ...(subscription ? { subscription } : {}) };
+  }
+
+  /**
+   * Reporting only, and never fatal.
+   *
+   * By the time this runs the key is spent and the password is set. Throwing
+   * would hand back a failure for an activation that actually succeeded, and
+   * the student would retry with a key that no longer works.
+   */
+  private async readEntitlement(
+    studentId: string,
+  ): Promise<StudentEntitlement | undefined> {
+    try {
+      return await this.entitlementService.forStudent(studentId);
+    } catch (error) {
+      this.logger.warn(
+        `activation: could not read entitlement for ${studentId}: ${(error as Error).message}`,
+      );
+      return undefined;
+    }
   }
 }

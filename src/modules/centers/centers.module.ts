@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
 import { CenterAuthController } from './center-auth.controller';
 import { CenterAuthService } from './center-auth.service';
 import { CenterExceptionFilter } from './center-exception.filter';
@@ -14,10 +15,13 @@ import { StudentActivationService } from './student-activation.service';
 import { StudentProvisioningService } from './student-provisioning.service';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 import { CenterAuthGuard } from './guards/center-auth.guard';
+import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
 
 @Module({
-  imports: [AuthModule],
+  // SubscriptionAccessModule imports nothing, so this cannot close a cycle
+  // back through AuthModule.
+  imports: [AuthModule, SubscriptionAccessModule],
   controllers: [
     CenterAuthController,
     CenterProfileController,
@@ -35,6 +39,7 @@ import { CentersService } from './centers.service';
     StudentActivationService,
     CenterStudentsService,
     CenterAuthGuard,
+    CenterSubscriptionGuard,
     CenterExceptionFilter,
   ],
   exports: [CentersService, SubscriptionPolicyService],

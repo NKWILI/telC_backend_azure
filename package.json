@@ -125,7 +125,8 @@
     "testPathIgnorePatterns": [
       "<rootDir>/test/center-session-integration",
       "<rootDir>/test/center-subscription-integration",
-      "<rootDir>/test/student-activation-integration"
+      "<rootDir>/test/student-activation-integration",
+      "<rootDir>/test/subscription-access-integration"
     ]
   }
 }

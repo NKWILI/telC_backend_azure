@@ -1,0 +1,68 @@
+meta {
+  name: 02 Learn
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/reading/exercise?modelltest=1
+  body: none
+  auth: none
+}
+
+params:query {
+  modelltest: 1
+}
+
+headers {
+  Authorization: Bearer {{studentAccessToken}}
+}
+
+docs {
+  The request the whole phase is about. Reading is one of seven learning
+  controllers; all of them behave identically here, so if you want to check
+  another, swap the URL for any of:
+
+  - /api/reading/exercise
+  - /api/listening/teils
+  - /api/modelltests
+  - /api/speaking/teils
+  - /api/sprachbausteine/exercise
+  - /api/writing/exercises
+
+  ## Entitled: 200
+
+  ## Blocked: 403
+
+  ```json
+  {
+    "message": "SUBSCRIPTION_INACTIVE",
+    "subscriptionStatus": "BLOCKED"
+  }
+  ```
+
+  403, not 401 — deliberately. The student is perfectly authenticated; telling
+  them to log in again would send them round a loop that cannot help them. And
+  `subscriptionStatus` rides along so the app can show the offer to carry on
+  rather than a dead error.
+
+  ## The thing to actually verify
+
+  Do NOT log in again after blocking the center. Use the SAME
+  {{studentAccessToken}} you already had.
+
+  It still fails. That is the point: the check runs on every request, not at
+  login, so a student blocked on Monday does not keep working until their token
+  happens to expire on Friday.
+
+  Then restore, and re-run with that same untouched token. It works again
+  immediately.
+
+  ## Other checks
+
+  - no Authorization header -> 401, not 403. Identity is a different question
+    from entitlement, and they answer separately.
+  - a CENTER access token -> 401. The student verifier refuses center tokens.
+  - a student with no center -> 200 always. Nobody's subscription governs them,
+    which is what keeps every pre-center user working the day this ships.
+}

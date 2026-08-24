@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
 import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { SprachbausteineService } from './sprachbausteine.service';
@@ -24,7 +25,7 @@ import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 /** Served when the caller omits ?modelltest= — keeps existing clients working. */
 const DEFAULT_MODELLTEST = 1;
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
 @ApiTags('Sprachbausteine')
 @Controller('api/sprachbausteine')
 export class SprachbausteineController {
@@ -33,7 +34,12 @@ export class SprachbausteineController {
   ) {}
 
   @Get('exercise')
-  @ApiQuery({ name: 'modelltest', required: false, schema: { type: 'integer', default: 1 }, example: 1 })
+  @ApiQuery({
+    name: 'modelltest',
+    required: false,
+    schema: { type: 'integer', default: 1 },
+    example: 1,
+  })
   @ApiOkResponse({ type: SprachbausteineExerciseResponseDto })
   getExercise(
     // Declared as string on purpose. The global ValidationPipe in main.ts runs
@@ -61,13 +67,18 @@ export class SprachbausteineController {
   }
 
   @Get('sessions')
-  @ApiQuery({ name: 'teilNumber', required: false, schema: { type: 'string', enum: ['1', '2'] } })
+  @ApiQuery({
+    name: 'teilNumber',
+    required: false,
+    schema: { type: 'string', enum: ['1', '2'] },
+  })
   async getSessions(
     @CurrentStudent() student: AccessTokenPayload | null,
     @Query('teilNumber') teilNumber?: string,
   ): Promise<ExerciseAttemptDto[]> {
     if (!student?.studentId) return [];
-    const teil = teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
+    const teil =
+      teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
     return this.sprachbausteineService.getSessions(student.studentId, teil);
   }
 

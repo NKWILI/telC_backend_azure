@@ -39,6 +39,7 @@ import {
 } from './dto/center-students.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
 import { CenterAuthGuard } from './guards/center-auth.guard';
+import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { StudentProvisioningService } from './student-provisioning.service';
 
 @ApiTags('Center Students')
@@ -68,7 +69,10 @@ export class CenterStudentsController {
     return this.students.list(centerUser, query);
   }
 
+  // Guarded, unlike the reads below: this is where a center consumes a seat
+  // and grants somebody new access to the product.
   @Post()
+  @UseGuards(CenterSubscriptionGuard)
   @ApiOperation({
     summary: 'Provision a student and mint their first activation key',
     description:
@@ -149,7 +153,10 @@ export class CenterStudentsController {
     return this.students.remove(centerUser, studentId);
   }
 
+  // Also guarded: a key is access, so re-issuing one to a blocked center
+  // would hand out exactly what the block is meant to withhold.
   @Post(':studentId/activation-key')
+  @UseGuards(CenterSubscriptionGuard)
   @ApiOperation({
     summary: 'Mint a replacement activation key',
     description:

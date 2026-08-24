@@ -1,0 +1,74 @@
+meta {
+  name: 01 Student login
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{studentEmail}}",
+    "password": "a-student-password",
+    "deviceId": "student-device-1",
+    "deviceName": "Android"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("studentAccessToken", res.getBody().accessToken);
+    bru.setEnvVar("studentRefreshToken", res.getBody().refreshToken);
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.subscription.studentsMayLearn: eq true
+}
+
+docs {
+  The password is whatever you chose in `Student Activation / 01 Activate`,
+  not one the center set — a center never knows its students' passwords.
+
+  Captures the student tokens for the rest of this folder. Note these are
+  SEPARATE from {{accessToken}}, which is the center's. A center token sent to
+  a student route is refused outright, and the reverse too; the two verifiers
+  do not accept each other's tokens.
+
+  ## What to look at in the response
+
+  `subscription` is the Phase 5 addition:
+
+  ```json
+  "subscription": {
+    "status": "TRIAL",
+    "studentsMayLearn": true,
+    "graceEndsAt": null
+  }
+  ```
+
+  It exists so a client knows where it stands before its first learning call,
+  instead of discovering a block through a 403 it cannot explain.
+
+  `status` has one value the policy itself never produces: **NONE**, meaning no
+  center governs this student. It is deliberately distinct from BLOCKED — one
+  is "you have no school", the other is "your school stopped paying", and only
+  the second is worth offering the student a way to fix.
+
+  ## Worth trying
+
+  - Log in as a student with no center (any account from before centers
+    existed) -> `status: "NONE"`, `studentsMayLearn: true`.
+  - Block the center per `00 How to block and restore`, then log in again ->
+    the login still SUCCEEDS, reporting BLOCKED. Refusing the sign-in would
+    strand an account whose center may yet pay; the learning routes are what
+    refuse them.
+  - `subscription` missing entirely is not an error. If the subscription could
+    not be read the field is simply absent, because a working login is worth
+    more than a cosmetic field. Enforcement never depends on it.
+}

@@ -10,6 +10,7 @@ import {
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuthController } from '../src/modules/auth/auth.controller';
+import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
@@ -164,6 +165,10 @@ describe('AuthController (e2e)', () => {
         { provide: AuthService, useValue: authService },
         { provide: TokenService, useValue: tokenService },
         { provide: RateLimitService, useValue: rateLimitService },
+        {
+          provide: StudentEntitlementService,
+          useValue: { forStudent: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -559,6 +564,10 @@ describe('AuthController (e2e)', () => {
         { provide: AuthService, useValue: authService },
         { provide: TokenService, useValue: tokenService },
         { provide: RateLimitService, useValue: rateLimitService },
+        {
+          provide: StudentEntitlementService,
+          useValue: { forStudent: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
