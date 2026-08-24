@@ -2,6 +2,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
+import { PricingService } from '../src/modules/centers/pricing.service';
 
 describe('CenterSubscriptionService', () => {
   const identity = { centerUserId: 'owner-1', centerId: 'center-1' } as never;
@@ -34,6 +35,7 @@ describe('CenterSubscriptionService', () => {
     service = new CenterSubscriptionService(
       prisma,
       new SubscriptionPolicyService(),
+      new PricingService(),
     );
   });
 

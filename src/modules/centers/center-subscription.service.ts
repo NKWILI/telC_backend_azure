@@ -5,6 +5,7 @@ import {
   SubscriptionPolicyService,
   type CenterSubscriptionStatus,
 } from './subscription-policy.service';
+import { PricingService, type Quote } from './pricing.service';
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
 
@@ -31,6 +32,7 @@ export class CenterSubscriptionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly policy: SubscriptionPolicyService,
+    private readonly pricing: PricingService,
   ) {}
 
   async getSubscription(
@@ -74,6 +76,36 @@ export class CenterSubscriptionService {
       seatsAvailable: Math.max(0, seatsLimit - seatsUsed),
       status: this.policy.evaluate(subscription).status,
     };
+  }
+
+  /**
+   * What the signed-in center would owe for a given number of seats.
+   *
+   * The seat count is the only thing the caller contributes. The price comes
+   * from the center's own billing terms and the floors from its own student
+   * count, so no request can talk this number down.
+   */
+  async quote(identity: SignedCenterIdentity, seats: number): Promise<Quote> {
+    const [center, studentCount] = await Promise.all([
+      this.prisma.center.findUnique({
+        where: { id: identity.centerId },
+        select: { unit_price_xaf: true, min_seats: true },
+      }),
+      this.prisma.student.count({ where: { center_id: identity.centerId } }),
+    ]);
+
+    if (!center) {
+      throw new NotFoundException('CENTER_NOT_FOUND');
+    }
+
+    return this.pricing.quote(
+      {
+        unitPriceXaf: center.unit_price_xaf,
+        minSeats: center.min_seats,
+        studentCount,
+      },
+      seats,
+    );
   }
 
   /**

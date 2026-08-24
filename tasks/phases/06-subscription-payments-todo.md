@@ -25,10 +25,10 @@ Companion to `tasks/phases/06-subscription-payments-plan.md`.
 
 ## Task 3: POST /subscription/quote
 
-- [ ] Own center only
-- [ ] Client-supplied unitPrice / amount / total rejected
-- [ ] Reachable while blocked
-- [ ] Commit the green increment
+- [x] Own center only
+- [x] Client-supplied unitPrice / amount / total rejected
+- [x] Reachable while blocked
+- [x] Commit the green increment
 
 ## Checkpoint A
 

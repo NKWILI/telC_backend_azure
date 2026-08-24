@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
+import { PricingService } from '../src/modules/centers/pricing.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { TokenCryptoService } from '../src/modules/auth/token-crypto.service';
 
@@ -24,6 +25,7 @@ const centers = new CentersService(prisma, tokenCrypto, emailService as never);
 const subscriptions = new CenterSubscriptionService(
   prisma,
   new SubscriptionPolicyService(),
+  new PricingService(),
 );
 
 /**

@@ -1,13 +1,17 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
+  Post,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -24,6 +28,10 @@ import {
   CenterUsageResponseDto,
 } from './dto/center-subscription-response.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
+import {
+  SubscriptionQuoteRequestDto,
+  SubscriptionQuoteResponseDto,
+} from './dto/subscription-quote.dto';
 import { CenterAuthGuard } from './guards/center-auth.guard';
 
 @ApiTags('Center Subscription')
@@ -49,6 +57,30 @@ export class CenterSubscriptionController {
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
   ): Promise<CenterSubscriptionResponseDto> {
     return this.subscriptions.getSubscription(centerUser);
+  }
+
+  // No CenterSubscriptionGuard here, deliberately, as on every route in this
+  // controller. A blocked center that cannot find out what it owes cannot pay,
+  // and a center that cannot pay never comes back.
+  @Post('subscription/quote')
+  @ApiOperation({
+    summary: 'Price a number of seats for the signed-in center',
+    description:
+      "The caller supplies a seat count and nothing else. The unit price comes from this center's own billing terms and the total is computed server-side; a request carrying a price, a total or another center id is rejected rather than ignored. Reachable while BLOCKED, because this is the first step of paying.",
+  })
+  @ApiCreatedResponse({ type: SubscriptionQuoteResponseDto })
+  @ApiBadRequestResponse({
+    type: CenterErrorResponseDto,
+    description:
+      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT, each carrying requiredSeats — the number this center has to reach.',
+  })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
+  async quote(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+    @Body() dto: SubscriptionQuoteRequestDto,
+  ): Promise<SubscriptionQuoteResponseDto> {
+    return this.subscriptions.quote(centerUser, dto.seats);
   }
 
   @Get('usage')
