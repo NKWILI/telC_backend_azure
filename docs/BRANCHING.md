@@ -166,6 +166,44 @@ before anyone decides the suite is optional:
 - a retry budget of two, which answered 503 to a real user whenever two
   requests collided and both lost the retry.
 
+### Why CI does not run the integration suite (decided 2026-08-24)
+
+CI runs the unit and e2e configs only. The integration suite runs on developer
+machines. That is deliberate, and it is not an invitation to point the CI job
+at the Neon scratch branch.
+
+**Pointing CI at the shared branch would reintroduce the race we just fixed.**
+`maxWorkers: 1` stops the suites racing *within* one run. It does nothing about
+*two runs at once*: push twice, or push while another build is going, and two
+jobs wipe each other's fixtures. Same failure as before, now intermittent and
+remote, where it cannot be reproduced.
+
+The expiry makes it worse. A job pinned to a branch that lapses goes
+permanently red, and a red build people have learned to ignore is exactly the
+habit the serial fix was meant to remove.
+
+**The plan is to add it at Phase 10, using a `postgres:16` service container**
+rather than Neon: a fresh database per run, no credentials in repository
+secrets, no expiry, no cross-run interference, and faster over a local socket.
+Phase 10 is the moment because that is when CI first guards something real —
+the merge to `main`. Until then nothing merges, so a gate there protects an
+empty road.
+
+This does mean CI and local would use different databases, and the section
+above argues for Neon precisely because "very probably identical" is what these
+tests exist to eliminate. Both are right, because the two jobs differ:
+
+| | Purpose | Needs |
+|---|---|---|
+| Local, Neon branch | Discovering engine-specific truths — Serializable, retries, constraints | The same engine and settings as production |
+| CI, container | Detecting regressions in logic already proven | Isolation and repeatability |
+
+A container is entirely adequate for the second and unsuitable for the first.
+
+Until Phase 10, what protects the work is running the full gate at every
+checkpoint. That is what caught the parallel-suite race, the unclosed pg pool,
+and a `tsc` failure sitting behind 758 green tests.
+
 ## Running the API for manual testing
 
 `.env` holds the production connection string, and NestJS reads it by default.
