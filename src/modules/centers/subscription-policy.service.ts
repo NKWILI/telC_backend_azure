@@ -37,6 +37,19 @@ export interface SubscriptionDecision {
    *  this rather than re-deriving access from the dates, because two
    *  implementations of one rule is how they drift apart. */
   studentsMayLearn: boolean;
+  /**
+   * Whether the center may create students and issue activation keys.
+   *
+   * Deliberately not the same question as `studentsMayLearn`, and the
+   * difference is `TRIAL_PENDING`. Every center registers into that state,
+   * and the trial clock only starts when a student activates — so a center
+   * must be able to provision the very student whose activation starts its
+   * trial. Gating provisioning on `studentsMayLearn` would deadlock onboarding
+   * for every new customer.
+   *
+   * Only a blocked center is stopped: it may still read, tidy up and pay.
+   */
+  centerMayProvision: boolean;
 }
 
 const LEARNING_ALLOWED: ReadonlySet<CenterSubscriptionStatus> = new Set([
@@ -71,6 +84,7 @@ export class SubscriptionPolicyService {
       status,
       graceEndsAt,
       studentsMayLearn: LEARNING_ALLOWED.has(status),
+      centerMayProvision: status !== 'BLOCKED',
     };
   }
 

@@ -45,15 +45,15 @@ gate never ran it. Worth fixing before Checkpoint B.
 
 ## Checkpoint A
 
-- [ ] Every state covered, including the no-center case
-- [ ] Full suite green, build exit 0
-- [ ] Human review before it is applied everywhere
+- [x] Every state covered, including the no-center case
+- [x] Full suite green, build exit 0
+- [x] Human review before it is applied everywhere
 
 ## Task 4: CenterSubscriptionGuard
 
-- [ ] A blocked center cannot provision students or mint keys
-- [ ] It can still read and update its profile, and read billing
-- [ ] Commit the green increment
+- [x] A blocked center cannot provision students or mint keys
+- [x] It can still read and update its profile, and read billing
+- [x] Commit the green increment
 
 ## Task 5: Integration proof
 

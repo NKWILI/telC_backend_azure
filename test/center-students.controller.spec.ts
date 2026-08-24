@@ -11,6 +11,7 @@ import { CenterStudentsController } from '../src/modules/centers/center-students
 import { CenterStudentsService } from '../src/modules/centers/center-students.service';
 import { StudentProvisioningService } from '../src/modules/centers/student-provisioning.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
+import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 describe('CenterStudentsController contract', () => {
@@ -89,6 +90,11 @@ describe('CenterStudentsController contract', () => {
           return true;
         },
       })
+      // This spec is about the controller contract. Whether the center is
+      // entitled to provision is center-subscription.guard.spec's subject,
+      // and which routes it protects is center-blocked-surface.spec's.
+      .overrideGuard(CenterSubscriptionGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = module.createNestApplication();

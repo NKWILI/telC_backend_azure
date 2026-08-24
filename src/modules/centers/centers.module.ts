@@ -14,6 +14,7 @@ import { StudentActivationService } from './student-activation.service';
 import { StudentProvisioningService } from './student-provisioning.service';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 import { CenterAuthGuard } from './guards/center-auth.guard';
+import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
 
 @Module({
@@ -35,6 +36,7 @@ import { CentersService } from './centers.service';
     StudentActivationService,
     CenterStudentsService,
     CenterAuthGuard,
+    CenterSubscriptionGuard,
     CenterExceptionFilter,
   ],
   exports: [CentersService, SubscriptionPolicyService],
