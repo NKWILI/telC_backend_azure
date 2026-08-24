@@ -74,7 +74,8 @@ describe('student provisioning and activation against real Postgres', () => {
 
   afterAll(async () => {
     await wipe();
-    await prisma.$disconnect();
+    // Ends the pg pool too, so the process can exit. See PrismaService.
+    await prisma.onModuleDestroy();
   });
 
   it('never lets two concurrent provisions exceed the last seat', async () => {

@@ -85,7 +85,10 @@ describe('subscription access against real Postgres', () => {
 
   afterAll(async () => {
     await wipe();
-    await prisma.$disconnect();
+    // onModuleDestroy, not $disconnect: the latter releases Prisma's side of
+    // the driver adapter but leaves the pg pool open, which keeps the process
+    // alive and would hang a CI step rather than merely printing a warning.
+    await prisma.onModuleDestroy();
   });
 
   it('lets a student learn during the trial, and refuses the moment it lapses', async () => {
@@ -232,9 +235,16 @@ describe('subscription access against real Postgres', () => {
         paid_until: daysFromNow(-8),
       });
 
-      expect(await attempt(asCenter(center.id), centerGuard)).toBeInstanceOf(
-        ForbiddenException,
-      );
+      const refused = await attempt(asCenter(center.id), centerGuard);
+
+      expect(refused).toBeInstanceOf(ForbiddenException);
+      // The status is asserted, not just the exception type. This guard also
+      // throws ForbiddenException for a missing center and a missing
+      // subscription row, so type alone would go green for the wrong reason.
+      expect((refused as ForbiddenException).getResponse()).toMatchObject({
+        message: 'SUBSCRIPTION_INACTIVE',
+        subscriptionStatus: 'BLOCKED',
+      });
     });
 
     it('agrees with the student side about the same center', async () => {
@@ -247,16 +257,21 @@ describe('subscription access against real Postgres', () => {
       });
       const student = await makeStudent(center.id);
 
-      expect(await attempt(asCenter(center.id), centerGuard)).toBeInstanceOf(
-        ForbiddenException,
+      const centerRefusal = await attempt(asCenter(center.id), centerGuard);
+      const studentRefusal = await attempt(asStudent(student.id), studentGuard);
+
+      // Same status from both sides, not merely a refusal from both. Matching
+      // exception types would hide the two reading the same row differently.
+      expect((centerRefusal as ForbiddenException).getResponse()).toMatchObject(
+        { subscriptionStatus: 'BLOCKED' },
       );
-      expect(await attempt(asStudent(student.id), studentGuard)).toBeInstanceOf(
-        ForbiddenException,
-      );
+      expect(
+        (studentRefusal as ForbiddenException).getResponse(),
+      ).toMatchObject({ subscriptionStatus: 'BLOCKED' });
     });
   });
 
-  it('refuses a student whose center row vanished, rather than passing them', async () => {
+  it('frees a student when their center row is deleted, per ON DELETE SET NULL', async () => {
     const center = await makeCenter({
       plan: 'PAID',
       paid_until: daysFromNow(30),
@@ -276,5 +291,38 @@ describe('subscription access against real Postgres', () => {
     await expect(studentGuard.canActivate(asStudent(student.id))).resolves.toBe(
       true,
     );
+  });
+
+  it('fails closed when a center exists but its subscription row does not', async () => {
+    // The one branch the mocks assert but no integration case reached: the
+    // student still belongs to a center, so something must govern them, and a
+    // missing row is a data fault rather than permission. Postgres allows this
+    // state — the relation is optional — so it is reachable in principle and
+    // must not read as "no subscription, therefore no restriction".
+    const center = await makeCenter({
+      plan: 'PAID',
+      paid_until: daysFromNow(30),
+    });
+    const student = await makeStudent(center.id);
+
+    await prisma.centerSubscription.delete({
+      where: { center_id: center.id },
+    });
+
+    const reread = await prisma.student.findUnique({
+      where: { id: student.id },
+    });
+    expect(reread!.center_id).toBe(center.id);
+
+    await expect(entitlement.forStudent(student.id)).resolves.toMatchObject({
+      status: 'BLOCKED',
+      studentsMayLearn: false,
+    });
+
+    const refused = await attempt(asStudent(student.id), studentGuard);
+    expect(refused).toBeInstanceOf(ForbiddenException);
+    expect((refused as ForbiddenException).getResponse()).toMatchObject({
+      subscriptionStatus: 'BLOCKED',
+    });
   });
 });

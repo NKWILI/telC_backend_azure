@@ -69,7 +69,8 @@ describe('center sessions against real Postgres', () => {
 
   afterAll(async () => {
     await wipeCenterData();
-    await prisma.$disconnect();
+    // Ends the pg pool too, so the process can exit. See PrismaService.
+    await prisma.onModuleDestroy();
   });
 
   it('lets exactly one of two concurrent refresh-hash rotations win', async () => {

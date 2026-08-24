@@ -8,6 +8,22 @@
  * PgBouncer in transaction mode and multiplexes connections underneath that,
  * so running through it would measure the pooler instead of Postgres.
  */
+/**
+ * Why `maxWorkers: 1` in jest-integration.json (JSON cannot hold the reason):
+ *
+ * Every suite here deletes shared center and student rows in one scratch
+ * database. Run in parallel they remove each other's fixtures mid-test —
+ * observed as foreign key violations on `students_center_id_fkey` straight
+ * after creating the center, and a duplicate-email assertion receiving P2003
+ * where it expected P2002. Thirteen of thirty-eight failed that way while the
+ * same suites passed serially.
+ *
+ * The red is the lucky outcome. The same race can produce green, with a suite
+ * asserting over rows a neighbour happened to leave behind, and a flaky
+ * integration gate is one people learn to re-run rather than read. A database
+ * per worker would restore parallelism; the whole suite is under a minute
+ * serially, so it has not been worth it.
+ */
 import { config } from 'dotenv';
 import { resolve } from 'path';
 

@@ -17,7 +17,6 @@
     "^src/(.*)$": "<rootDir>/src/$1"
   },
   "testEnvironment": "node",
-  "_comment_maxWorkers": "Serial on purpose. Every suite here truncates shared center and student tables in one scratch database, so run in parallel they delete each other's fixtures: foreign key violations on students_center_id_fkey, and a unique-violation assertion that gets P2003 instead of P2002. Worse than the red is the possible green, where a suite passes on another suite's rows. Sharding the database per worker would restore parallelism, but these suites take under a minute serially and correctness is the point of running them at all.",
   "maxWorkers": 1,
   "setupFiles": [
     "<rootDir>/test/jest-integration-setup.ts"

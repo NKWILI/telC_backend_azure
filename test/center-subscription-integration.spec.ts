@@ -59,7 +59,8 @@ describe('center subscriptions against real Postgres', () => {
 
   afterAll(async () => {
     await wipe();
-    await prisma.$disconnect();
+    // Ends the pg pool too, so the process can exit. See PrismaService.
+    await prisma.onModuleDestroy();
   });
 
   it('refuses a second subscription for the same center', async () => {
