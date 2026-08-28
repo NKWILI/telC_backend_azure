@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeakingLevel } from './speaking-topics.data';
+import { SafetyService } from './safety.service';
 
 export interface LobbyEntry {
   socketId: string;
@@ -40,7 +41,7 @@ export class LobbyService {
   private readonly entryTtlMs: number;
   private readonly maxSize: number;
 
-  constructor() {
+  constructor(private readonly safetyService: SafetyService) {
     this.entryTtlMs =
       parseInt(process.env.LOBBY_ENTRY_TTL_SECONDS || '120', 10) * 1000;
     this.maxSize = parseInt(process.env.LOBBY_MAX_SIZE || '200', 10);
@@ -183,6 +184,12 @@ export class LobbyService {
     for (const candidate of this.waiting.values()) {
       if (candidate.socketId === seeker.socketId) continue;
       if (candidate.level !== seeker.level) continue;
+      // Someone the seeker reported, or who reported them, is skipped rather
+      // than refused: neither side is told a block exists, so a report cannot
+      // be used to probe whether a particular person is online.
+      if (this.safetyService.isBlocked(seeker.socketId, candidate.socketId)) {
+        continue;
+      }
       if (!best || candidate.joinedAt < best.joinedAt) best = candidate;
     }
 

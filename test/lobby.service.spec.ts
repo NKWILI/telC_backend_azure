@@ -1,5 +1,11 @@
 import { LobbyService } from '../src/modules/speaking/room/lobby.service';
+import { SafetyService } from '../src/modules/speaking/room/safety.service';
 
+/**
+ * A real SafetyService rather than a stub: it is pure in-memory state with no
+ * collaborators, and blocking is part of what matching means, so faking it here
+ * would only test that the mock was called.
+ */
 function makeService(env: Record<string, string> = {}) {
   const previous = { ...process.env };
   Object.assign(process.env, {
@@ -7,9 +13,10 @@ function makeService(env: Record<string, string> = {}) {
     LOBBY_MAX_SIZE: '200',
     ...env,
   });
-  const service = new LobbyService();
+  const safety = new SafetyService();
+  const service = new LobbyService(safety);
   process.env = previous;
-  return service;
+  return Object.assign(service, { safety });
 }
 
 describe('LobbyService', () => {

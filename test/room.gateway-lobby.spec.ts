@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoomGateway } from '../src/modules/speaking/room/room.gateway';
 import { RoomService } from '../src/modules/speaking/room/room.service';
 import { LobbyService } from '../src/modules/speaking/room/lobby.service';
+import { SafetyService } from '../src/modules/speaking/room/safety.service';
 
 const ROOM_ID = 'room-uuid-1';
 const HOST_TOKEN = 'host-token-secret';
@@ -45,6 +46,7 @@ describe('RoomGateway — lobby', () => {
         RoomGateway,
         { provide: RoomService, useValue: roomService },
         LobbyService,
+        SafetyService,
       ],
     }).compile();
 

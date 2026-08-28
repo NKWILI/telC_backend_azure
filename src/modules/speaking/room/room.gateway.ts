@@ -15,9 +15,11 @@ import { Namespace, Socket } from 'socket.io';
 import { ROOM_GATEWAY_NAMESPACE } from './constants';
 import { RoomService } from './room.service';
 import { LobbyService } from './lobby.service';
+import { SafetyService } from './safety.service';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { ShuffleTopicDto } from './dto/shuffle-topic.dto';
 import { FindPartnerDto } from './dto/find-partner.dto';
+import { ReportPartnerDto } from './dto/report-partner.dto';
 
 @UsePipes(new ValidationPipe({ whitelist: true }))
 @WebSocketGateway({ namespace: ROOM_GATEWAY_NAMESPACE, cors: { origin: '*' } })
@@ -36,6 +38,7 @@ export class RoomGateway
   constructor(
     private readonly roomService: RoomService,
     private readonly lobbyService: LobbyService,
+    private readonly safetyService: SafetyService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -178,6 +181,42 @@ export class RoomGateway
     client.emit('search-cancelled', {});
 
     if (removed) this.broadcastWaitingCount();
+  }
+
+  // ─── report-partner ────────────────────────────────────────────────────────
+
+  @SubscribeMessage('report-partner')
+  handleReportPartner(client: Socket, data: ReportPartnerDto): void {
+    // The room is derived from the socket, never taken from the payload — the
+    // same rule leave-room follows. A client that could name the room it is
+    // reporting could end a call it is not in.
+    const room = this.roomService.getRoomBySocketId(client.id);
+    if (!room) return;
+
+    const roomId = room.roomId;
+    const isHost = client.id === room.hostSocketId;
+    const otherSocketId = isHost
+      ? (room.guest?.socketId ?? null)
+      : room.hostSocketId;
+
+    this.safetyService.report({
+      roomId,
+      reporterSocketId: client.id,
+      reportedSocketId: otherSocketId,
+      reason: data?.reason,
+    });
+
+    // The call ends for both. Leaving a reported call running would make the
+    // report a thing you do while still being subjected to the behaviour.
+    if (otherSocketId) {
+      const otherSocket = this.server.sockets.get(otherSocketId);
+      if (otherSocket) otherSocket.data.roomId = undefined;
+      this.server.to(otherSocketId).emit('partner-reported', {});
+    }
+
+    client.data.roomId = undefined;
+    client.emit('partner-reported', {});
+    this.roomService.deleteRoom(roomId, 'reported');
   }
 
   /**
