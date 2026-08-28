@@ -17,7 +17,7 @@ describe('GeminiService.mintLiveToken', () => {
     get: jest.fn((key: string) => {
       const values: Record<string, string> = {
         GEMINI_API_KEY: 'test-api-key',
-        GEMINI_LIVE_MODEL: 'gemini-live-2.5-flash-preview',
+        GEMINI_LIVE_MODEL: 'gemini-3.1-flash-live-preview',
         GEMINI_LIVE_VOICE: 'Zephyr',
       };
       return values[key];
@@ -39,12 +39,31 @@ describe('GeminiService.mintLiveToken', () => {
     return mintedTokenConfigs[mintedTokenConfigs.length - 1];
   }
 
+  it('falls back to a model the API actually serves for live sessions', async () => {
+    // A model that is not live-capable still mints a token without complaint and
+    // only fails when the browser opens the socket, so a wrong default here is
+    // invisible to every other test and to the endpoint's own 201. Verified
+    // against the real key: this one completes setup, gemini-live-2.5-flash-preview
+    // is rejected with "not supported for bidiGenerateContent".
+    // Key present, model unset — the deployment case this default exists for.
+    const bare = new GeminiService({
+      get: (key: string) =>
+        key === 'GEMINI_API_KEY' ? 'test-api-key' : undefined,
+    } as unknown as ConfigService);
+    await bare.onModuleInit();
+    await bare.mintLiveToken('INSTRUCTION', 600);
+
+    expect(lastConfig().liveConnectConstraints.model).toBe(
+      'gemini-3.1-flash-live-preview',
+    );
+  });
+
   it('returns the minted token name and the live model', async () => {
     const result = await service.mintLiveToken('INSTRUCTION', 600);
 
     expect(result).toEqual({
       token: 'auth_tokens/mock-token',
-      model: 'gemini-live-2.5-flash-preview',
+      model: 'gemini-3.1-flash-live-preview',
     });
   });
 
@@ -58,7 +77,7 @@ describe('GeminiService.mintLiveToken', () => {
     await service.mintLiveToken('INSTRUCTION', 600);
 
     expect(lastConfig().liveConnectConstraints.model).toBe(
-      'gemini-live-2.5-flash-preview',
+      'gemini-3.1-flash-live-preview',
     );
   });
 

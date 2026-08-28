@@ -14,10 +14,16 @@ export class GeminiService implements OnModuleInit {
     this.GEMINI_TEXT_MODEL =
       this.configService.get<string>('GEMINI_TEXT_MODEL') ?? 'gemini-2.0-flash';
     // Separate from the text model on purpose: the two move independently, and
-    // free-tier availability differs between them.
+    // availability differs between them. This default was verified against the
+    // project's own key — `gemini-live-2.5-flash-preview` mints a token happily
+    // and then fails at connect time with "not supported for
+    // bidiGenerateContent", so the model must be one the key actually lists as
+    // live-capable. Check with:
+    //   GET https://generativelanguage.googleapis.com/v1beta/models?key=...
+    //   → filter supportedGenerationMethods for 'bidiGenerateContent'
     this.GEMINI_LIVE_MODEL =
       this.configService.get<string>('GEMINI_LIVE_MODEL') ??
-      'gemini-live-2.5-flash-preview';
+      'gemini-3.1-flash-live-preview';
     this.GEMINI_LIVE_VOICE =
       this.configService.get<string>('GEMINI_LIVE_VOICE') ?? 'Zephyr';
   }

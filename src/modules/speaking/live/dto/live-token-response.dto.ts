@@ -16,11 +16,17 @@ export class LiveTokenResponseDto {
     example: 'auth_tokens/abc123',
     description:
       'Ephemeral, single-use Gemini token. Locked to the live model, audio ' +
-      'modality and the Teil instruction. Not the API key.',
+      'modality and the Teil instruction. Not the API key. The client MUST ' +
+      'connect with apiVersion "v1alpha" — ephemeral token support does not ' +
+      'exist on v1beta, and the socket opens and then closes without a setup ' +
+      'if you use it. Connect within 60 seconds; the token works exactly once.',
   })
   token: string;
 
-  @ApiProperty({ example: 'gemini-3.1-flash-live-preview' })
+  @ApiProperty({
+    example: 'gemini-3.1-flash-live-preview',
+    description: 'Pass verbatim to live.connect — do not hardcode client-side.',
+  })
   model: string;
 
   @ApiProperty({
