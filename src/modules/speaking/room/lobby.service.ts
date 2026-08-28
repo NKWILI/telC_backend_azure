@@ -136,19 +136,34 @@ export class LobbyService {
   }
 
   /**
-   * How many people are waiting, excluding the asker.
+   * How many people the given socket could actually be matched with.
    *
-   * Excluding yourself is what makes the number honest: a lone student would
-   * otherwise be told "1 person waiting" and reasonably expect a match.
+   * Two things make this number honest rather than merely large. It excludes
+   * the asker, because telling the only person queued that one person is
+   * waiting promises a match that cannot happen. And it counts only their own
+   * level, because someone waiting at a different level is not a candidate —
+   * that is inert today, since B1 is the only level, and would otherwise
+   * silently become wrong the moment a second level is seeded.
+   *
+   * Expect this to read 0 almost always: pairing happens on arrival, so the
+   * queue holds at most one person per level. It is a truthful number, not a
+   * measure of how busy the lobby is.
    */
   countWaiting(excludeSocketId?: string): number {
     this.prune();
 
-    if (excludeSocketId && this.waiting.has(excludeSocketId)) {
-      return this.waiting.size - 1;
+    const asker = excludeSocketId
+      ? this.waiting.get(excludeSocketId)
+      : undefined;
+
+    let count = 0;
+    for (const entry of this.waiting.values()) {
+      if (entry.socketId === excludeSocketId) continue;
+      if (asker && entry.level !== asker.level) continue;
+      count += 1;
     }
 
-    return this.waiting.size;
+    return count;
   }
 
   isWaiting(socketId: string): boolean {

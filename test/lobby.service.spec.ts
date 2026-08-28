@@ -166,6 +166,18 @@ describe('LobbyService', () => {
 
       expect(lobby.countWaiting('a')).toBe(2);
     });
+
+    it('counts only people at the asker’s own level', () => {
+      // Inert while B1 is the only level, and the reason it is written now: a
+      // cross-level count would quietly start lying the day a second level is
+      // seeded, and nothing would fail to reveal it.
+      const lobby = makeService();
+      lobby.enqueue('a', 'Anna', 'B1');
+      lobby.enqueue('b', 'Ben', 'B1');
+      lobby.enqueue('c', 'Chris', 'A2' as never);
+
+      expect(lobby.countWaiting('a')).toBe(1);
+    });
   });
 
   describe('stale entries', () => {

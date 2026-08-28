@@ -14,8 +14,10 @@ import {
 import { Namespace, Socket } from 'socket.io';
 import { ROOM_GATEWAY_NAMESPACE } from './constants';
 import { RoomService } from './room.service';
+import { LobbyService } from './lobby.service';
 import { JoinRoomDto } from './dto/join-room.dto';
 import { ShuffleTopicDto } from './dto/shuffle-topic.dto';
+import { FindPartnerDto } from './dto/find-partner.dto';
 
 @UsePipes(new ValidationPipe({ whitelist: true }))
 @WebSocketGateway({ namespace: ROOM_GATEWAY_NAMESPACE, cors: { origin: '*' } })
@@ -31,7 +33,10 @@ export class RoomGateway
 
   private readonly logger = new Logger(RoomGateway.name);
 
-  constructor(private readonly roomService: RoomService) {}
+  constructor(
+    private readonly roomService: RoomService,
+    private readonly lobbyService: LobbyService,
+  ) {}
 
   handleConnection(client: Socket) {
     this.logger.log(
@@ -96,6 +101,97 @@ export class RoomGateway
       if (room.hostSocketId) {
         this.server.to(room.hostSocketId).emit('guest-joined', { displayName });
       }
+    }
+  }
+
+  // ─── find-partner ──────────────────────────────────────────────────────────
+
+  @SubscribeMessage('find-partner')
+  handleFindPartner(client: Socket, data: FindPartnerDto): void {
+    // Same one-socket-one-place invariant as join-room: someone already in a
+    // call cannot also be queued for another.
+    if (client.data.roomId) {
+      client.emit('already-in-room', {});
+      return;
+    }
+
+    const level = data.level ?? 'B1';
+    const result = this.lobbyService.enqueue(
+      client.id,
+      data.displayName,
+      level,
+    );
+
+    if (result === 'already-searching') {
+      client.emit('already-searching', {});
+      return;
+    }
+
+    if (result === 'queue-full') {
+      client.emit('lobby-full', {});
+      return;
+    }
+
+    const match = this.lobbyService.findMatch(client.id);
+
+    if (!match) {
+      client.emit('waiting', {
+        count: this.lobbyService.countWaiting(client.id),
+      });
+      this.broadcastWaitingCount();
+      return;
+    }
+
+    // A match only has to produce a room; every signalling path after this is
+    // the one join-room already drives. The host token goes to exactly one peer
+    // and travels over the socket, never in a URL.
+    const room = this.roomService.createRoom(match.host.level);
+
+    this.server.to(match.host.socketId).emit('partner-found', {
+      roomId: room.roomId,
+      hostToken: room.hostToken,
+      displayName: match.guest.displayName,
+    });
+
+    this.server.to(match.guest.socketId).emit('partner-found', {
+      roomId: room.roomId,
+      displayName: match.host.displayName,
+    });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'lobby.room.created',
+        roomId: room.roomId,
+        level: match.host.level,
+      }),
+    );
+
+    this.broadcastWaitingCount();
+  }
+
+  // ─── cancel-search ─────────────────────────────────────────────────────────
+
+  @SubscribeMessage('cancel-search')
+  handleCancelSearch(client: Socket): void {
+    const removed = this.lobbyService.dequeue(client.id);
+
+    client.emit('search-cancelled', {});
+
+    if (removed) this.broadcastWaitingCount();
+  }
+
+  /**
+   * Pushes the current count to everyone still queued.
+   *
+   * Each socket is told how many OTHERS are waiting, so the last person in the
+   * lobby sees zero rather than one — a count that includes yourself promises a
+   * match that cannot happen.
+   */
+  private broadcastWaitingCount(): void {
+    for (const socketId of this.lobbyService.waitingSocketIds()) {
+      this.server.to(socketId).emit('waiting-count', {
+        count: this.lobbyService.countWaiting(socketId),
+      });
     }
   }
 
@@ -308,6 +404,15 @@ export class RoomGateway
   // ─── disconnect ────────────────────────────────────────────────────────────
 
   handleDisconnect(client: Socket): void {
+    // MUST come before the `if (!room) return` below. A socket waiting in the
+    // lobby has no room, so it takes that early return: a dequeue placed any
+    // later would never run for exactly the sockets that need it, and the queue
+    // would fill with entries for people who are gone. They would then be
+    // matched, and their partner would wait in a room nobody joins.
+    if (this.lobbyService.dequeue(client.id)) {
+      this.broadcastWaitingCount();
+    }
+
     // EDGE-06: O(1) lookup via client.data.roomId, fall back to linear scan
     const room = client.data.roomId
       ? this.roomService.getRoom(client.data.roomId as string)
