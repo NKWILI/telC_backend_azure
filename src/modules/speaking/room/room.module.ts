@@ -4,6 +4,8 @@ import { AuthModule } from '../../auth/auth.module';
 import { RoomController } from './room.controller';
 import { RoomGateway } from './room.gateway';
 import { RoomService } from './room.service';
+import { LobbyService } from './lobby.service';
+import { SafetyService } from './safety.service';
 import { TurnCredentialsService } from './turn-credentials.service';
 
 @Module({
@@ -12,7 +14,13 @@ import { TurnCredentialsService } from './turn-credentials.service';
     AuthModule, // provides TokenService for JwtAuthGuard on the ice-servers route
   ],
   controllers: [RoomController],
-  providers: [RoomService, RoomGateway, TurnCredentialsService],
+  providers: [
+    RoomService,
+    LobbyService,
+    SafetyService,
+    RoomGateway,
+    TurnCredentialsService,
+  ],
   exports: [RoomService],
 })
 export class RoomModule {}

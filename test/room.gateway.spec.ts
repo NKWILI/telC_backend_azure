@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoomGateway } from '../src/modules/speaking/room/room.gateway';
 import { RoomService } from '../src/modules/speaking/room/room.service';
+import { LobbyService } from '../src/modules/speaking/room/lobby.service';
+import { SafetyService } from '../src/modules/speaking/room/safety.service';
 import { Room } from '../src/modules/speaking/room/interfaces/room.interface';
 import { SPEAKING_TOPICS } from '../src/modules/speaking/room/speaking-topics.data';
 
@@ -73,7 +75,14 @@ describe('RoomGateway', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RoomGateway, { provide: RoomService, useValue: roomService }],
+      providers: [
+        RoomGateway,
+        { provide: RoomService, useValue: roomService },
+        // Real instance: pure in-memory state, no dependencies, and these specs
+        // exercise paths that legitimately touch the queue on disconnect.
+        LobbyService,
+        SafetyService,
+      ],
     }).compile();
 
     gateway = module.get<RoomGateway>(RoomGateway);
