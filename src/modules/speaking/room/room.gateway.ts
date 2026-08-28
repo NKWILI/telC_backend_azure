@@ -5,11 +5,17 @@ import {
   OnGatewayDisconnect,
   OnGatewayConnection,
 } from '@nestjs/websockets';
-import { OnApplicationShutdown, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  OnApplicationShutdown,
+  Logger,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Namespace, Socket } from 'socket.io';
 import { ROOM_GATEWAY_NAMESPACE } from './constants';
 import { RoomService } from './room.service';
 import { JoinRoomDto } from './dto/join-room.dto';
+import { ShuffleTopicDto } from './dto/shuffle-topic.dto';
 
 @UsePipes(new ValidationPipe({ whitelist: true }))
 @WebSocketGateway({ namespace: ROOM_GATEWAY_NAMESPACE, cors: { origin: '*' } })
@@ -28,7 +34,9 @@ export class RoomGateway
   constructor(private readonly roomService: RoomService) {}
 
   handleConnection(client: Socket) {
-    this.logger.log(JSON.stringify({ event: 'socket.connected', socketId: client.id }));
+    this.logger.log(
+      JSON.stringify({ event: 'socket.connected', socketId: client.id }),
+    );
   }
 
   // ─── join-room ─────────────────────────────────────────────────────────────
@@ -69,7 +77,9 @@ export class RoomGateway
         client.emit('guest-joined', { displayName: room.guest.displayName });
       }
 
-      this.logger.log(JSON.stringify({ event: 'socket.joined', roomId, role: 'host' }));
+      this.logger.log(
+        JSON.stringify({ event: 'socket.joined', roomId, role: 'host' }),
+      );
     } else {
       // Guest path
       if (room.guest) {
@@ -78,7 +88,9 @@ export class RoomGateway
       }
       this.roomService.setGuest(roomId, displayName, client.id);
       client.data.roomId = roomId;
-      this.logger.log(JSON.stringify({ event: 'socket.joined', roomId, role: 'guest' }));
+      this.logger.log(
+        JSON.stringify({ event: 'socket.joined', roomId, role: 'guest' }),
+      );
 
       // Notify host if already connected
       if (room.hostSocketId) {
@@ -89,12 +101,44 @@ export class RoomGateway
 
   // ─── offer ─────────────────────────────────────────────────────────────────
 
+  @SubscribeMessage('shuffle-topic')
+  handleShuffleTopic(client: Socket, data: ShuffleTopicDto): void {
+    const room = this.roomService.getRoom(data.roomId);
+
+    if (!room || room.status === 'ended') {
+      client.emit('room-not-found', {});
+      return;
+    }
+
+    if (client.id !== room.hostSocketId || client.data.roomId !== data.roomId) {
+      client.emit('unauthorized', {});
+      return;
+    }
+
+    const topic = this.roomService.selectNextTopic(data.roomId);
+    if (!topic) {
+      client.emit('room-not-found', {});
+      return;
+    }
+
+    this.server.to(client.id).emit('topic-changed', { topic });
+    if (room.guest) {
+      this.server.to(room.guest.socketId).emit('topic-changed', { topic });
+    }
+  }
+
   @SubscribeMessage('offer')
-  handleOffer(client: Socket, data: { roomId: string; offer: RTCSessionDescriptionInit }): void {
+  handleOffer(
+    client: Socket,
+    data: { roomId: string; offer: RTCSessionDescriptionInit },
+  ): void {
     const { roomId, offer } = data;
 
     const room = this.roomService.getRoom(roomId);
-    if (!room) { client.emit('room-not-found', {}); return; }
+    if (!room) {
+      client.emit('room-not-found', {});
+      return;
+    }
 
     if (client.id !== room.hostSocketId) {
       client.emit('unauthorized', {});
@@ -107,17 +151,30 @@ export class RoomGateway
     }
 
     this.server.to(room.guest.socketId).emit('offer', { offer });
-    this.logger.log(JSON.stringify({ event: 'signal.relayed', type: 'offer', roomId, direction: 'host→guest' }));
+    this.logger.log(
+      JSON.stringify({
+        event: 'signal.relayed',
+        type: 'offer',
+        roomId,
+        direction: 'host→guest',
+      }),
+    );
   }
 
   // ─── answer ────────────────────────────────────────────────────────────────
 
   @SubscribeMessage('answer')
-  handleAnswer(client: Socket, data: { roomId: string; answer: RTCSessionDescriptionInit }): void {
+  handleAnswer(
+    client: Socket,
+    data: { roomId: string; answer: RTCSessionDescriptionInit },
+  ): void {
     const { roomId, answer } = data;
 
     const room = this.roomService.getRoom(roomId);
-    if (!room) { client.emit('room-not-found', {}); return; }
+    if (!room) {
+      client.emit('room-not-found', {});
+      return;
+    }
 
     if (client.id !== room.guest?.socketId) {
       client.emit('unauthorized', {});
@@ -125,22 +182,42 @@ export class RoomGateway
     }
 
     if (!room.hostSocketId) {
-      this.logger.log(JSON.stringify({ event: 'signal.dropped', type: 'answer', roomId, reason: 'no-host' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'signal.dropped',
+          type: 'answer',
+          roomId,
+          reason: 'no-host',
+        }),
+      );
       return;
     }
 
     this.server.to(room.hostSocketId).emit('answer', { answer });
-    this.logger.log(JSON.stringify({ event: 'signal.relayed', type: 'answer', roomId, direction: 'guest→host' }));
+    this.logger.log(
+      JSON.stringify({
+        event: 'signal.relayed',
+        type: 'answer',
+        roomId,
+        direction: 'guest→host',
+      }),
+    );
   }
 
   // ─── ice-candidate ─────────────────────────────────────────────────────────
 
   @SubscribeMessage('ice-candidate')
-  handleIceCandidate(client: Socket, data: { roomId: string; candidate: RTCIceCandidateInit }): void {
+  handleIceCandidate(
+    client: Socket,
+    data: { roomId: string; candidate: RTCIceCandidateInit },
+  ): void {
     const { roomId, candidate } = data;
 
     const room = this.roomService.getRoom(roomId);
-    if (!room) { client.emit('room-not-found', {}); return; }
+    if (!room) {
+      client.emit('room-not-found', {});
+      return;
+    }
 
     let targetSocketId: string | null = null;
     let direction: string;
@@ -152,17 +229,38 @@ export class RoomGateway
       targetSocketId = room.hostSocketId;
       direction = 'guest→host';
     } else {
-      this.logger.log(JSON.stringify({ event: 'signal.dropped', type: 'ice-candidate', roomId, reason: 'unknown-sender' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'signal.dropped',
+          type: 'ice-candidate',
+          roomId,
+          reason: 'unknown-sender',
+        }),
+      );
       return;
     }
 
     if (!targetSocketId) {
-      this.logger.log(JSON.stringify({ event: 'signal.dropped', type: 'ice-candidate', roomId, reason: 'no-target' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'signal.dropped',
+          type: 'ice-candidate',
+          roomId,
+          reason: 'no-target',
+        }),
+      );
       return;
     }
 
     this.server.to(targetSocketId).emit('ice-candidate', { candidate });
-    this.logger.log(JSON.stringify({ event: 'signal.relayed', type: 'ice-candidate', roomId, direction }));
+    this.logger.log(
+      JSON.stringify({
+        event: 'signal.relayed',
+        type: 'ice-candidate',
+        roomId,
+        direction,
+      }),
+    );
   }
 
   // ─── leave-room ────────────────────────────────────────────────────────────
@@ -182,14 +280,28 @@ export class RoomGateway
       }
       client.data.roomId = undefined;
       this.roomService.deleteRoom(roomId);
-      this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'host', reason: 'intentional' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'socket.left',
+          roomId,
+          role: 'host',
+          reason: 'intentional',
+        }),
+      );
     } else {
       if (room.hostSocketId) {
         this.server.to(room.hostSocketId).emit('partner-left', {});
       }
       client.data.roomId = undefined;
       this.roomService.removeGuest(roomId);
-      this.logger.log(JSON.stringify({ event: 'socket.left', roomId, role: 'guest', reason: 'intentional' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'socket.left',
+          roomId,
+          role: 'guest',
+          reason: 'intentional',
+        }),
+      );
     }
   }
 
@@ -223,14 +335,28 @@ export class RoomGateway
         this.logger.log(JSON.stringify({ event: 'grace.expired', roomId }));
       });
 
-      this.logger.log(JSON.stringify({ event: 'socket.disconnected', roomId, role: 'host', reason: 'unexpected' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'socket.disconnected',
+          roomId,
+          role: 'host',
+          reason: 'unexpected',
+        }),
+      );
     } else {
       // Guest disconnected
       if (room.hostSocketId) {
         this.server.to(room.hostSocketId).emit('partner-left', {});
       }
       this.roomService.removeGuest(roomId);
-      this.logger.log(JSON.stringify({ event: 'socket.disconnected', roomId, role: 'guest', reason: 'unexpected' }));
+      this.logger.log(
+        JSON.stringify({
+          event: 'socket.disconnected',
+          roomId,
+          role: 'guest',
+          reason: 'unexpected',
+        }),
+      );
     }
   }
 
@@ -248,6 +374,12 @@ export class RoomGateway
       }
     }
 
-    this.logger.log(JSON.stringify({ event: 'server.shutdown', signal, activeRooms: rooms.length }));
+    this.logger.log(
+      JSON.stringify({
+        event: 'server.shutdown',
+        signal,
+        activeRooms: rooms.length,
+      }),
+    );
   }
 }
