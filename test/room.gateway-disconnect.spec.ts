@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoomGateway } from '../src/modules/speaking/room/room.gateway';
 import { RoomService } from '../src/modules/speaking/room/room.service';
 import { Room } from '../src/modules/speaking/room/interfaces/room.interface';
+import { SPEAKING_TOPICS } from '../src/modules/speaking/room/speaking-topics.data';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,9 @@ const GUEST_SOCKET_ID = 'socket-guest-1';
 function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     roomId: ROOM_ID,
+    level: 'B1',
+    topic: SPEAKING_TOPICS[0],
+    usedTopicIds: [SPEAKING_TOPICS[0].id],
     hostSocketId: HOST_SOCKET_ID,
     hostToken: HOST_TOKEN,
     guest: { displayName: 'Anna', socketId: GUEST_SOCKET_ID },
@@ -26,19 +30,31 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
 }
 
 function makeClient(id: string, roomId?: string) {
-  return { id, emit: jest.fn(), data: { roomId } as Record<string, unknown> } as any;
+  return {
+    id,
+    emit: jest.fn(),
+    data: { roomId } as Record<string, unknown>,
+  } as any;
 }
 
 // ─── spec ────────────────────────────────────────────────────────────────────
 
 describe('RoomGateway — disconnect & leave (Task 6)', () => {
   let gateway: RoomGateway;
-  let roomService: jest.Mocked<Pick<
-    RoomService,
-    | 'getRoom' | 'verifyHostToken' | 'setHost' | 'setGuest'
-    | 'deleteRoom' | 'removeGuest' | 'startGracePeriod'
-    | 'getRoomBySocketId' | 'getAllRooms'
-  >>;
+  let roomService: jest.Mocked<
+    Pick<
+      RoomService,
+      | 'getRoom'
+      | 'verifyHostToken'
+      | 'setHost'
+      | 'setGuest'
+      | 'deleteRoom'
+      | 'removeGuest'
+      | 'startGracePeriod'
+      | 'getRoomBySocketId'
+      | 'getAllRooms'
+    >
+  >;
   let mockEmit: jest.Mock;
   let mockTo: jest.Mock;
 
@@ -149,7 +165,10 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
 
       gateway.handleDisconnect(client);
 
-      expect(roomService.startGracePeriod).toHaveBeenCalledWith(ROOM_ID, expect.any(Function));
+      expect(roomService.startGracePeriod).toHaveBeenCalledWith(
+        ROOM_ID,
+        expect.any(Function),
+      );
       expect(mockTo).toHaveBeenCalledWith(GUEST_SOCKET_ID);
       expect(mockEmit).toHaveBeenCalledWith('host-disconnected', {});
     });
@@ -194,7 +213,9 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
 
       expect(roomService.deleteRoom).toHaveBeenCalledWith(ROOM_ID);
       // room-ended not emitted since guestSocketId is null
-      const roomEndedEmits = mockEmit.mock.calls.filter(([event]) => event === 'room-ended');
+      const roomEndedEmits = mockEmit.mock.calls.filter(
+        ([event]) => event === 'room-ended',
+      );
       expect(roomEndedEmits).toHaveLength(0);
     });
 
@@ -228,7 +249,9 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
 
       gateway.handleDisconnect(client);
 
-      expect(roomService.getRoomBySocketId).toHaveBeenCalledWith(HOST_SOCKET_ID);
+      expect(roomService.getRoomBySocketId).toHaveBeenCalledWith(
+        HOST_SOCKET_ID,
+      );
     });
   });
 
@@ -241,7 +264,11 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
       roomService.verifyHostToken.mockReturnValue(true);
       const client = makeClient('socket-host-2');
 
-      gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Host', hostToken: HOST_TOKEN });
+      gateway.handleJoinRoom(client, {
+        roomId: ROOM_ID,
+        displayName: 'Host',
+        hostToken: HOST_TOKEN,
+      });
 
       expect(mockTo).toHaveBeenCalledWith(GUEST_SOCKET_ID);
       expect(mockEmit).toHaveBeenCalledWith('host-reconnected', {});
@@ -253,9 +280,15 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
       roomService.verifyHostToken.mockReturnValue(true);
       const client = makeClient('socket-host-2');
 
-      gateway.handleJoinRoom(client, { roomId: ROOM_ID, displayName: 'Host', hostToken: HOST_TOKEN });
+      gateway.handleJoinRoom(client, {
+        roomId: ROOM_ID,
+        displayName: 'Host',
+        hostToken: HOST_TOKEN,
+      });
 
-      const guestJoinedCalls = client.emit.mock.calls.filter(([e]) => e === 'guest-joined');
+      const guestJoinedCalls = client.emit.mock.calls.filter(
+        ([e]) => e === 'guest-joined',
+      );
       expect(guestJoinedCalls).toHaveLength(0);
     });
   });
@@ -270,7 +303,9 @@ describe('RoomGateway — disconnect & leave (Task 6)', () => {
         hostSocketId: 'host-2',
         guest: { displayName: 'Bob', socketId: 'guest-2' },
       });
-      roomService.getAllRooms.mockReturnValue([room1, room2][Symbol.iterator]() as any);
+      roomService.getAllRooms.mockReturnValue(
+        [room1, room2][Symbol.iterator]() as any,
+      );
 
       gateway.onApplicationShutdown('SIGTERM');
 

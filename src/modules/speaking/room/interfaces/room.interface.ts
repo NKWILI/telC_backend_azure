@@ -1,3 +1,5 @@
+import { SpeakingLevel, SpeakingTopic } from '../speaking-topics.data';
+
 export interface RoomGuest {
   displayName: string;
   socketId: string;
@@ -5,6 +7,9 @@ export interface RoomGuest {
 
 export interface Room {
   roomId: string;
+  level: SpeakingLevel;
+  topic: SpeakingTopic;
+  usedTopicIds: string[];
   hostSocketId: string | null;
   hostToken: string;
   guest: RoomGuest | null;

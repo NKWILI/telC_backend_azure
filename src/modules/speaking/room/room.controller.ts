@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Param, Request, Logger, NotFoundException, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Query,
+  Request,
+  Logger,
+  NotFoundException,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
@@ -8,6 +18,7 @@ import { TurnCredentialsService } from './turn-credentials.service';
 import { CreateRoomResponseDto } from './dto/create-room-response.dto';
 import { RoomInfoResponseDto } from './dto/room-info-response.dto';
 import { IceServersResponseDto } from './dto/ice-servers-response.dto';
+import { CreateRoomQueryDto } from './dto/create-room-query.dto';
 
 @ApiTags('Speaking Rooms')
 @Controller('api/speaking/rooms')
@@ -22,8 +33,8 @@ export class RoomController {
   @Post()
   @UseGuards(ThrottlerGuard)
   @ApiOperation({ summary: 'Create a new speaking practice room' })
-  createRoom(): CreateRoomResponseDto {
-    const result = this.roomService.createRoom();
+  createRoom(@Query() query: CreateRoomQueryDto): CreateRoomResponseDto {
+    const result = this.roomService.createRoom(query.level);
     this.logger.log(`POST /api/speaking/rooms → roomId=${result.roomId}`);
     return result;
   }
@@ -33,14 +44,20 @@ export class RoomController {
   @Get('ice-servers')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get STUN/TURN ICE servers with ephemeral TURN credentials' })
-  getIceServers(@Request() req: { student: AccessTokenPayload }): IceServersResponseDto {
+  @ApiOperation({
+    summary: 'Get STUN/TURN ICE servers with ephemeral TURN credentials',
+  })
+  getIceServers(
+    @Request() req: { student: AccessTokenPayload },
+  ): IceServersResponseDto {
     const studentId = req.student?.studentId ?? 'anonymous';
     return this.turnCredentialsService.getIceServers(studentId);
   }
 
   @Get(':roomId')
-  @ApiOperation({ summary: 'Get room info by roomId (public — no auth required)' })
+  @ApiOperation({
+    summary: 'Get room info by roomId (public — no auth required)',
+  })
   getRoom(@Param('roomId') roomId: string): RoomInfoResponseDto {
     const room = this.roomService.getRoom(roomId);
 
@@ -48,14 +65,17 @@ export class RoomController {
       throw new NotFoundException(`Room ${roomId} not found`);
     }
 
-    this.logger.log(`GET /api/speaking/rooms/${roomId} → status=${room.status}`);
+    this.logger.log(
+      `GET /api/speaking/rooms/${roomId} → status=${room.status}`,
+    );
 
     return {
       roomId: room.roomId,
-      status: room.status as 'waiting' | 'active',
+      status: room.status,
       hasHost: room.hostSocketId !== null,
       hasGuest: room.guest !== null,
       expiresAt: room.expiresAt.toISOString(),
+      topic: room.topic,
     };
   }
 }
