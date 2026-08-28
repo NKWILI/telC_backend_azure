@@ -162,6 +162,48 @@ describe('LiveSessionLimitService', () => {
     });
   });
 
+  describe('release', () => {
+    it('frees the slot immediately, without waiting out the ceiling', async () => {
+      const service = makeService({
+        ELENA_IP_DAILY_MAX: '99',
+        ELENA_CONCURRENT_MAX: '1',
+      });
+
+      await service.acquire(GUEST, 'first');
+      expect(await messageKeyOf(service.acquire(GUEST, 'blocked'))).toBe(
+        'elenaBusyNow',
+      );
+
+      await service.release('first');
+
+      await expect(service.acquire(GUEST, 'second')).resolves.toBeUndefined();
+    });
+
+    it('does not refund the daily quota', async () => {
+      // Otherwise ending a session immediately would buy unlimited sessions.
+      const service = makeService({
+        ELENA_IP_DAILY_MAX: '2',
+        ELENA_CONCURRENT_MAX: '99',
+      });
+
+      await service.acquire(GUEST, 's1');
+      await service.release('s1');
+      await service.acquire(GUEST, 's2');
+      await service.release('s2');
+
+      expect(await messageKeyOf(service.acquire(GUEST, 's3'))).toBe(
+        'elenaDailyLimit',
+      );
+    });
+
+    it('is idempotent and tolerates an unknown id', async () => {
+      const service = makeService();
+
+      await expect(service.release('never-existed')).resolves.toBeUndefined();
+      await expect(service.release('never-existed')).resolves.toBeUndefined();
+    });
+  });
+
   describe('global daily cap', () => {
     it('refuses with elenaBusyToday and does not consume the caller quota', async () => {
       const service = makeService({

@@ -24,7 +24,11 @@ const TEIL_2 = {
 const mockSpeakingService = { getTeils: jest.fn() };
 const mockGeminiService = { mintLiveToken: jest.fn() };
 const mockPromptService = { build: jest.fn() };
-const mockLimitService = { acquire: jest.fn(), sessionSeconds: 600 };
+const mockLimitService = {
+  acquire: jest.fn(),
+  release: jest.fn(),
+  sessionSeconds: 600,
+};
 
 const guestReq = { student: { studentId: 'guest-uuid', isGuest: true } };
 
@@ -63,6 +67,7 @@ describe('LiveTokenController', () => {
     });
 
     expect(result).toEqual({
+      sessionId: expect.any(String),
       token: 'auth_tokens/xyz',
       model: 'gemini-live-2.5-flash-preview',
       expiresInSeconds: 600,
@@ -126,6 +131,28 @@ describe('LiveTokenController', () => {
     });
 
     expect(result.topic).toBeUndefined();
+  });
+
+  describe('endLiveSession', () => {
+    it('releases the slot the client was given', async () => {
+      const minted = await controller.createLiveToken('1.2.3.4', guestReq, {
+        teilNumber: 2,
+      });
+
+      await controller.endLiveSession({ sessionId: minted.sessionId });
+
+      expect(mockLimitService.release).toHaveBeenCalledWith(minted.sessionId);
+    });
+
+    it('returns the same sessionId it reserved the slot under', async () => {
+      // The client can only free the slot if these two match.
+      const minted = await controller.createLiveToken('1.2.3.4', guestReq, {
+        teilNumber: 1,
+      });
+
+      const reservedUnder = mockLimitService.acquire.mock.calls[0][1] as string;
+      expect(minted.sessionId).toBe(reservedUnder);
+    });
   });
 
   it('does not mint anything when a cap refuses the request', async () => {

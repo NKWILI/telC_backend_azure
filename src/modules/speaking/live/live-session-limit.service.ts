@@ -141,6 +141,25 @@ export class LiveSessionLimitService {
     return true;
   }
 
+  /**
+   * Frees a slot a caller is finished with, ahead of its TTL.
+   *
+   * The daily counters are deliberately NOT refunded: the session happened, and
+   * refunding on "I'm done" would let a client take unlimited sessions by
+   * ending each one immediately.
+   *
+   * Idempotent, and safe to call with an unknown id — releasing is only ever a
+   * capability held by whoever was given the id at mint time, which is a random
+   * UUID never shared with anyone else.
+   */
+  async release(sessionId: string): Promise<void> {
+    this.localSlots.delete(sessionId);
+    await this.valkey?.releaseConcurrent(CONCURRENT_KEY, sessionId);
+    this.logger.log(
+      JSON.stringify({ event: 'elena.session.released', sessionId }),
+    );
+  }
+
   /** Read-only look at the pool, so a full pool costs the caller nothing. */
   private async poolIsFull(): Promise<boolean> {
     const distributed = await this.valkey?.countConcurrent(

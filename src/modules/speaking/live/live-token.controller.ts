@@ -12,6 +12,7 @@ import {
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiOperation,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -28,6 +29,7 @@ import {
 } from './examiner-prompt.service';
 import { LiveSessionLimitService } from './live-session-limit.service';
 import { CreateLiveTokenDto } from './dto/create-live-token.dto';
+import { EndLiveSessionDto } from './dto/end-live-session.dto';
 import { LiveTokenResponseDto } from './dto/live-token-response.dto';
 
 /**
@@ -106,12 +108,30 @@ export class LiveTokenController {
     );
 
     return {
+      sessionId,
       token,
       model,
       expiresInSeconds: sessionSeconds,
       teilNumber: dto.teilNumber,
       ...(topic ? { topic } : {}),
     };
+  }
+
+  @Post('live-session/end')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Release a live session slot early',
+    description:
+      'Call when the conversation ends. The pool of concurrent sessions is ' +
+      'otherwise TTL-driven — the backend never learns that a ' +
+      'browser-to-Google session finished — so a two-minute conversation ' +
+      'would hold a slot for the full session ceiling and keep others out. ' +
+      'Idempotent, and always 204: an unknown or already-released id is not ' +
+      'reported, so this cannot be used to probe which sessions exist.',
+  })
+  @ApiNoContentResponse({ description: 'Slot released, or was not held' })
+  async endLiveSession(@Body() dto: EndLiveSessionDto): Promise<void> {
+    await this.limitService.release(dto.sessionId);
   }
 
   /**

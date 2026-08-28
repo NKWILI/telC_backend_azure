@@ -13,6 +13,16 @@ export class LiveTokenTopicDto {
 
 export class LiveTokenResponseDto {
   @ApiProperty({
+    example: 'f2c1a0e4-9b3d-4c7a-8e1f-0a2b3c4d5e6f',
+    description:
+      'Identifies this session to POST /api/speaking/live-session/end. Send it ' +
+      'when the conversation finishes so the slot is freed immediately; ' +
+      'otherwise it is held for the full session ceiling and blocks others. ' +
+      'Treat it as a secret — it is the only thing needed to free the slot.',
+  })
+  sessionId: string;
+
+  @ApiProperty({
     example: 'auth_tokens/abc123',
     description:
       'Ephemeral, single-use Gemini token. Locked to the live model, audio ' +

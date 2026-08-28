@@ -173,6 +173,22 @@ export class ValkeyService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  /**
+   * Hands a {@link trackConcurrent} slot back before its TTL runs out.
+   *
+   * The pool is TTL-driven so an abandoned session always frees itself; this is
+   * the fast path for a session that ended cleanly, which matters because a
+   * two-minute conversation would otherwise hold a slot for the full ten.
+   */
+  async releaseConcurrent(key: string, member: string): Promise<void> {
+    if (!this.client?.isReady) return;
+    try {
+      await this.client.zRem(key, member);
+    } catch {
+      this.logDegraded();
+    }
+  }
+
   async onApplicationShutdown(): Promise<void> {
     if (this.client?.isOpen) await this.client.close();
   }
