@@ -1,6 +1,6 @@
 # Spec: Return the answer key with the exercise (Sprachbausteine + Lesen)
 
-**Status:** draft — awaiting review
+**Status:** implemented — see [ADR 0001](adr/0001-answer-key-with-exercise.md)
 **Modules:** `sprachbausteine`, `lesen`
 **Related:** `docs/SPRACHBAUSTEINE_CORRECTION_FR.md` (the note to Herman), commit `7678440`, commit `fa18aa8`
 
@@ -147,7 +147,18 @@ converting in any direction.
 ### Lesen — `GET /api/reading/exercise`
 
 The key builder exists but lives inside `getSubmissionRules`, reachable only from `submit`.
-Extract it to a private method both paths call, then attach per item.
+
+> **Changed during implementation.** This section originally said to extract that builder
+> into one private method both paths call. It isn't. The two paths run *different queries* —
+> `getExercise` uses `findFirst` with an explicit `orderBy` (because nothing enforces one row
+> per Modelltest), while `getSubmissionRules` uses `findUnique`. Unifying them is a real
+> refactor of query semantics, not a code move, and it is not what this change is for.
+>
+> Instead each Teil builder composes the answer from columns it already loads — the same
+> approach taken in Sprachbausteine — and a test submits the key served by `getExercise()`
+> and asserts it scores 100. Two producers, guarded by a test, rather than one producer and
+> a wider refactor. If that test is ever deleted, the two can drift and students get marked
+> wrong for correct answers.
 
 | Teil | new field | on | value |
 |---|---|---|---|

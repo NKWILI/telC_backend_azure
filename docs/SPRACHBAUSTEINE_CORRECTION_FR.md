@@ -39,10 +39,38 @@ d'avant août.
 
 ## 2. Ce qui a changé maintenant
 
-Le corrigé est désormais renvoyé **au moment de la soumission**, et non plus avec
-l'exercice. C'est le même fonctionnement que Hören, qui marche déjà ainsi.
+> **Mise à jour du 9 septembre 2026.** La première version de cette note te
+> demandait d'appeler `/submit` pour obtenir le corrigé. Ce n'est plus
+> nécessaire : `correctOptionId` et `correctWordId` sont de retour dans
+> `GET /exercise`, sous les noms que ton code lit déjà.
 
-**`POST /api/sprachbausteine/submit`** renvoie maintenant :
+`GET /api/sprachbausteine/exercise` renvoie de nouveau la bonne réponse, sur
+chaque trou :
+
+```jsonc
+{
+  "contentRevision": "…",
+  "teil1": {
+    "gaps": [
+      {
+        "id": "21",
+        "correctOptionId": "21b",        // ← de retour
+        "options": [ { "id": "21a", "content": "…" }, … ]
+      }
+    ]
+  },
+  "teil2": {
+    "wordBank": [ { "id": "wa", "letter": "a", "content": "…" } ],
+    "gaps": [ { "id": "31", "correctWordId": "wa" } ]   // ← de retour
+  }
+}
+```
+
+Ce sont exactement les noms de champs que ton bundle cherche déjà.
+**Ton écran de correction remarche sans aucune modification de l'application.**
+
+`POST /api/sprachbausteine/submit` continue de renvoyer `answerKey` en plus.
+Rien n'est retiré ; les deux sources existent.
 
 ```json
 {
@@ -51,29 +79,32 @@ l'exercice. C'est le même fonctionnement que Hören, qui marche déjà ainsi.
 }
 ```
 
-`answerKey` contient **la bonne réponse par trou**, dans exactement le même
-encodage que celui que tu envoies. La comparaison est donc directe.
-
-`GET /api/sprachbausteine/exercise` reste inchangé : pas de corrigé dedans.
-
 ---
 
 ## 3. Ce que tu dois faire
 
-### Le flux devient
+### Pour la correction : plus rien
+
+Le champ est revenu sous son ancien nom. Ton code existant fonctionne.
+
+### Il reste quand même `/submit` à brancher
+
+Pas pour la correction — pour l'historique. Aujourd'hui l'application
+n'appelle jamais `/submit` (0 occurrence dans le bundle), donc **aucune
+tentative n'est enregistrée** : ni score conservé, ni progression, et
+`GET /sprachbausteine/sessions` reste vide.
+
+Tu peux l'appeler après avoir affiché la correction ; ce n'est plus bloquant.
 
 ```
 1. GET  /api/sprachbausteine/exercise?modelltest=1
    → afficher l'exercice, l'étudiant répond
 
-2. POST /api/sprachbausteine/submit
-   → { score, answerKey }
+2. Afficher la correction immédiatement (correctOptionId / correctWordId)
 
-3. Afficher la correction en comparant tes réponses à answerKey
+3. POST /api/sprachbausteine/submit
+   → enregistre la tentative, renvoie { score, answerKey }
 ```
-
-Aujourd'hui l'application n'appelle jamais `/submit` (0 occurrence dans le
-bundle). C'est le point à ajouter.
 
 ### La requête
 
@@ -169,21 +200,57 @@ corrigé.** Il faut donc traiter le cas d'erreur, et ne pas supposer qu'un
 
 ---
 
-## 7. Reste à faire — Lesen
+## 7. Lesen — c'est fait aussi
 
-Le même problème existe sur Lesen, et il va se poser dès que tu attaqueras cet
-écran. Le bundle montre que ton code lit `correctMatches`, et l'API ne l'envoie pas
-non plus. `reading/submit` n'est jamais appelé.
+Les deux questions posées dans la version précédente de cette note sont
+désormais tranchées côté backend, pour ne pas te bloquer plus longtemps.
+`GET /api/reading/exercise` renvoie la bonne réponse sur chaque élément.
 
-**Deux questions pour pouvoir le corriger sans se tromper :**
+| Teil | Champ | Sur | Valeur |
+|---|---|---|---|
+| 1 | `correctTitleId` | chaque `texts[]` | l'`id` du titre correspondant, tel quel |
+| 2 | `correctOptionId` | chaque `questions[]` | `"6a"` — numéro + lettre |
+| 3 | `correctAnswer` | chaque `situations[]` | `"a"`…`"z"`, ou `"X"` si aucune annonce ne convient |
 
-1. **Quelle forme attends-tu pour `correctMatches` ?**
-   `{ idDuTexte: idDuTitre }` ou l'inverse `{ idDuTitre: idDuTexte }` ?
-2. **Lesen Teil 2** (choix multiple) — quel nom de champ ton code attend-il pour
-   la bonne option ? On n'a trouvé ni `correctOptionId` ni autre chose côté Lesen
-   dans le bundle.
+```jsonc
+{
+  "teil1": {
+    "texts":  [ { "id": "1", "body": "…", "correctTitleId": "…" } ],
+    "titles": [ { "id": "…", "content": "…" } ]
+  },
+  "teil2": {
+    "questions": [ { "id": "6", "content": "…", "correctOptionId": "6a",
+                     "options": [ { "id": "6a", "content": "…" } ] } ]
+  },
+  "teil3": {
+    "situations":    [ { "id": "11", "content": "…", "correctAnswer": "a" } ],
+    "announcements": [ { "id": "a", "title": "…", "content": "…" } ]
+  }
+}
+```
 
-Dès que tu réponds, on applique la même correction sur Lesen Teil 1, 2 et 3.
+### Ce que ça change pour toi
+
+**Un seul point.** Ton bundle cherche `correctMatches` pour le Teil 1. Ce n'est
+pas ce qui est envoyé : la bonne réponse est posée **sur chaque texte**
+(`texts[].correctTitleId`) plutôt que rassemblée dans une map.
+
+Le choix a été fait pour que Lesen ressemble à Sprachbausteine, et pour ne pas
+ajouter un quatrième encodage à un endpoint qui en compte déjà trois. Si cette
+lecture est coûteuse chez toi, dis-le : renvoyer une map `correctMatches` en
+plus est trivial.
+
+Le `"X"` du Teil 3 n'est pas une valeur d'erreur : c'est la situation à laquelle
+aucune annonce ne répond, et le Teil 3 telc en contient toujours une.
+
+### Attention
+
+`POST /api/reading/submit` ne renvoie **que** `{ score }` — pas de `answerKey`,
+contrairement à Sprachbausteine et Hören. Le corrigé est dans `/exercise`.
+
+Et Lesen **n'enregistre aucune tentative**, quoi que tu envoies. Il n'y a ni
+historique ni progression côté Reading, et il n'y en aura pas tant que ce n'est
+pas construit — c'est un chantier séparé, pas un oubli de cette livraison.
 
 ---
 
@@ -192,9 +259,19 @@ Dès que tu réponds, on applique la même correction sur Lesen Teil 1, 2 et 3.
 | Module | Corrigé disponible | Où |
 |---|---|---|
 | Hören | ✅ | `POST /listening/submit` → `answerKey` |
-| Sprachbausteine | ✅ (nouveau) | `POST /sprachbausteine/submit` → `answerKey` |
-| Lesen | ❌ | en attente de tes deux réponses |
+| Sprachbausteine | ✅ | `GET /sprachbausteine/exercise` → `correctOptionId` / `correctWordId`, **et** `POST /submit` → `answerKey` |
+| Lesen | ✅ | `GET /reading/exercise` → `correctTitleId` / `correctOptionId` / `correctAnswer` |
 | Schreiben | ✅ | `corrections[]` |
 | Sprechen | ✅ | `POST /speaking/evaluate` → `corrections[]` |
+
+### Tentatives enregistrées
+
+Autre chose, pour éviter une mauvaise surprise plus tard :
+
+| Module | Tentative enregistrée | Historique |
+|---|---|---|
+| Hören | ✅ | `GET /listening/sessions` |
+| Sprachbausteine | ✅ si tu appelles `/submit` | `GET /sprachbausteine/sessions` |
+| Lesen | ❌ jamais | aucun |
 
 Documentation Swagger : `https://api.lerniqo.tech/api-docs`
