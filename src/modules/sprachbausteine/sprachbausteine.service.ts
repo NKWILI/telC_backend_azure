@@ -177,7 +177,11 @@ export class SprachbausteineService {
       },
     });
 
-    return { score };
+    // After the create, never before: a key returned on a submission that
+    // failed to persist could be harvested by submitting and discarding the
+    // error, which would reopen the exposure the exercise endpoint was
+    // hardened against.
+    return { score, answerKey: answers };
   }
 
   private async getAnswerKey(
