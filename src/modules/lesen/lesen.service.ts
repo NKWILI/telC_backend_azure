@@ -73,7 +73,16 @@ export class LesenService {
     }
 
     const texts = exercise.texts.map((t) => {
-      return { id: String(t.textNumber), von: t.von, an: t.an, body: t.body };
+      // correctTitleId is the raw title uuid, which is exactly what titles[].id
+      // exposes and what getSubmissionRules() scores against. Same value, no
+      // translation — unlike Teil 2 and Teil 3, which compose letters.
+      return {
+        id: String(t.textNumber),
+        von: t.von,
+        an: t.an,
+        body: t.body,
+        correctTitleId: t.correctTitleId,
+      };
     });
 
     const titles = exercise.titles.map((t) => ({
@@ -119,9 +128,16 @@ export class LesenService {
         id: `${q.questionNumber}${LETTERS[o.sortOrder]}`,
         content: o.content,
       }));
+      // Composed exactly as getSubmissionRules() composes it. Two producers of
+      // the same key now; a test asserts they agree.
+      const correct = q.options.find((o) => o.isCorrect);
+
       return {
         id: String(q.questionNumber),
         content: q.prompt,
+        correctOptionId: correct
+          ? `${q.questionNumber}${LETTERS[correct.sortOrder]}`
+          : '',
         options,
       };
     });
@@ -169,7 +185,16 @@ export class LesenService {
     });
 
     const situations = exercise.situations.map((s) => {
-      return { id: String(s.situationNumber), content: s.content };
+      // letterMap was already built above for the announcement ids and until now
+      // was never read. "X" marks the situation no announcement answers, which
+      // telc Teil 3 always includes.
+      return {
+        id: String(s.situationNumber),
+        content: s.content,
+        correctAnswer: s.noMatch
+          ? 'X'
+          : (letterMap.get(s.correctAnnouncementId ?? '') ?? ''),
+      };
     });
 
     return {
