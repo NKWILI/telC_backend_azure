@@ -50,4 +50,26 @@ export class SubmitSprachbausteineDto {
 export class SubmitSprachbausteineResponseDto {
   @ApiProperty()
   score!: number;
+
+  /**
+   * The correct answer per gap, in the same encoding the client submits, so a
+   * correction screen can compare the two directly:
+   *   Teil 1 → { "21": "21b" }   gap key + option letter
+   *   Teil 2 → { "31": "wa"  }   word-bank id
+   *
+   * Released here rather than from GET /exercise on purpose. Shipping it with
+   * the exercise would put the answers in the browser before the student has
+   * answered — the exposure closed in 7678440 and guarded by a test. Returning
+   * it once the attempt is recorded gives the frontend what it needs to show
+   * corrections, and gives up nothing: the answers are only revealed after the
+   * submission they grade.
+   */
+  @ApiProperty({
+    description:
+      'Correct answer per gap, keyed by gap id, in the same encoding as the ' +
+      'submitted answers. Compare client-side to mark each gap right or wrong.',
+    example: { '21': '21b', '22': '22a' },
+    additionalProperties: { type: 'string' },
+  })
+  answerKey!: Record<string, string>;
 }

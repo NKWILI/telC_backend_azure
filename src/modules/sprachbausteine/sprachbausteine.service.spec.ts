@@ -66,7 +66,10 @@ describe('SprachbausteineService answer security', () => {
       contentRevision: 'sb-1-v1',
       answers: { '21': '21a' },
     });
-    expect(result).toEqual({ score: 0 });
+    // Asserts the score specifically, not the whole response: this test exists
+    // to prove the client's score: 100 was ignored, and should not fail merely
+    // because the response gained a field.
+    expect(result.score).toBe(0);
     expect(prisma.sprachbausteineAttempt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         score: 0,
@@ -84,7 +87,56 @@ describe('SprachbausteineService answer security', () => {
       contentRevision: 'sb-2-v1',
       answers: { '31': 'wa' },
     });
-    expect(result).toEqual({ score: 100 });
+    expect(result.score).toBe(100);
+  });
+
+  it('returns the Teil 1 answer key with the score, so the client can correct', async () => {
+    // The exercise response deliberately withholds the answers (see the first
+    // test). Releasing them here instead is what lets a student see WHICH gaps
+    // were wrong, without ever letting them see it before they answer.
+    prisma.sprachbausteineExercise.findUnique.mockResolvedValue(teil1);
+
+    const result = await service.submit('student-1', {
+      modelltestNumber: 1,
+      teil_id: '1',
+      contentRevision: 'sb-1-v1',
+      answers: { '21': '21a' },
+    });
+
+    // Same encoding the client submits, so it can compare directly.
+    expect(result.answerKey).toEqual({ '21': '21b' });
+  });
+
+  it('returns the Teil 2 answer key with the score', async () => {
+    prisma.sprachbausteineTeil2Exercise.findUnique.mockResolvedValue(teil2);
+
+    const result = await service.submit('student-1', {
+      modelltestNumber: 1,
+      teil_id: '2',
+      contentRevision: 'sb-2-v1',
+      answers: { '31': 'wa' },
+    });
+
+    expect(result.answerKey).toEqual({ '31': 'wa' });
+  });
+
+  it('releases the answer key only after the attempt is recorded', async () => {
+    // Ordering matters: if the key were returned on a submission that failed to
+    // persist, a client could harvest answers by submitting and discarding the
+    // error, which is the exposure the exercise endpoint was hardened against.
+    prisma.sprachbausteineExercise.findUnique.mockResolvedValue(teil1);
+    prisma.sprachbausteineAttempt.create.mockRejectedValue(
+      new Error('database unavailable'),
+    );
+
+    await expect(
+      service.submit('student-1', {
+        modelltestNumber: 1,
+        teil_id: '1',
+        contentRevision: 'sb-1-v1',
+        answers: { '21': '21b' },
+      }),
+    ).rejects.toThrow('database unavailable');
   });
 
   it('rejects unknown gap IDs and answer values outside the exercise options', async () => {
