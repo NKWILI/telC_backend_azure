@@ -79,7 +79,19 @@ export class SprachbausteineService {
         id: `${gap.gap_key}${letters[o.sort_order]}`,
         content: o.content,
       }));
-      return { id: gap.gap_key, options };
+
+      // Composed exactly as getAnswerKey() composes it, so the key served here
+      // and the key /submit scores against cannot drift. A test asserts the two
+      // agree; if you change one, change both.
+      const correct = gap.options.find((o) => o.is_correct);
+
+      return {
+        id: gap.gap_key,
+        correctOptionId: correct
+          ? `${gap.gap_key}${letters[correct.sort_order]}`
+          : '',
+        options,
+      };
     });
 
     return {
@@ -123,7 +135,18 @@ export class SprachbausteineService {
       };
     });
 
-    const gaps = exercise.gaps.map((g) => ({ id: g.gapKey }));
+    // g.correctWordId is the word row's uuid; the client-facing id is "wa".
+    // Translate through the same mapping wordBank was built from.
+    const wordIdByUuid = new Map(
+      exercise.words.map((w) => [
+        w.id,
+        'w' + String.fromCharCode(97 + w.sortOrder),
+      ]),
+    );
+    const gaps = exercise.gaps.map((g) => ({
+      id: g.gapKey,
+      correctWordId: wordIdByUuid.get(g.correctWordId) ?? '',
+    }));
 
     return {
       imageUrl: exercise.imageUrl,
