@@ -26,7 +26,10 @@ export class SubmitListeningDto {
   type: string;
 
   @ApiProperty({
-    description: 'true = exam mode (no answer reveal), false = practice mode',
+    description:
+      'true = the attempt was taken under time pressure, false = practice. ' +
+      'Recorded on the attempt only. It does NOT suppress the answer key: ' +
+      'the response carries answerKey either way.',
     example: false,
   })
   @IsBoolean()
