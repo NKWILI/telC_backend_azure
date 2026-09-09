@@ -196,6 +196,10 @@ export class SprachbausteineService {
         answers: dto.answers,
         content_revision: dto.contentRevision,
         duration_seconds: dto.durationSeconds ?? null,
+        // Unconditional today, because GET /exercise always ships the key.
+        // Written explicitly rather than left to the column default so that
+        // adding an exam mode later has an obvious place to become a condition.
+        answers_prefetched: true,
         completed_at: new Date(),
       },
     });

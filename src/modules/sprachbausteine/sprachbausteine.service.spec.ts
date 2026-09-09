@@ -113,6 +113,10 @@ describe('SprachbausteineService answer security', () => {
         score: 0,
         answers: { '21': '21a' },
         content_revision: 'sb-1-v1',
+        // Every attempt from here on was taken with the answers already served
+        // by GET /exercise. Recorded so a later exam mode can tell these apart
+        // instead of guessing.
+        answers_prefetched: true,
       }),
     });
   });
