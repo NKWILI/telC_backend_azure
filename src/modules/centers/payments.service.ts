@@ -82,7 +82,7 @@ export class PaymentsService {
       const created = await this.prisma.$transaction(async (tx) => {
         const quote = this.pricing.quote(
           wanted,
-          await this.seats.tierContextFor(identity.centerId, tx),
+          await this.seats.pricingContextFor(identity.centerId, tx),
         );
 
         return tx.payment.create({

@@ -90,17 +90,27 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentResponseDto> {
+    // Mapped field by field onto the tier keys rather than passed through, so
+    // an unexpected property on the body can never reach pricing.
+    const mix = { START: dto.start, PRO: dto.pro, PREMIUM: dto.premium };
+
+    // Refused before any budget is spent. Every tier field is optional, so an
+    // empty body clears the validation pipe and arrives here; charging a slot
+    // for a request that buys nothing lets twenty empty submits lock a center
+    // out of the one route a lapsed center has to be able to reach. This is a
+    // pure check — no database, no writes — so doing it first costs nothing.
+    // The service checks again, because it must hold for any caller.
+    this.requireSomethingToBuy(mix);
+
     // Keyed on the center, not the IP: the caller is authenticated, and what
     // needs protecting is this center's own row count. The idempotency index
     // stops duplicates of ONE intent; nothing stops a flood of distinct ones,
     // because a fresh key is a fresh payment by design.
     await this.rateLimitService.checkPaymentCreateLimit(centerUser.centerId);
 
-    // Mapped field by field onto the tier keys rather than passed through, so
-    // an unexpected property on the body can never reach pricing.
     return this.payments.create(
       centerUser,
-      { START: dto.start, PRO: dto.pro, PREMIUM: dto.premium },
+      mix,
       this.requireIdempotencyKey(idempotencyKey),
     );
   }
@@ -136,6 +146,25 @@ export class PaymentsController {
     @Param('paymentId') paymentId: string,
   ): Promise<PaymentResponseDto> {
     return this.payments.get(centerUser, paymentId);
+  }
+
+  /**
+   * Whether this body asks to buy anything at all.
+   *
+   * Deliberately the same code `PricingService` raises for the same condition,
+   * so a client sees one answer to one mistake regardless of which layer
+   * noticed. The rule cannot live in the DTO: `class-validator` runs per
+   * property, and "at least one of these three" is a statement about the
+   * object.
+   */
+  private requireSomethingToBuy(mix: Record<string, number | undefined>): void {
+    const wanted = Object.values(mix).some(
+      (seats) => typeof seats === 'number' && seats > 0,
+    );
+
+    if (!wanted) {
+      throw new BadRequestException('SEAT_MIX_EMPTY');
+    }
   }
 
   /**

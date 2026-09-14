@@ -118,7 +118,10 @@ describe('the shape of a center refusal', () => {
     // reach the client, including fields added to the refusal later.
     const refusal = new PricingService().explain(
       { PRO: 1 },
-      { PRO: { stampedPriceXaf: null, studentCount: 3 } },
+      {
+        tiers: { PRO: { stampedPriceXaf: null, studentCount: 3 } },
+        totalStudents: 3,
+      },
     );
 
     const { body } = sendThrough(new PricingService().asException(refusal!));

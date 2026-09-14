@@ -172,6 +172,40 @@ describe('PaymentsController', () => {
       await pay({ start: 20 }, 'key-1').expect(409);
     });
 
+    /**
+     * A refused request must not cost the center its budget.
+     *
+     * Every tier field is optional, so `{}` clears the validation pipe and
+     * reaches the handler. Spending one of twenty an hour on a request that
+     * buys nothing means twenty empty submits can 429 a center out of the one
+     * route a lapsed center has to be able to reach.
+     */
+    describe('an unusable mix costs no rate-limit budget', () => {
+      it.each([
+        ['an empty body', {}],
+        ['every tier at zero', { start: 0, pro: 0, premium: 0 }],
+      ])('refuses %s without spending a slot', async (_case, body) => {
+        await pay(body, 'key-1').expect(400);
+
+        expect(rateLimit.checkPaymentCreateLimit).not.toHaveBeenCalled();
+        expect(payments.create).not.toHaveBeenCalled();
+      });
+
+      it('says which refusal it is, not just 400', async () => {
+        const response = await pay({}, 'key-1').expect(400);
+
+        expect(response.body.error).toBe('SEAT_MIX_EMPTY');
+      });
+
+      it('still spends a slot on a mix worth pricing', async () => {
+        // The limiter has to keep doing its job for real attempts, including
+        // ones the pricing floors go on to refuse.
+        await pay({ start: 10 }, 'key-1').expect(201);
+
+        expect(rateLimit.checkPaymentCreateLimit).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('the client cannot influence the price', () => {
       it.each([
         ['a unit price', { start: 10, unitPriceXaf: 1 }],

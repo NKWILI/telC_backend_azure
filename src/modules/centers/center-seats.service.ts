@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../shared/services/prisma.service';
-import type { CenterTierContext } from './pricing.service';
+import type { CenterPricingContext } from './pricing.service';
 
 /**
  * The part of the client this loader touches.
@@ -10,11 +10,14 @@ import type { CenterTierContext } from './pricing.service';
  * transaction that writes the payment, or the price and the student floor are
  * decided against a snapshot that can move before the insert lands.
  */
-export type SeatContextReader = Pick<PrismaService, 'centerSeat' | 'student'>;
+export type SeatContextReader = Pick<
+  PrismaService,
+  'center' | 'centerSeat' | 'student'
+>;
 
 /**
- * Loads what a center holds, per tier: the price it has already agreed to and
- * how many students sit in that tier.
+ * Loads what a center holds: the prices it has already agreed to, per tier,
+ * and how many students it has to seat.
  *
  * Its own service because two callers need exactly this — quoting and creating
  * a payment — and written twice the two copies would drift. `PricingService`
@@ -26,19 +29,28 @@ export class CenterSeatsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Two queries rather than four: the seat rows carry the stamped prices, and
-   * one grouped count covers every tier at once instead of a count per tier.
+   * Three queries: the center itself, which also yields the total student
+   * count; the seat rows, which carry the stamped prices; and one grouped
+   * count that covers every tier at once instead of a count per tier.
    *
    * `client` exists so a caller can read inside its own transaction. Quoting
    * passes nothing, because a quote is a question and a stale answer to it
    * costs nothing; creating a payment passes its transaction, because the
    * price it reads is the price the center is charged.
    */
-  async tierContextFor(
+  async pricingContextFor(
     centerId: string,
     client: SeatContextReader = this.prisma,
-  ): Promise<CenterTierContext> {
-    const [seats, studentsByTier] = await Promise.all([
+  ): Promise<CenterPricingContext> {
+    const [center, seats, studentsByTier] = await Promise.all([
+      // Existence and the student body in one read. A center token can outlive
+      // its center — the auth guard has a cache that does not recheck the row
+      // — and without this the missing center surfaces as a foreign-key error
+      // at insert, which reaches the client as a 500 instead of a 404.
+      client.center.findUnique({
+        where: { id: centerId },
+        select: { _count: { select: { students: true } } },
+      }),
       client.centerSeat.findMany({
         where: { center_id: centerId },
         select: { tier: true, unit_price_xaf: true },
@@ -50,28 +62,32 @@ export class CenterSeatsService {
       }),
     ]);
 
-    const context: CenterTierContext = {};
+    if (!center) {
+      throw new NotFoundException('CENTER_NOT_FOUND');
+    }
+
+    const tiers: CenterPricingContext['tiers'] = {};
 
     for (const seat of seats) {
-      context[seat.tier] = {
+      tiers[seat.tier] = {
         stampedPriceXaf: seat.unit_price_xaf,
         studentCount: 0,
       };
     }
 
     for (const group of studentsByTier) {
-      // A student carrying no tier sits in no seat, so there is nothing to
-      // count them against. That is anyone provisioned before tiers existed,
-      // and anyone whose center was deleted — the tier survives that delete,
-      // so it must never be trusted without a center.
+      // A student carrying no tier sits in no particular tier's seats, so
+      // there is nothing to count them against here. They are counted in
+      // `totalStudents` below, because they still occupy a seat — and today
+      // that is every student, since nothing writes `students.tier` yet.
       if (!group.tier) continue;
 
-      context[group.tier] = {
-        stampedPriceXaf: context[group.tier]?.stampedPriceXaf ?? null,
+      tiers[group.tier] = {
+        stampedPriceXaf: tiers[group.tier]?.stampedPriceXaf ?? null,
         studentCount: group._count._all,
       };
     }
 
-    return context;
+    return { tiers, totalStudents: center._count.students };
   }
 }

@@ -77,6 +77,7 @@ describe('recognising a replay', () => {
     prisma.$transaction = jest.fn(
       async (run: (tx: unknown) => Promise<unknown>) =>
         run({
+          center: prisma.center,
           centerSeat: prisma.centerSeat,
           student: prisma.student,
           payment: {
@@ -117,6 +118,9 @@ describe('recognising a replay', () => {
 
   beforeEach(() => {
     prisma = {
+      center: {
+        findUnique: jest.fn().mockResolvedValue({ _count: { students: 0 } }),
+      },
       centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
       student: { groupBy: jest.fn().mockResolvedValue([]) },
       payment: { findUnique: jest.fn() },

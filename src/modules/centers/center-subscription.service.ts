@@ -92,7 +92,7 @@ export class CenterSubscriptionService {
   async quote(identity: SignedCenterIdentity, mix: SeatMix): Promise<Quote> {
     return this.pricing.quote(
       mix,
-      await this.seats.tierContextFor(identity.centerId),
+      await this.seats.pricingContextFor(identity.centerId),
     );
   }
 

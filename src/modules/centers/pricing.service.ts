@@ -77,8 +77,20 @@ export interface TierContext {
   studentCount: number;
 }
 
-/** What pricing needs to know about a center. Nothing else about it matters. */
-export type CenterTierContext = Partial<Record<Tier, TierContext>>;
+/**
+ * What pricing needs to know about a center. Nothing else about it matters.
+ *
+ * `totalStudents` is every student the center governs, including those in no
+ * tier, and it is not the sum of the per-tier counts. Nothing writes
+ * `students.tier` until provisioning learns to, so today every per-tier count
+ * is zero while `totalStudents` is the real number — and a student in no tier
+ * still occupies a seat. Keeping both means the floor holds before tiers are
+ * assigned and after.
+ */
+export interface CenterPricingContext {
+  tiers: Partial<Record<Tier, TierContext>>;
+  totalStudents: number;
+}
 
 export interface QuoteLine {
   tier: Tier;
@@ -142,7 +154,7 @@ export interface QuoteRefusal {
  */
 @Injectable()
 export class PricingService {
-  quote(mix: SeatMix, context: CenterTierContext): Quote {
+  quote(mix: SeatMix, context: CenterPricingContext): Quote {
     const refusal = this.explain(mix, context);
 
     if (refusal) {
@@ -193,7 +205,7 @@ export class PricingService {
    * one. It therefore never throws — an unusable mix is reported, not raised,
    * because a UI asking "what is wrong with this cart" is not an error path.
    */
-  explain(mix: SeatMix, context: CenterTierContext): QuoteRefusal | null {
+  explain(mix: SeatMix, context: CenterPricingContext): QuoteRefusal | null {
     const normalised = this.normaliseMix(mix);
 
     if ('code' in normalised) {
@@ -213,14 +225,14 @@ export class PricingService {
       };
     }
 
-    // Both floors are computed before either is reported. They are not
-    // alternatives: a center can be short in one tier and short overall, and
+    // Every floor is computed before any is reported. They are not
+    // alternatives: a center can be short in one tier AND short overall, and
     // reporting only the rule hit first sends it away with a number that does
     // not unblock it.
     const requiredSeatsPerTier: Partial<Record<Tier, number>> = {};
 
     for (const tier of TIER_ORDER) {
-      const students = context[tier]?.studentCount ?? 0;
+      const students = context.tiers[tier]?.studentCount ?? 0;
       if (students > (wanted[tier] ?? 0)) {
         requiredSeatsPerTier[tier] = students;
       }
@@ -233,7 +245,15 @@ export class PricingService {
         total + (requiredSeatsPerTier[tier] ?? wanted[tier] ?? 0),
       0,
     );
-    const requiredSeatsTotal = Math.max(MIN_PAID_SEATS_TOTAL, floorFromTiers);
+
+    // Three floors, and the center has to clear the highest. The student body
+    // is its own floor rather than the sum of the tier counts, because a
+    // student in no tier is counted nowhere above and still holds a seat.
+    const requiredSeatsTotal = Math.max(
+      MIN_PAID_SEATS_TOTAL,
+      context.totalStudents,
+      floorFromTiers,
+    );
 
     if (Object.keys(requiredSeatsPerTier).length > 0) {
       return {
@@ -241,6 +261,13 @@ export class PricingService {
         requiredSeatsPerTier,
         requiredSeatsTotal,
       };
+    }
+
+    // Short overall while every tier is individually covered. That is what an
+    // untiered student body looks like, so no tier is named: naming one would
+    // send the center to change a number that is already correct.
+    if (totalSeats < context.totalStudents) {
+      return { code: 'SEATS_BELOW_STUDENT_COUNT', requiredSeatsTotal };
     }
 
     if (totalSeats < MIN_PAID_SEATS_TOTAL) {
@@ -261,7 +288,10 @@ export class PricingService {
     return null;
   }
 
-  private priceLines(wanted: SeatMix, context: CenterTierContext): QuoteLine[] {
+  private priceLines(
+    wanted: SeatMix,
+    context: CenterPricingContext,
+  ): QuoteLine[] {
     return TIER_ORDER.filter((tier) => wanted[tier]).map<QuoteLine>((tier) => {
       const seats = wanted[tier] as number;
       const unitPriceXaf = this.priceFor(tier, context);
@@ -291,8 +321,8 @@ export class PricingService {
    * line must be positive. So zero falls through to list price: converting
    * from a trial means starting to pay.
    */
-  private priceFor(tier: Tier, context: CenterTierContext): number {
-    const stamped = context[tier]?.stampedPriceXaf;
+  private priceFor(tier: Tier, context: CenterPricingContext): number {
+    const stamped = context.tiers[tier]?.stampedPriceXaf;
 
     return stamped != null && stamped > 0 ? stamped : TIER_PRICES_XAF[tier];
   }

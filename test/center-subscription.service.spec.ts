@@ -33,6 +33,11 @@ describe('CenterSubscriptionService', () => {
       centerSeat: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      center: {
+        // Existence plus the student body, which is what sets the floor a
+        // quote cannot go under.
+        findUnique: jest.fn().mockResolvedValue({ _count: { students: 0 } }),
+      },
       get deviceSession(): never {
         throw new Error('Student sessions must never be touched here');
       },
@@ -201,6 +206,33 @@ describe('CenterSubscriptionService', () => {
       prisma.student.groupBy.mockResolvedValue([
         { tier: 'PRO', _count: { _all: 6 } },
       ]);
+
+      await expect(service.quote(identity, { START: 10 })).rejects.toThrow(
+        'SEATS_BELOW_STUDENT_COUNT',
+      );
+    });
+
+    /**
+     * A center token can outlive its center: the auth guard caches the
+     * identity and does not recheck the row. `dev` answered 404 here. Losing
+     * the check turned a deleted center into a foreign-key error at insert on
+     * the payment path — a 500 — and into a cheerful list-price quote on this
+     * one, while the controller still documents 404.
+     */
+    it('refuses a token whose center no longer exists', async () => {
+      prisma.center.findUnique.mockResolvedValue(null);
+
+      await expect(service.quote(identity, { START: 10 })).rejects.toThrow(
+        'CENTER_NOT_FOUND',
+      );
+    });
+
+    it('refuses fewer seats than the center has students, tier or no tier', async () => {
+      // The floor that must hold before provisioning assigns any tier. Today
+      // every student is untiered, so a per-tier count alone reads as zero.
+      prisma.center.findUnique.mockResolvedValue({
+        _count: { students: 40 },
+      });
 
       await expect(service.quote(identity, { START: 10 })).rejects.toThrow(
         'SEATS_BELOW_STUDENT_COUNT',

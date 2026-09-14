@@ -5,28 +5,44 @@ import {
   MAX_SEATS_TOTAL,
   MAX_AMOUNT_XAF,
   type SeatMix,
-  type CenterTierContext,
+  type CenterPricingContext,
 } from '../src/modules/centers/pricing.service';
 
 /** A center that holds nothing and has no students yet. */
-const FRESH: CenterTierContext = {};
+const FRESH: CenterPricingContext = { tiers: {}, totalStudents: 0 };
 
 const holding = (
   tier: 'START' | 'PRO' | 'PREMIUM',
   stampedPriceXaf: number,
   studentCount = 0,
-): CenterTierContext => ({ [tier]: { stampedPriceXaf, studentCount } });
+): CenterPricingContext => ({
+  tiers: { [tier]: { stampedPriceXaf, studentCount } },
+  totalStudents: studentCount,
+});
 
 const withStudents = (
   tier: 'START' | 'PRO' | 'PREMIUM',
   studentCount: number,
-): CenterTierContext => ({
-  [tier]: { stampedPriceXaf: null, studentCount },
+): CenterPricingContext => ({
+  tiers: { [tier]: { stampedPriceXaf: null, studentCount } },
+  totalStudents: studentCount,
+});
+
+/**
+ * Students the center governs who sit in no tier at all.
+ *
+ * This is every student provisioned before tiers existed, which today is all
+ * of them: nothing writes `students.tier` until provisioning learns to. They
+ * still occupy seats, so they still set a floor.
+ */
+const untiered = (totalStudents: number): CenterPricingContext => ({
+  tiers: {},
+  totalStudents,
 });
 
 describe('PricingService', () => {
   const service = new PricingService();
-  const quote = (mix: SeatMix, context: CenterTierContext = FRESH) =>
+  const quote = (mix: SeatMix, context: CenterPricingContext = FRESH) =>
     service.quote(mix, context);
 
   describe('the published prices', () => {
@@ -188,6 +204,68 @@ describe('PricingService', () => {
     });
   });
 
+  /**
+   * The floor that must hold whatever tiers exist.
+   *
+   * `dev` counted students center-wide, which always worked. Moving to a
+   * per-tier count broke it silently: nothing writes `students.tier`, so every
+   * per-tier count is zero and a center with forty students could buy ten
+   * seats. A student in no tier still occupies a seat.
+   */
+  describe('seats can never be fewer than students, tiers or no tiers', () => {
+    it('refuses ten seats to a center with forty untiered students', () => {
+      expect(() => quote({ START: 10 }, untiered(40))).toThrow(
+        'SEATS_BELOW_STUDENT_COUNT',
+      );
+    });
+
+    it('asks for the whole student body, not the contract minimum', () => {
+      const refusal = service.explain({ START: 10 }, untiered(40));
+
+      expect(refusal).toMatchObject({
+        code: 'SEATS_BELOW_STUDENT_COUNT',
+        requiredSeatsTotal: 40,
+      });
+      // No tier is at fault, because no student is in one.
+      expect(refusal).not.toHaveProperty('requiredSeatsPerTier');
+    });
+
+    it('accepts a mix that covers every untiered student', () => {
+      expect(() => quote({ START: 25, PRO: 15 }, untiered(40))).not.toThrow();
+    });
+
+    it('counts untiered students alongside tiered ones', () => {
+      // Twelve students in total: eight in Pro, four in no tier. Buying eight
+      // Pro seats covers the Pro students and strands the other four.
+      const context: CenterPricingContext = {
+        tiers: { PRO: { stampedPriceXaf: null, studentCount: 8 } },
+        totalStudents: 12,
+      };
+
+      const refusal = service.explain({ PRO: 8, START: 2 }, context);
+
+      expect(refusal).toMatchObject({
+        code: 'SEATS_BELOW_STUDENT_COUNT',
+        requiredSeatsTotal: 12,
+      });
+    });
+
+    it('takes the highest of the three floors', () => {
+      // Pro needs 14 for its own students, the body needs 20 in total, and the
+      // contract minimum is 10. Twenty is the number that unblocks them.
+      const context: CenterPricingContext = {
+        tiers: { PRO: { stampedPriceXaf: null, studentCount: 14 } },
+        totalStudents: 20,
+      };
+
+      expect(service.explain({ PRO: 1 }, context)).toMatchObject({
+        code: 'SEATS_BELOW_STUDENT_COUNT',
+        requiredSeatsPerTier: { PRO: 14 },
+        requiredSeatsTotal: 20,
+      });
+    });
+  });
+
   describe('a tier cannot hold fewer seats than it has students', () => {
     it('refuses Start seats below the Start students already provisioned', () => {
       expect(() => quote({ START: 10 }, withStudents('START', 12))).toThrow(
@@ -200,7 +278,10 @@ describe('PricingService', () => {
       // say which one and how many.
       const refusal = service.explain(
         { START: 10, PRO: 2 },
-        { START: { stampedPriceXaf: null, studentCount: 12 } },
+        {
+          tiers: { START: { stampedPriceXaf: null, studentCount: 12 } },
+          totalStudents: 12,
+        },
       );
 
       expect(refusal).toMatchObject({
@@ -218,8 +299,11 @@ describe('PricingService', () => {
       const refusal = service.explain(
         { START: 1, PRO: 1 },
         {
-          START: { stampedPriceXaf: null, studentCount: 8 },
-          PRO: { stampedPriceXaf: null, studentCount: 6 },
+          tiers: {
+            START: { stampedPriceXaf: null, studentCount: 8 },
+            PRO: { stampedPriceXaf: null, studentCount: 6 },
+          },
+          totalStudents: 14,
         },
       );
 

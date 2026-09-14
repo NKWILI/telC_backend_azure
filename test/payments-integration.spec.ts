@@ -82,6 +82,21 @@ async function makeStudents(
   }
 }
 
+/**
+ * Students with no tier, which is every student any center has today. They
+ * still occupy a seat, so they still set a floor.
+ */
+async function makeUntieredStudents(centerId: string, count: number) {
+  for (let i = 0; i < count; i++) {
+    await prisma.student.create({
+      data: {
+        email: `payments-test-untiered-${i}-${Date.now()}-${Math.random()}@example.com`,
+        center_id: centerId,
+      },
+    });
+  }
+}
+
 describe('payments against real Postgres', () => {
   beforeEach(wipe);
 
@@ -275,6 +290,53 @@ describe('payments against real Postgres', () => {
       });
       // Nothing recorded. A refused quote must not leave a payment behind.
       expect(rows).toBe(0);
+    });
+
+    /**
+     * The floor as it actually behaves today.
+     *
+     * Nothing writes `students.tier` yet, so a per-tier count reads zero for
+     * every real student. Counting only per tier meant a center with forty
+     * students could buy ten seats — which is the whole product given away.
+     * This is the case a mocked Prisma cannot judge, because the count comes
+     * from the rows.
+     */
+    it('refuses ten seats to a center whose students are all untiered', async () => {
+      const center = await makeCenter();
+      await makeUntieredStudents(center.id, 12);
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toThrow('SEATS_BELOW_STUDENT_COUNT');
+
+      expect(
+        await prisma.payment.count({ where: { center_id: center.id } }),
+      ).toBe(0);
+    });
+
+    it('accepts a mix that seats every untiered student', async () => {
+      const center = await makeCenter();
+      await makeUntieredStudents(center.id, 12);
+
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 12 },
+        'key-1',
+      );
+
+      expect(payment.totalSeats).toBe(12);
+    });
+
+    it('refuses a token whose center no longer exists', async () => {
+      // A center token outlives its center: the guard caches the identity and
+      // never rechecks the row. Without the existence read this is a
+      // foreign-key error at insert, which reaches the center as a 500.
+      const center = await makeCenter();
+      await prisma.center.delete({ where: { id: center.id } });
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toThrow('CENTER_NOT_FOUND');
     });
 
     it('refuses fewer seats in a tier than it already has students', async () => {
