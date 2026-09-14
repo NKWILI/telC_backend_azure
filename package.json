@@ -129,7 +129,8 @@
       "<rootDir>/test/subscription-access-integration",
       "<rootDir>/test/center-billing-terms-integration",
       "<rootDir>/test/payments-integration",
-      "<rootDir>/test/draft-center-integration"
+      "<rootDir>/test/draft-center-integration",
+      "<rootDir>/test/center-seats-integration"
     ]
   }
 }

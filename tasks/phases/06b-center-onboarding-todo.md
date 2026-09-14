@@ -48,12 +48,12 @@ The part the frontend needs soonest. Independent of tiers.
 
 ### Task 4: Tier schema, additive only
 
-- [ ] `Tier` enum, `center_seats` table, `Student.tier`
-- [ ] `center_seats` unique per (center, tier), holds quantity and the stamped
+- [x] `Tier` enum, `center_seats` table, `Student.tier`
+- [x] `center_seats` unique per (center, tier), holds quantity and the stamped
       `unit_price_xaf`
-- [ ] `Student.tier` nullable, for students no center governs
-- [ ] Nothing dropped; the tree builds unchanged
-- [ ] Commit the green increment
+- [x] `Student.tier` nullable, for students no center governs
+- [x] Nothing dropped; the tree builds unchanged
+- [x] Commit the green increment
 
 ### Task 5: Tier prices and the rewritten pricing service
 
@@ -139,6 +139,8 @@ The part the frontend needs soonest. Independent of tiers.
 ### Task 14: Enforce the rolling allowance
 
 - [ ] One authority answering "may this student run one more speaking session"
+- [ ] A tier is only read alongside a center, so a student whose center was
+      deleted keeps no quota — the stale tier survives the delete by design
 - [ ] Start 2, Pro 5, Premium 20, over a rolling 24 hours
 - [ ] No timezone anywhere
 - [ ] Refusal carries tier, usedToday, allowedToday, resetsAt

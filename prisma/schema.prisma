@@ -17,6 +17,18 @@ enum CenterUserRole {
   MANAGER
 }
 
+/// What a seat entitles its student to.
+///
+/// A trial is not a tier: it is an ordinary START seat priced at zero with a
+/// 14-day clock, so trial and paid Start students behave identically
+/// everywhere except the clock. That keeps the quota logic to three cases
+/// rather than four.
+enum Tier {
+  START
+  PRO
+  PREMIUM
+}
+
 model Student {
   id           String   @id @default(uuid())
   first_name   String?
@@ -56,6 +68,11 @@ model Student {
   /// Nullable: students who predate the center model, and any future
   /// independent student, simply have none.
   center_id String?
+
+  /// Which tier this student's seat is, assigned by their center. Null for a
+  /// student no center governs — anyone predating centers, and anyone removed
+  /// from one. It decides what the student may do, so it is read per request.
+  tier Tier?
 
   center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
   device_sessions DeviceSession[]
@@ -132,6 +149,7 @@ model Center {
 
   users        CenterUser[]
   payments     Payment[]
+  seats        CenterSeat[]
   students     Student[]
   subscription CenterSubscription?
 
@@ -166,6 +184,35 @@ model CenterSubscription {
   center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
 
   @@map("center_subscriptions")
+}
+
+/// The seats a center holds in one tier.
+///
+/// One row per tier, so a seat count never depends on remembering to sum
+/// several rows. A center may hold all three tiers at once — five Start,
+/// three Pro and two Premium is a valid arrangement.
+model CenterSeat {
+  id        String @id @default(uuid())
+  center_id String
+  tier      Tier
+  /// Seats held in this tier. Never zero: a row saying "no seats" is not the
+  /// same as no row, and would make every count ambiguous.
+  quantity  Int
+
+  /// The price this center pays for this tier, copied in at purchase rather
+  /// than looked up. This is what makes grandfathering automatic — raising the
+  /// list price later cannot rewrite what a center already agreed to.
+  ///
+  /// Zero is legal, and is how a free trial seat is held.
+  unit_price_xaf Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+
+  @@unique([center_id, tier])
+  @@map("center_seats")
 }
 
 enum PaymentStatus {
