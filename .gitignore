@@ -75,3 +75,5 @@ bruno/environments/*.local.bru
 !tasks/phases/05-subscription-access-todo.md
 !tasks/phases/06-subscription-payments-plan.md
 !tasks/phases/06-subscription-payments-todo.md
+!tasks/phases/06b-center-onboarding-plan.md
+!tasks/phases/06b-center-onboarding-todo.md

@@ -111,13 +111,16 @@ export class CenterProfileService {
     first_name: string;
     last_name: string;
     email: string;
-    phone: string;
+    // Nullable because registration no longer collects them. A center that has
+    // not finished onboarding genuinely has no country, city or manager phone,
+    // and the response says so rather than inventing an empty string.
+    phone: string | null;
     email_verified: boolean;
     center: {
       id: string;
       name: string;
-      country: string;
-      city: string;
+      country: string | null;
+      city: string | null;
       logo_url: string | null;
     };
   }): CenterProfileResponseDto {

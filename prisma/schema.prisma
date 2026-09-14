@@ -102,10 +102,18 @@ model DeviceSession {
 }
 
 model Center {
-  id         String   @id @default(uuid())
-  name       String
-  country    String
-  city       String
+  id   String @id @default(uuid())
+  /// The only thing registration collects about the center itself, so it stays
+  /// required — optional here would let a five-field signup write a row that
+  /// says nothing.
+  name String
+
+  /// Collected during onboarding rather than at registration, so both are
+  /// nullable until a center completes its profile. Nothing reads them today;
+  /// they exist for invoices and for knowing which market a school is in.
+  /// Profile completeness is derived from these being present, never stored.
+  country    String?
+  city       String?
   logo_url   String?
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
@@ -212,7 +220,10 @@ model CenterUser {
   first_name   String
   last_name    String
   email        String         @unique
-  phone        String
+  /// The manager's own number, not the school's public line, and collected
+  /// during onboarding rather than at registration. Nullable for that reason.
+  /// This is who gets contacted about a late payment or a locked account.
+  phone        String?
   created_at   DateTime       @default(now())
   updated_at   DateTime       @default(now()) @updatedAt
   last_seen_at DateTime       @default(now())

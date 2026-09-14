@@ -17,8 +17,12 @@ export class CenterAuthUserDto {
   @ApiProperty({ format: 'email' })
   email: string;
 
-  @ApiProperty()
-  phone: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Null until the manager completes onboarding. Registration no longer collects it.',
+  })
+  phone: string | null;
 
   @ApiProperty()
   emailVerified: boolean;
@@ -31,11 +35,13 @@ export class CenterAuthCenterDto {
   @ApiProperty()
   name: string;
 
-  @ApiProperty()
-  country: string;
+  // Both null until onboarding is complete. A client should read the
+  // `onboarding` block rather than inferring completeness from these.
+  @ApiPropertyOptional({ nullable: true, example: 'CM' })
+  country: string | null;
 
-  @ApiProperty()
-  city: string;
+  @ApiPropertyOptional({ nullable: true, example: 'Douala' })
+  city: string | null;
 
   @ApiPropertyOptional({ nullable: true, format: 'uri' })
   logoUrl: string | null;
