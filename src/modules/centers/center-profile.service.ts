@@ -14,6 +14,22 @@ type SignedCenterIdentity = Pick<
   'centerUserId' | 'centerId'
 >;
 
+/**
+ * What a center must supply before it can pay, in the order a checklist should
+ * show them. Declaration order is the reported order, so a dashboard never
+ * reshuffles between two requests.
+ *
+ * The logo is deliberately absent: optional by decision, so a center completes
+ * onboarding without one.
+ */
+const REQUIRED_PROFILE_FIELDS = ['country', 'city', 'phone'] as const;
+
+type RequiredProfileField = (typeof REQUIRED_PROFILE_FIELDS)[number];
+
+/** Blank is not an answer. Spaces must not satisfy a checklist. */
+const isSupplied = (value: string | null | undefined): boolean =>
+  typeof value === 'string' && value.trim().length > 0;
+
 @Injectable()
 export class CenterProfileService {
   constructor(private readonly prisma: PrismaService) {}
@@ -141,6 +157,37 @@ export class CenterProfileService {
         city: centerUser.center.city,
         logoUrl: centerUser.center.logo_url,
       },
+      onboarding: this.toOnboardingState(centerUser),
     };
+  }
+
+  /**
+   * Worked out on every read rather than stored.
+   *
+   * A stored flag needs a job or a trigger to keep it true, and when that runs
+   * late the value is wrong — the same reasoning that left subscription status
+   * derived from timestamps. This cannot drift, because there is nothing to
+   * drift from.
+   *
+   * `missing` is reported so the dashboard renders its checklist without
+   * holding a second copy of these rules. A fourth required field added here
+   * updates every checklist with no frontend change, and the client never ends
+   * up with a rival definition of "complete".
+   */
+  private toOnboardingState(centerUser: {
+    phone: string | null;
+    center: { country: string | null; city: string | null };
+  }): { complete: boolean; missing: RequiredProfileField[] } {
+    const present: Record<RequiredProfileField, string | null> = {
+      country: centerUser.center.country,
+      city: centerUser.center.city,
+      phone: centerUser.phone,
+    };
+
+    const missing = REQUIRED_PROFILE_FIELDS.filter(
+      (field) => !isSupplied(present[field]),
+    );
+
+    return { complete: missing.length === 0, missing: [...missing] };
   }
 }

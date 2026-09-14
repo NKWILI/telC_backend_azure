@@ -13,12 +13,39 @@ import {
   CenterAuthUserDto,
 } from './center-auth-response.dto';
 
+/**
+ * Where a center stands in onboarding, worked out on every read.
+ *
+ * Read `complete` to decide what to show. Do not infer it by checking whether
+ * country and city are present — that would be a second definition of the
+ * rule, living in the client, free to drift from this one.
+ */
+export class CenterOnboardingStateDto {
+  @ApiProperty({
+    example: false,
+    description:
+      'True once every required field is supplied. The only thing a client should branch on.',
+  })
+  complete: boolean;
+
+  @ApiProperty({
+    type: [String],
+    example: ['country', 'city', 'phone'],
+    description:
+      'Exactly the fields still needed, in a stable order so a checklist does not reshuffle between requests. Render the checklist from this rather than hard-coding the list.',
+  })
+  missing: string[];
+}
+
 export class CenterProfileResponseDto {
   @ApiProperty({ type: CenterAuthUserDto })
   centerUser: CenterAuthUserDto;
 
   @ApiProperty({ type: CenterAuthCenterDto })
   center: CenterAuthCenterDto;
+
+  @ApiProperty({ type: CenterOnboardingStateDto })
+  onboarding: CenterOnboardingStateDto;
 }
 
 /**

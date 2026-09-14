@@ -32,16 +32,16 @@ The part the frontend needs soonest. Independent of tiers.
 
 ### Task 3: Report onboarding state
 
-- [ ] `GET /api/centers/me` returns `{ complete, missing }`
-- [ ] Complete when country, city and manager phone are all present
-- [ ] `missing` lists exactly the absent fields, in a stable order
-- [ ] Derived on read, no stored column
-- [ ] Commit the green increment
+- [x] `GET /api/centers/me` returns `{ complete, missing }`
+- [x] Complete when country, city and manager phone are all present
+- [x] `missing` lists exactly the absent fields, in a stable order
+- [x] Derived on read, no stored column
+- [x] Commit the green increment
 
 ### Checkpoint A
 
-- [ ] A center can register with five fields and reach a dashboard
-- [ ] Gates green by exit code
+- [x] A center can register with five fields and reach a dashboard
+- [x] Gates green by exit code
 - [ ] Human review — the frontend starts against this slice
 
 ## Slice 2: the tier model
