@@ -6,13 +6,9 @@ import { CentersService } from '../src/modules/centers/centers.service';
 describe('CentersService registration', () => {
   const registration = {
     centerName: 'Goethe Language Center',
-    country: 'Cameroon',
-    city: 'Douala',
-    logoUrl: 'https://cdn.example.com/center.webp',
     managerFirstName: 'Alain',
     managerLastName: 'Ngeukeu',
     email: ' Manager@Example.COM ',
-    phone: '+237690000000',
     password: 'private-password',
   };
 
@@ -63,13 +59,11 @@ describe('CentersService registration', () => {
       where: { email: 'manager@example.com' },
       select: expect.any(Object),
     });
+    // A draft center: the name and nothing else. Country, city and the logo
+    // are collected during onboarding, and writing placeholders here would
+    // make an unfinished profile look complete.
     expect(tx.center.create).toHaveBeenCalledWith({
-      data: {
-        name: 'Goethe Language Center',
-        country: 'Cameroon',
-        city: 'Douala',
-        logo_url: 'https://cdn.example.com/center.webp',
-      },
+      data: { name: 'Goethe Language Center' },
       select: { id: true },
     });
 
@@ -81,7 +75,6 @@ describe('CentersService registration', () => {
         first_name: 'Alain',
         last_name: 'Ngeukeu',
         email: 'manager@example.com',
-        phone: '+237690000000',
         email_verified: false,
         email_verification_token: 'hashed-verification-token',
       }),

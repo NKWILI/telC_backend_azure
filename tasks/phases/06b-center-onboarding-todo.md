@@ -22,13 +22,13 @@ The part the frontend needs soonest. Independent of tiers.
 
 ### Task 2: Simplified registration
 
-- [ ] Registration accepts exactly centerName, managerFirstName,
+- [x] Registration accepts exactly centerName, managerFirstName,
       managerLastName, email, password
-- [ ] The four dropped fields are rejected if sent, not ignored
-- [ ] A registered center still gets its subscription row in the same
+- [x] The four dropped fields are rejected if sent, not ignored
+- [x] A registered center still gets its subscription row in the same
       transaction
-- [ ] Verification email and duplicate-address behaviour unchanged
-- [ ] Commit the green increment
+- [x] Verification email and duplicate-address behaviour unchanged
+- [x] Commit the green increment
 
 ### Task 3: Report onboarding state
 

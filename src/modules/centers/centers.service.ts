@@ -12,15 +12,16 @@ const TRIAL_SEATS = 3;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 const REGISTRATION_RESPONSE = { message: 'verification email sent' } as const;
 
+/**
+ * Five fields. Country, city, the manager's phone and the logo are collected
+ * during onboarding instead, at the point the center goes to pay — none is
+ * needed to run a trial, and all are needed to take money.
+ */
 export interface RegisterCenterInput {
   centerName: string;
-  country: string;
-  city: string;
-  logoUrl?: string;
   managerFirstName: string;
   managerLastName: string;
   email: string;
-  phone: string;
   password: string;
 }
 
@@ -130,13 +131,11 @@ export class CentersService {
 
     try {
       const centerUserId = await this.prisma.$transaction(async (tx) => {
+        // A draft center: its name and nothing else. Country, city and the
+        // logo arrive during onboarding, so they are left null here rather
+        // than filled with placeholders that would look like real answers.
         const center = await tx.center.create({
-          data: {
-            name: input.centerName.trim(),
-            country: input.country.trim(),
-            city: input.city.trim(),
-            logo_url: input.logoUrl?.trim() || null,
-          },
+          data: { name: input.centerName.trim() },
           select: { id: true },
         });
 
@@ -147,7 +146,6 @@ export class CentersService {
             first_name: input.managerFirstName.trim(),
             last_name: input.managerLastName.trim(),
             email,
-            phone: input.phone.trim(),
             password_hash: passwordHash,
             email_verified: false,
             email_verification_token: tokenHash,

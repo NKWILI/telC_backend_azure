@@ -21,13 +21,9 @@ describe('Center registration contract', () => {
 
   const validBody = {
     centerName: '  Goethe Language Center  ',
-    country: ' Cameroon ',
-    city: ' Douala ',
-    logoUrl: 'https://cdn.example.com/center.webp',
     managerFirstName: ' Alain ',
     managerLastName: ' Ngeukeu ',
     email: ' Manager@Example.COM ',
-    phone: ' +237690000000 ',
     password: 'private-password',
   };
 
@@ -74,33 +70,20 @@ describe('Center registration contract', () => {
     expect(centersService.register).toHaveBeenCalledWith({
       ...validBody,
       centerName: 'Goethe Language Center',
-      country: 'Cameroon',
-      city: 'Douala',
       managerFirstName: 'Alain',
       managerLastName: 'Ngeukeu',
       email: 'manager@example.com',
-      phone: '+237690000000',
     });
   });
 
-  it('allows registration without an optional logo', async () => {
-    const body = { ...validBody };
-    Reflect.deleteProperty(body, 'logoUrl');
-
-    await request(app.getHttpServer())
-      .post('/api/center-auth/register')
-      .send(body)
-      .expect(201);
-
-    expect(centersService.register).toHaveBeenCalledWith(
-      expect.not.objectContaining({ logoUrl: expect.anything() }),
-    );
-  });
-
-  it('rejects a non-HTTPS center logo before reaching the service', async () => {
+  it('refuses a logo, which now belongs to onboarding', async () => {
+    // Registration used to accept an optional HTTPS logo URL. It no longer
+    // does, along with country, city and the manager phone — all four moved
+    // to onboarding. The HTTPS rule still applies where the logo is now set;
+    // `center-registration-shape.spec.ts` owns the full four-field contract.
     const response = await request(app.getHttpServer())
       .post('/api/center-auth/register')
-      .send({ ...validBody, logoUrl: 'http://cdn.example.com/center.webp' })
+      .send({ ...validBody, logoUrl: 'https://cdn.example.com/center.webp' })
       .expect(400);
 
     expect(response.body.error).toBe('VALIDATION_ERROR');

@@ -186,14 +186,13 @@ describe('center identity end to end', () => {
   let db: FakeDb;
   let mailer: { [k: string]: jest.Mock };
 
+  // Five fields. Country, city and the manager phone moved to onboarding, and
+  // the global pipe refuses them here rather than ignoring them.
   const registration = {
     centerName: 'Goethe Language Center',
-    country: 'Cameroon',
-    city: 'Douala',
     managerFirstName: 'Alain',
     managerLastName: 'Ngeukeu',
     email: 'owner@example.com',
-    phone: '+237690000000',
     password: 'a-strong-password',
   };
   const DEVICE = 'browser-installation-1';
