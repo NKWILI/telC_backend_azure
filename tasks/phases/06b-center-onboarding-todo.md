@@ -87,8 +87,8 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Checkpoint B
 
-- [ ] A mixed quote prices correctly and cannot be influenced by the client
-- [ ] One payment covering three tiers is idempotent against real Postgres
+- [x] A mixed quote prices correctly and cannot be influenced by the client
+- [x] One payment covering three tiers is idempotent against real Postgres
 - [ ] Human review before trials or students are touched
 
 ## Slice 3: trials and students on tiers

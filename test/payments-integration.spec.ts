@@ -226,11 +226,14 @@ describe('payments against real Postgres', () => {
 
   describe('the same key twice', () => {
     it('creates exactly one row when two requests race', async () => {
+      // Three tiers deliberately: the insert now writes four rows rather than
+      // one, and the loser of the race has to leave none of them behind.
       const center = await makeCenter();
+      const mix = { START: 4, PRO: 3, PREMIUM: 3 };
 
       const results = await Promise.allSettled([
-        payments.create(identity(center.id), { START: 10 }, 'same-key'),
-        payments.create(identity(center.id), { START: 10 }, 'same-key'),
+        payments.create(identity(center.id), mix, 'same-key'),
+        payments.create(identity(center.id), mix, 'same-key'),
       ]);
 
       // Both succeed: the loser of the insert race is answered from the row
@@ -242,23 +245,23 @@ describe('payments against real Postgres', () => {
       });
       expect(rows).toHaveLength(1);
       // And exactly one set of lines. A second insert that lost the race must
-      // not have left its breakdown behind.
+      // not have left its breakdown behind, and there is no partial write:
+      // three tiers means three lines, never four or six.
       expect(
         await prisma.paymentLine.count({ where: { payment_id: rows[0].id } }),
-      ).toBe(1);
+      ).toBe(3);
+      // 4 x 4,500 + 3 x 10,000 + 3 x 20,000.
+      expect(rows[0].amount_xaf).toBe(108_000);
     });
 
     it('returns the original record rather than a second one', async () => {
       const center = await makeCenter();
+      const mix = { START: 4, PRO: 3, PREMIUM: 3 };
 
-      const first = await payments.create(
-        identity(center.id),
-        { START: 10 },
-        'same-key',
-      );
+      const first = await payments.create(identity(center.id), mix, 'same-key');
       const replay = await payments.create(
         identity(center.id),
-        { START: 10 },
+        mix,
         'same-key',
       );
 
