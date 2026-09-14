@@ -7,7 +7,7 @@ import { createHash } from 'crypto';
 import type { PaymentStatus, Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
-import { PricingService, type SeatMix, type Quote } from './pricing.service';
+import { PricingService, type SeatMix } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
@@ -39,6 +39,9 @@ export interface PaymentPage {
 /** Prisma's unique-violation code. The insert race is decided by this. */
 const UNIQUE_VIOLATION = 'P2002';
 
+/** The column that makes a P2002 a replay rather than a bug. */
+const IDEMPOTENCY_COLUMN = 'idempotency_key';
+
 /** Cheapest first, matching the order a quote lists its lines in. */
 const TIER_VIEW_ORDER: Record<Tier, number> = { START: 0, PRO: 1, PREMIUM: 2 };
 
@@ -65,40 +68,48 @@ export class PaymentsService {
     mix: SeatMix,
     idempotencyKey: string,
   ): Promise<PaymentView> {
-    // Priced before anything is written, so a refused mix leaves no record
-    // behind.
-    const quote = this.pricing.quote(
-      mix,
-      await this.seats.tierContextFor(identity.centerId),
-    );
-
-    const requestHash = this.fingerprint(identity.centerId, quote);
+    // Shape-checked before a transaction is opened: an unusable mix should not
+    // hold a connection, and the refusal does not depend on any row.
+    const wanted = this.pricing.requireMix(mix);
+    const requestHash = this.fingerprint(identity.centerId, wanted);
 
     try {
-      const created = await this.prisma.payment.create({
-        data: {
-          center_id: identity.centerId,
-          total_seats: quote.totalSeats,
-          amount_xaf: quote.totalXaf,
-          idempotency_key: idempotencyKey,
-          request_hash: requestHash,
-          // Written in the same insert as the payment, so a payment can never
-          // exist without the breakdown that explains its amount.
-          lines: {
-            create: quote.lines.map((line) => ({
-              tier: line.tier,
-              seats: line.seats,
-              unit_price_xaf: line.unitPriceXaf,
-              amount_xaf: line.amountXaf,
-            })),
+      // Priced and written in one transaction. Reading the stamped prices and
+      // the student counts outside it would decide both against a snapshot:
+      // a concurrent price stamp would be charged at the old price, and a
+      // concurrent provisioning run would let a payment be recorded for fewer
+      // seats than the tier has students — the invariant Phase 7 will act on.
+      const created = await this.prisma.$transaction(async (tx) => {
+        const quote = this.pricing.quote(
+          wanted,
+          await this.seats.tierContextFor(identity.centerId, tx),
+        );
+
+        return tx.payment.create({
+          data: {
+            center_id: identity.centerId,
+            total_seats: quote.totalSeats,
+            amount_xaf: quote.totalXaf,
+            idempotency_key: idempotencyKey,
+            request_hash: requestHash,
+            // Written in the same insert as the payment, so a payment can
+            // never exist without the breakdown that explains its amount.
+            lines: {
+              create: quote.lines.map((line) => ({
+                tier: line.tier,
+                seats: line.seats,
+                unit_price_xaf: line.unitPriceXaf,
+                amount_xaf: line.amountXaf,
+              })),
+            },
           },
-        },
-        include: { lines: true },
+          include: { lines: true },
+        });
       });
 
       return this.toView(created);
     } catch (error) {
-      if (!this.isUniqueViolation(error)) {
+      if (!this.isIdempotencyViolation(error)) {
         throw error;
       }
 
@@ -141,7 +152,12 @@ export class PaymentsService {
     const [rows, total] = await Promise.all([
       this.prisma.payment.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        // Two keys, because `created_at` is TIMESTAMP(3) and two payments can
+        // land in the same millisecond. A tie makes the sort unstable, and an
+        // unstable sort across pages can show one row twice and another never.
+        // The id is a uuid, so it says nothing about time — it is here only to
+        // break the tie the same way on every request.
+        orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: { lines: true },
@@ -196,35 +212,83 @@ export class PaymentsService {
   /**
    * What the key was first used for.
    *
-   * Covers the center and every tier line, so a replay that changes any part
-   * of the mix is a different intent wearing the same name. Hashing only the
-   * total would let five Start plus five Pro pass as ten Start at the same
-   * price, which is the one collision that matters.
+   * Covers the center and every tier, so a replay that changes any part of the
+   * mix is a different intent wearing the same name. Hashing only the total
+   * would let five Start plus five Pro pass as ten Start, which is the one
+   * collision that matters.
    *
-   * The center is included so a hash can never be compared across centers by
-   * accident.
+   * It covers the seats and NOT the price, because a fingerprint has to
+   * identify the caller's intent and the price is the server's answer to it.
+   * An earlier version hashed the priced lines, which meant a stamped price
+   * changing between an attempt and its retry — the by-hand stamping workflow,
+   * or the planned 4,500 to 4,800 move — turned a byte-identical retry into
+   * IDEMPOTENCY_KEY_REUSED. A client following the documented contract answers
+   * that with a fresh key, producing a second payment for one intent: exactly
+   * what the unique index exists to prevent.
+   *
+   * Sorted by tier so the hash cannot depend on key order, and the center is
+   * included so a hash can never be compared across centers by accident.
    */
-  private fingerprint(centerId: string, quote: Quote): string {
+  private fingerprint(centerId: string, mix: SeatMix): string {
+    const seats = Object.entries(mix).sort(([a], [b]) => a.localeCompare(b));
+
     return createHash('sha256')
-      .update(
-        JSON.stringify({
-          centerId,
-          lines: quote.lines.map((line) => [
-            line.tier,
-            line.seats,
-            line.unitPriceXaf,
-          ]),
-        }),
-      )
+      .update(JSON.stringify({ centerId, seats }))
       .digest('hex');
   }
 
-  private isUniqueViolation(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      (error as { code?: unknown }).code === UNIQUE_VIOLATION
-    );
+  /**
+   * Whether this error is the idempotency index rejecting a duplicate.
+   *
+   * The constraint is checked, not just the code. `payment_lines` has a unique
+   * index of its own in the same transaction, so treating any P2002 as a
+   * replay would look for a row by idempotency key, not find one, and answer a
+   * server bug with 409 IDEMPOTENCY_KEY_REUSED — a client error the client
+   * cannot act on and nobody can debug from the response.
+   */
+  private isIdempotencyViolation(error: unknown): boolean {
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      (error as { code?: unknown }).code !== UNIQUE_VIOLATION
+    ) {
+      return false;
+    }
+
+    return this.violatedColumns(error).includes(IDEMPOTENCY_COLUMN);
+  }
+
+  /**
+   * Which columns a unique violation names.
+   *
+   * Two shapes, because this runs on the `PrismaPg` driver adapter. The
+   * adapter reports the constraint under `meta.driverAdapterError`, and
+   * `meta.target` — what Prisma's own engine sets, and what the documentation
+   * describes — is simply absent. Reading only `target` therefore matched
+   * nothing and quietly turned every replay back into a 500, which is how this
+   * function earned its test.
+   *
+   * Both are read so the behaviour does not depend on which one a future
+   * Prisma release populates.
+   */
+  private violatedColumns(error: object): string[] {
+    const meta = (error as { meta?: Record<string, unknown> }).meta ?? {};
+
+    const target = meta.target;
+    if (Array.isArray(target)) {
+      return target.map(String);
+    }
+    if (typeof target === 'string') {
+      return [target];
+    }
+
+    const fields = (
+      meta as {
+        driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } };
+      }
+    ).driverAdapterError?.cause?.constraint?.fields;
+
+    return Array.isArray(fields) ? fields.map(String) : [];
   }
 
   /** Built field by field, so a column added later cannot leak into a response. */

@@ -72,7 +72,7 @@ export class CenterSubscriptionController {
   @ApiBadRequestResponse({
     type: CenterErrorResponseDto,
     description:
-      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT, each carrying requiredSeats — the number this center has to reach.',
+      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT, each carrying requiredSeatsTotal, plus requiredSeatsPerTier naming every tier that has more students than the seats asked for. Both arrive together, so one correction is enough. AMOUNT_ABOVE_MAXIMUM carries maximumAmountXaf.',
   })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
   @ApiNotFoundResponse({ type: CenterErrorResponseDto })

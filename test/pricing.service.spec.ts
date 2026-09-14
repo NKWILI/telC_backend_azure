@@ -3,6 +3,7 @@ import {
   TIER_PRICES_XAF,
   MIN_PAID_SEATS_TOTAL,
   MAX_SEATS_TOTAL,
+  MAX_AMOUNT_XAF,
   type SeatMix,
   type CenterTierContext,
 } from '../src/modules/centers/pricing.service';
@@ -44,7 +45,13 @@ describe('PricingService', () => {
       ['PRO', 10000],
       ['PREMIUM', 20000],
     ] as const)('prices %s at %i a seat', (tier, price) => {
-      expect(TIER_PRICES_XAF[tier]).toBe(price);
+      // Asserted through a quote rather than against the constant. Comparing
+      // TIER_PRICES_XAF to itself pins the name and nothing else; this pins
+      // the number a center is actually charged.
+      const result = quote({ [tier]: 10 });
+
+      expect(result.lines[0].unitPriceXaf).toBe(price);
+      expect(result.totalXaf).toBe(price * 10);
     });
 
     it('prices a mix of all three, itemised', () => {
@@ -128,6 +135,29 @@ describe('PricingService', () => {
 
       expect(result.totalXaf).toBe(10);
     });
+
+    /**
+     * A trial seat is held as a seat row priced at zero, so a trial center
+     * arrives here holding Start at 0. Honouring that as an agreed price would
+     * quote it 0 XAF for ten seats — a free plan shown to a paying customer —
+     * and the payment would then fail its positive-amount constraint, turning
+     * the one route a lapsed center must always reach into a 500.
+     *
+     * Zero is a granted seat, not a price. Converting means starting to pay.
+     */
+    it('charges list price to a center whose stamped price is zero', () => {
+      const result = quote({ START: 10 }, holding('START', 0));
+
+      expect(result.lines[0].unitPriceXaf).toBe(TIER_PRICES_XAF.START);
+      expect(result.totalXaf).toBe(45000);
+    });
+
+    it('charges list price for the tier a trial center is converting out of', () => {
+      // The real shape of a trial: one Start seat at zero, one student in it.
+      const result = quote({ START: 10 }, holding('START', 0, 1));
+
+      expect(result.totalXaf).toBe(45000);
+    });
   });
 
   describe('the ten-seat floor is a total, not per tier', () => {
@@ -150,9 +180,11 @@ describe('PricingService', () => {
 
       expect(refusal).toMatchObject({
         code: 'SEATS_BELOW_MINIMUM',
-        requiredSeats: MIN_PAID_SEATS_TOTAL,
+        requiredSeatsTotal: MIN_PAID_SEATS_TOTAL,
       });
-      expect(refusal).not.toHaveProperty('tier');
+      // No tier is at fault: the shortfall is the total, and naming a tier
+      // would send the center to change the wrong number.
+      expect(refusal).not.toHaveProperty('requiredSeatsPerTier');
     });
   });
 
@@ -173,8 +205,28 @@ describe('PricingService', () => {
 
       expect(refusal).toMatchObject({
         code: 'SEATS_BELOW_STUDENT_COUNT',
-        tier: 'START',
-        requiredSeats: 12,
+        requiredSeatsPerTier: { START: 12 },
+        // Twelve Start plus the two Pro they asked for. The total floor moves
+        // with the tier floor, so this is the order that would go through.
+        requiredSeatsTotal: 14,
+      });
+    });
+
+    it('names every tier at fault at once, not the first one', () => {
+      // A center short in two tiers should not have to discover them one
+      // refusal at a time.
+      const refusal = service.explain(
+        { START: 1, PRO: 1 },
+        {
+          START: { stampedPriceXaf: null, studentCount: 8 },
+          PRO: { stampedPriceXaf: null, studentCount: 6 },
+        },
+      );
+
+      expect(refusal).toMatchObject({
+        code: 'SEATS_BELOW_STUDENT_COUNT',
+        requiredSeatsPerTier: { START: 8, PRO: 6 },
+        requiredSeatsTotal: 14,
       });
     });
 
@@ -223,7 +275,28 @@ describe('PricingService', () => {
     it('keeps the largest allowed order inside the integer column', () => {
       const result = quote({ PREMIUM: MAX_SEATS_TOTAL });
 
-      expect(result.totalXaf).toBeLessThan(2_147_483_647);
+      expect(result.totalXaf).toBeLessThanOrEqual(MAX_AMOUNT_XAF);
+    });
+
+    /**
+     * The seat cap bounds the amount only while every unit price stays under
+     * roughly 214,748, and a stamped price is not bounded by anything. An
+     * enterprise price, or a 300000-for-30000 typo when stamping a seat row by
+     * hand, puts a legal seat count over the column ceiling — and Postgres
+     * answering "integer out of range" reaches the client as a 500.
+     */
+    it('refuses an amount that would overflow the column, at a legal seat count', () => {
+      const mix = { PREMIUM: MAX_SEATS_TOTAL };
+      const enterprise = holding('PREMIUM', 300_000);
+
+      // The seat count itself is allowed, so nothing but the amount can catch
+      // this.
+      expect(service.explain(mix, FRESH)).toBeNull();
+      expect(() => quote(mix, enterprise)).toThrow('AMOUNT_ABOVE_MAXIMUM');
+      expect(service.explain(mix, enterprise)).toMatchObject({
+        code: 'AMOUNT_ABOVE_MAXIMUM',
+        maximumAmountXaf: MAX_AMOUNT_XAF,
+      });
     });
   });
 
@@ -232,14 +305,44 @@ describe('PricingService', () => {
       expect(service.explain({ START: 10 }, FRESH)).toBeNull();
     });
 
-    it('reports the student floor before the minimum, being the higher bar', () => {
-      // Both unmet: four seats, twelve students. The number that actually
-      // unblocks them is twelve, so that is the one to report.
-      const refusal = service.explain({ START: 4 }, withStudents('START', 12));
+    /**
+     * The case that made the old ordering wrong. Three Pro students, one seat
+     * asked for: the tier floor is three, which is below the ten-seat minimum.
+     * Reporting only the tier floor told the center to reach three; it complied
+     * exactly and was then told to reach ten. Both numbers, one refusal.
+     */
+    it('reports both floors when both are unmet', () => {
+      const refusal = service.explain({ PRO: 1 }, withStudents('PRO', 3));
 
       expect(refusal).toMatchObject({
         code: 'SEATS_BELOW_STUDENT_COUNT',
-        requiredSeats: 12,
+        requiredSeatsPerTier: { PRO: 3 },
+        requiredSeatsTotal: MIN_PAID_SEATS_TOTAL,
+      });
+    });
+
+    it('accepts the mix its own refusal asked for', () => {
+      // The property that matters more than any single number: complying with
+      // a refusal has to work the first time.
+      const refusal = service.explain({ PRO: 1 }, withStudents('PRO', 3));
+
+      expect(
+        service.explain(
+          { PRO: refusal?.requiredSeatsTotal },
+          withStudents('PRO', 3),
+        ),
+      ).toBeNull();
+    });
+
+    it('never throws, whatever it is handed', () => {
+      // Its whole purpose is answering "what is wrong with this cart", which
+      // is not an error path. A UI must be able to ask about an empty one.
+      expect(() => service.explain({}, FRESH)).not.toThrow();
+      expect(service.explain({}, FRESH)).toMatchObject({
+        code: 'SEAT_MIX_EMPTY',
+      });
+      expect(service.explain({ START: 1.5 }, FRESH)).toMatchObject({
+        code: 'SEATS_INVALID',
       });
     });
   });

@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 import { PricingService } from '../src/modules/centers/pricing.service';
+import { CenterSeatsService } from '../src/modules/centers/center-seats.service';
 
 describe('CenterSubscriptionService', () => {
   const identity = { centerUserId: 'owner-1', centerId: 'center-1' } as never;
@@ -27,6 +28,10 @@ describe('CenterSubscriptionService', () => {
       },
       student: {
         count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+      centerSeat: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       get deviceSession(): never {
         throw new Error('Student sessions must never be touched here');
@@ -36,6 +41,11 @@ describe('CenterSubscriptionService', () => {
       prisma,
       new SubscriptionPolicyService(),
       new PricingService(),
+      // A real one over the mocked client, not a stub. `quote` is only
+      // meaningful if the context it prices from is really loaded, and passing
+      // a stub here is how this spec came to construct the service with three
+      // of its four dependencies and still pass.
+      new CenterSeatsService(prisma),
     );
   });
 
@@ -154,6 +164,55 @@ describe('CenterSubscriptionService', () => {
       expect(result.status).toBe('BLOCKED');
       expect(result.seatsLimit).toBe(10);
       expect(result.seatsUsed).toBe(4);
+    });
+  });
+  /**
+   * The quote path had no test of its own at all: the controller spec mocks
+   * this service away, and this spec could not reach `quote` because it built
+   * the service without its seat loader. That is how a missing constructor
+   * argument sat in two specs with the suite green — ts-jest transpiles without
+   * type-checking, so `Expected 4 arguments, but got 3` failed nothing.
+   */
+  describe('quote', () => {
+    it('prices the signed center own holdings, never a center named by the caller', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', unit_price_xaf: 3800 },
+      ]);
+
+      const result = await service.quote(identity, { START: 10 });
+
+      expect(prisma.centerSeat.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { center_id: 'center-1' } }),
+      );
+      // The stamped price, not the list price: proof the context was really
+      // loaded and handed to pricing.
+      expect(result.lines[0].unitPriceXaf).toBe(3800);
+      expect(result.totalXaf).toBe(38000);
+    });
+
+    it('charges list price to a center holding nothing yet', async () => {
+      const result = await service.quote(identity, { START: 5, PRO: 5 });
+
+      expect(result.totalXaf).toBe(5 * 4500 + 5 * 10000);
+      expect(result.totalSeats).toBe(10);
+    });
+
+    it('counts existing students, so a mix cannot strand them', async () => {
+      prisma.student.groupBy.mockResolvedValue([
+        { tier: 'PRO', _count: { _all: 6 } },
+      ]);
+
+      await expect(service.quote(identity, { START: 10 })).rejects.toThrow(
+        'SEATS_BELOW_STUDENT_COUNT',
+      );
+    });
+
+    it('does not read the subscription row to quote', async () => {
+      // Pricing depends on seats and students, not on subscription status, so
+      // a blocked or lapsed center can still be quoted.
+      await service.quote(identity, { START: 10 });
+
+      expect(prisma.centerSubscription.findUnique).not.toHaveBeenCalled();
     });
   });
 });

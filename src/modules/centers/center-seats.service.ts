@@ -3,6 +3,16 @@ import { PrismaService } from '../../shared/services/prisma.service';
 import type { CenterTierContext } from './pricing.service';
 
 /**
+ * The part of the client this loader touches.
+ *
+ * Structural rather than `PrismaService` so a transaction client satisfies it
+ * too. Pricing a payment has to read seats and students inside the same
+ * transaction that writes the payment, or the price and the student floor are
+ * decided against a snapshot that can move before the insert lands.
+ */
+export type SeatContextReader = Pick<PrismaService, 'centerSeat' | 'student'>;
+
+/**
  * Loads what a center holds, per tier: the price it has already agreed to and
  * how many students sit in that tier.
  *
@@ -18,14 +28,22 @@ export class CenterSeatsService {
   /**
    * Two queries rather than four: the seat rows carry the stamped prices, and
    * one grouped count covers every tier at once instead of a count per tier.
+   *
+   * `client` exists so a caller can read inside its own transaction. Quoting
+   * passes nothing, because a quote is a question and a stale answer to it
+   * costs nothing; creating a payment passes its transaction, because the
+   * price it reads is the price the center is charged.
    */
-  async tierContextFor(centerId: string): Promise<CenterTierContext> {
+  async tierContextFor(
+    centerId: string,
+    client: SeatContextReader = this.prisma,
+  ): Promise<CenterTierContext> {
     const [seats, studentsByTier] = await Promise.all([
-      this.prisma.centerSeat.findMany({
+      client.centerSeat.findMany({
         where: { center_id: centerId },
         select: { tier: true, unit_price_xaf: true },
       }),
-      this.prisma.student.groupBy({
+      client.student.groupBy({
         by: ['tier'],
         where: { center_id: centerId },
         _count: { _all: true },

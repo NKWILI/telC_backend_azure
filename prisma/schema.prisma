@@ -275,7 +275,13 @@ model PaymentLine {
   seats      Int
 
   unit_price_xaf Int
+  /// Always seats * unit_price_xaf, and a CHECK constraint enforces it. The
+  /// column is stored rather than computed so an invoice keeps its own total
+  /// even if the arithmetic here ever changes.
   amount_xaf     Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
 
   payment Payment @relation(fields: [payment_id], references: [id], onDelete: Cascade)
 

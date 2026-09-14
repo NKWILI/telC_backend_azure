@@ -194,6 +194,75 @@ describe('payments against real Postgres', () => {
       ).toBe(0);
     });
 
+    it('leaves an existing seat row untouched, price included', async () => {
+      // The stronger half of "grants nothing", and the one a center with a
+      // seat row would actually notice. Counting rows on a center that holds
+      // none would pass even if paying repriced or resized what it holds.
+      const center = await makeCenter();
+      await holdSeats(center.id, 'START', 4, 4_000);
+      const before = await prisma.centerSeat.findFirstOrThrow({
+        where: { center_id: center.id },
+      });
+
+      await payments.create(identity(center.id), { START: 12 }, 'key-1');
+
+      const after = await prisma.centerSeat.findFirstOrThrow({
+        where: { center_id: center.id },
+      });
+      expect(after.quantity).toBe(4);
+      expect(after.unit_price_xaf).toBe(4_000);
+      expect(after.updated_at).toEqual(before.updated_at);
+    });
+
+    it('records an amount that equals the sum of its lines', async () => {
+      // The invariant the whole line model exists to protect. Nothing else
+      // checks that the total and the breakdown agree.
+      const center = await makeCenter();
+
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 4, PRO: 3, PREMIUM: 3 },
+        'key-1',
+      );
+
+      const row = await prisma.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+        include: { lines: true },
+      });
+
+      expect(row.amount_xaf).toBe(
+        row.lines.reduce((total, line) => total + line.amount_xaf, 0),
+      );
+      expect(row.total_seats).toBe(
+        row.lines.reduce((total, line) => total + line.seats, 0),
+      );
+      row.lines.forEach((line) => {
+        expect(line.amount_xaf).toBe(line.seats * line.unit_price_xaf);
+      });
+    });
+
+    /**
+     * A trial seat is a seat row priced at zero, so a converting center
+     * arrives here holding Start at 0. Honouring that as an agreed price would
+     * quote it nothing and then break: `payment_lines.unit_price_xaf` must be
+     * positive, and the failure is not a unique violation, so it would reach
+     * the center as a 500 on the one route a lapsed center must always reach.
+     */
+    it('lets a trial center on a zero-priced seat actually pay', async () => {
+      const center = await makeCenter();
+      await holdSeats(center.id, 'START', 1, 0);
+      await makeStudents(center.id, 'START', 1);
+
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'key-1',
+      );
+
+      expect(payment.lines[0].unitPriceXaf).toBe(4_500);
+      expect(payment.amountXaf).toBe(45_000);
+    });
+
     it('refuses a mix the total floor rejects', async () => {
       const center = await makeCenter();
 
@@ -268,6 +337,63 @@ describe('payments against real Postgres', () => {
       expect(replay.id).toBe(first.id);
       expect(replay.createdAt).toEqual(first.createdAt);
       expect(replay.lines).toEqual(first.lines);
+    });
+
+    /**
+     * The retry that used to be refused.
+     *
+     * The fingerprint covered the priced lines, so a stamped price changing
+     * between an attempt and its retry made a byte-identical request look like
+     * a different purchase. The client's documented answer to
+     * IDEMPOTENCY_KEY_REUSED is a fresh key — which produces a second payment
+     * for one intent, the exact failure the unique index exists to prevent.
+     *
+     * A fingerprint identifies what the caller asked for. The price is the
+     * server's answer, and the original row stays the authority on it.
+     */
+    it('answers a retry from the original row after the price moved', async () => {
+      const center = await makeCenter();
+      const first = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
+      expect(first.lines[0].unitPriceXaf).toBe(4_500);
+
+      // The by-hand stamping workflow, or the planned move to 4,800.
+      await holdSeats(center.id, 'START', 10, 4_000);
+
+      const replay = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
+
+      expect(replay.id).toBe(first.id);
+      // Still the price it was actually charged, not a reprice.
+      expect(replay.lines[0].unitPriceXaf).toBe(4_500);
+      expect(
+        await prisma.payment.count({ where: { center_id: center.id } }),
+      ).toBe(1);
+    });
+
+    it('treats a mix with explicit zeros as the same intent', async () => {
+      // `{start: 10}` and `{start: 10, pro: 0}` are the same purchase, and a
+      // client filling in every field must not be told otherwise.
+      const center = await makeCenter();
+      const first = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
+
+      const replay = await payments.create(
+        identity(center.id),
+        { START: 10, PRO: 0, PREMIUM: 0 },
+        'same-key',
+      );
+
+      expect(replay.id).toBe(first.id);
     });
 
     it('refuses the same key carrying a different mix', async () => {

@@ -2,8 +2,19 @@
 -- cannot live in one seats/unit_price pair on the payment row.
 --
 -- payments.seats and payments.unit_price_xaf are replaced by payments
--- .total_seats plus a payment_lines row per tier. Safe to rewrite rather than
--- migrate: no center is live, so there are no payments to preserve.
+-- .total_seats plus a payment_lines row per tier.
+--
+-- Dropped and renamed rather than expanded, unlike Center.unit_price_xaf and
+-- CenterSubscription.seats in 20260914140000. The difference is verifiable
+-- rather than assumed: the payments table itself does not exist in production
+-- and no deployed code reads it, because the migration that creates it is on
+-- this same unmerged branch. Both migrations therefore run inside one deploy,
+-- and no running instance can ever select the old column names. Expanding
+-- would leave a nullable column nothing will ever write.
+--
+-- If that stops being true -- if any payments row exists anywhere these
+-- migrations have already run -- this file must be rewritten as an expand,
+-- because DROP COLUMN is not recoverable.
 ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "payments_seats_positive";
 ALTER TABLE "payments" DROP CONSTRAINT IF EXISTS "payments_unit_price_xaf_positive";
 

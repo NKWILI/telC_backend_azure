@@ -10,6 +10,7 @@ import { PrismaService } from '../src/shared/services/prisma.service';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 import { PricingService } from '../src/modules/centers/pricing.service';
+import { CenterSeatsService } from '../src/modules/centers/center-seats.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { TokenCryptoService } from '../src/modules/auth/token-crypto.service';
 
@@ -26,6 +27,7 @@ const subscriptions = new CenterSubscriptionService(
   prisma,
   new SubscriptionPolicyService(),
   new PricingService(),
+  new CenterSeatsService(prisma),
 );
 
 /**
@@ -77,13 +79,12 @@ describe('center subscriptions against real Postgres', () => {
 
   it('gives a registered center exactly one subscription', async () => {
     await centers.register({
+      // Five fields, which is all registration takes since a center may
+      // start as a draft and complete its profile afterwards.
       centerName: 'Registration Test',
-      country: 'Cameroon',
-      city: 'Douala',
       managerFirstName: 'Alain',
       managerLastName: 'Ngeukeu',
       email: 'sub-integration@integration.test',
-      phone: '+237690000000',
       password: 'integration-password',
     });
 
