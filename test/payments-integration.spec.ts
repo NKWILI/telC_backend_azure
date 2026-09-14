@@ -5,18 +5,33 @@
  * one key, in flight at once, must leave exactly one row. A mocked Prisma will
  * happily "create" twice and report success both times.
  *
+ * Since tiers arrived it carries a second claim a mock cannot check: a payment
+ * and its per-tier lines are written in one insert, so no payment can exist
+ * without the breakdown that explains its amount.
+ *
  * Runs against the disposable branch in `.env.test`, over the direct endpoint.
  */
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { PricingService } from '../src/modules/centers/pricing.service';
 import { PaymentsService } from '../src/modules/centers/payments.service';
+import { CenterSeatsService } from '../src/modules/centers/center-seats.service';
 
 const prisma = new PrismaService();
-const payments = new PaymentsService(prisma, new PricingService());
+const payments = new PaymentsService(
+  prisma,
+  new PricingService(),
+  new CenterSeatsService(prisma),
+);
 
 const identity = (centerId: string) => ({ centerId }) as never;
 
 async function wipe() {
+  // Students first. `center_id` is ON DELETE SET NULL, so deleting the center
+  // would leave them behind carrying a tier and no center — harmless here, but
+  // they would pile up in the branch across runs.
+  await prisma.student.deleteMany({
+    where: { email: { startsWith: 'payments-test-' } },
+  });
   await prisma.center.deleteMany({
     where: { name: { startsWith: 'Payments Test' } },
   });
@@ -34,6 +49,39 @@ async function makeCenter(over: Record<string, unknown> = {}) {
   });
 }
 
+/** A seat row is what stamps a price, and therefore what grandfathers it. */
+async function holdSeats(
+  centerId: string,
+  tier: 'START' | 'PRO' | 'PREMIUM',
+  quantity: number,
+  unitPriceXaf: number,
+) {
+  await prisma.centerSeat.create({
+    data: {
+      center_id: centerId,
+      tier,
+      quantity,
+      unit_price_xaf: unitPriceXaf,
+    },
+  });
+}
+
+async function makeStudents(
+  centerId: string,
+  tier: 'START' | 'PRO' | 'PREMIUM',
+  count: number,
+) {
+  for (let i = 0; i < count; i++) {
+    await prisma.student.create({
+      data: {
+        email: `payments-test-${tier}-${i}-${Date.now()}-${Math.random()}@example.com`,
+        center_id: centerId,
+        tier,
+      },
+    });
+  }
+}
+
 describe('payments against real Postgres', () => {
   beforeEach(wipe);
 
@@ -46,22 +94,83 @@ describe('payments against real Postgres', () => {
     it('records what the server priced, not what anyone asked for', async () => {
       const center = await makeCenter();
 
-      const payment = await payments.create(identity(center.id), 10, 'key-1');
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 5, PRO: 5 },
+        'key-1',
+      );
 
       expect(payment).toMatchObject({
-        seats: 10,
-        unitPriceXaf: 4800,
-        amountXaf: 48000,
+        totalSeats: 10,
+        // 5 x 4,500 + 5 x 10,000.
+        amountXaf: 72_500,
         status: 'PENDING',
       });
+      expect(payment.lines).toEqual([
+        { tier: 'START', seats: 5, unitPriceXaf: 4_500, amountXaf: 22_500 },
+        { tier: 'PRO', seats: 5, unitPriceXaf: 10_000, amountXaf: 50_000 },
+      ]);
     });
 
-    it('prices a partner center from its own terms', async () => {
-      const center = await makeCenter({ unit_price_xaf: 4500 });
+    it('writes the lines in the same insert as the payment', async () => {
+      // The claim the response cannot make on its own: the rows are really
+      // there, and a payment can never be read back without its breakdown.
+      const center = await makeCenter();
 
-      const payment = await payments.create(identity(center.id), 10, 'key-1');
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 5, PREMIUM: 5 },
+        'key-1',
+      );
 
-      expect(payment.amountXaf).toBe(45000);
+      const lines = await prisma.paymentLine.findMany({
+        where: { payment_id: payment.id },
+        orderBy: { tier: 'asc' },
+      });
+
+      expect(lines).toHaveLength(2);
+      expect(
+        lines.map((line) => [line.tier, line.seats, line.amount_xaf]),
+      ).toEqual(
+        expect.arrayContaining([
+          ['START', 5, 22_500],
+          ['PREMIUM', 5, 100_000],
+        ]),
+      );
+    });
+
+    it('keeps the price a center already agreed to for a tier it holds', async () => {
+      // Grandfathering, end to end. The list price for Start is 4,500 today
+      // and will rise; this center bought at 4,000 and keeps it.
+      const center = await makeCenter();
+      await holdSeats(center.id, 'START', 10, 4_000);
+
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'key-1',
+      );
+
+      expect(payment.lines[0].unitPriceXaf).toBe(4_000);
+      expect(payment.amountXaf).toBe(40_000);
+    });
+
+    it('charges list price for a tier the center does not hold', async () => {
+      // A stamped Start price is not a discount on Pro. Only the tier on the
+      // seat row is grandfathered.
+      const center = await makeCenter();
+      await holdSeats(center.id, 'START', 10, 4_000);
+
+      const payment = await payments.create(
+        identity(center.id),
+        { START: 10, PRO: 2 },
+        'key-1',
+      );
+
+      expect(payment.lines).toEqual([
+        { tier: 'START', seats: 10, unitPriceXaf: 4_000, amountXaf: 40_000 },
+        { tier: 'PRO', seats: 2, unitPriceXaf: 10_000, amountXaf: 20_000 },
+      ]);
     });
 
     it('grants nothing', async () => {
@@ -72,20 +181,24 @@ describe('payments against real Postgres', () => {
         where: { center_id: center.id },
       });
 
-      await payments.create(identity(center.id), 10, 'key-1');
+      await payments.create(identity(center.id), { START: 10 }, 'key-1');
 
       const after = await prisma.centerSubscription.findUniqueOrThrow({
         where: { center_id: center.id },
       });
       expect(after.paid_until).toBeNull();
       expect(after.seats).toBe(before.seats);
+      // No seat row either. Holding seats is what a successful payment buys.
+      expect(
+        await prisma.centerSeat.count({ where: { center_id: center.id } }),
+      ).toBe(0);
     });
 
-    it('refuses a seat count the pricing floors reject', async () => {
+    it('refuses a mix the total floor rejects', async () => {
       const center = await makeCenter();
 
       await expect(
-        payments.create(identity(center.id), 9, 'key-1'),
+        payments.create(identity(center.id), { START: 4, PRO: 5 }, 'key-1'),
       ).rejects.toThrow('SEATS_BELOW_MINIMUM');
 
       const rows = await prisma.payment.count({
@@ -94,6 +207,21 @@ describe('payments against real Postgres', () => {
       // Nothing recorded. A refused quote must not leave a payment behind.
       expect(rows).toBe(0);
     });
+
+    it('refuses fewer seats in a tier than it already has students', async () => {
+      // Buying eleven seats overall does not cover twelve Pro students, and
+      // the refusal has to name the tier — a center holds several.
+      const center = await makeCenter();
+      await makeStudents(center.id, 'PRO', 12);
+
+      await expect(
+        payments.create(identity(center.id), { START: 10, PRO: 1 }, 'key-1'),
+      ).rejects.toThrow('SEATS_BELOW_STUDENT_COUNT');
+
+      expect(
+        await prisma.payment.count({ where: { center_id: center.id } }),
+      ).toBe(0);
+    });
   });
 
   describe('the same key twice', () => {
@@ -101,8 +229,8 @@ describe('payments against real Postgres', () => {
       const center = await makeCenter();
 
       const results = await Promise.allSettled([
-        payments.create(identity(center.id), 10, 'same-key'),
-        payments.create(identity(center.id), 10, 'same-key'),
+        payments.create(identity(center.id), { START: 10 }, 'same-key'),
+        payments.create(identity(center.id), { START: 10 }, 'same-key'),
       ]);
 
       // Both succeed: the loser of the insert race is answered from the row
@@ -113,33 +241,67 @@ describe('payments against real Postgres', () => {
         where: { center_id: center.id },
       });
       expect(rows).toHaveLength(1);
+      // And exactly one set of lines. A second insert that lost the race must
+      // not have left its breakdown behind.
+      expect(
+        await prisma.paymentLine.count({ where: { payment_id: rows[0].id } }),
+      ).toBe(1);
     });
 
     it('returns the original record rather than a second one', async () => {
       const center = await makeCenter();
 
-      const first = await payments.create(identity(center.id), 10, 'same-key');
-      const replay = await payments.create(identity(center.id), 10, 'same-key');
+      const first = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
+      const replay = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
 
       expect(replay.id).toBe(first.id);
       expect(replay.createdAt).toEqual(first.createdAt);
+      expect(replay.lines).toEqual(first.lines);
     });
 
-    it('refuses the same key carrying different seats', async () => {
+    it('refuses the same key carrying a different mix', async () => {
       const center = await makeCenter();
-      const first = await payments.create(identity(center.id), 10, 'same-key');
+      const first = await payments.create(
+        identity(center.id),
+        { START: 10 },
+        'same-key',
+      );
 
       // A different intent wearing the same name. Handing back the original
-      // would tell a client it had bought 20 seats when it had bought 10.
+      // would tell a client it had bought Pro seats when it had bought Start.
       await expect(
-        payments.create(identity(center.id), 20, 'same-key'),
+        payments.create(identity(center.id), { PRO: 10 }, 'same-key'),
       ).rejects.toThrow('IDEMPOTENCY_KEY_REUSED');
 
       const rows = await prisma.payment.findMany({
         where: { center_id: center.id },
       });
       expect(rows).toHaveLength(1);
-      expect(rows[0].seats).toBe(first.seats);
+      expect(rows[0].total_seats).toBe(first.totalSeats);
+    });
+
+    it('refuses a different mix that happens to total the same', async () => {
+      // The collision that matters, and the reason the fingerprint covers
+      // every line rather than the total. Ten Start and five Start plus five
+      // Pro are both ten seats, and are not the same purchase.
+      const center = await makeCenter();
+      await payments.create(identity(center.id), { START: 10 }, 'same-key');
+
+      await expect(
+        payments.create(identity(center.id), { START: 5, PRO: 5 }, 'same-key'),
+      ).rejects.toThrow('IDEMPOTENCY_KEY_REUSED');
+
+      expect(
+        await prisma.payment.count({ where: { center_id: center.id } }),
+      ).toBe(1);
     });
 
     it('lets two different centers use the same key text', async () => {
@@ -148,9 +310,9 @@ describe('payments against real Postgres', () => {
       const a = await makeCenter();
       const b = await makeCenter();
 
-      await payments.create(identity(a.id), 10, 'shared-text');
+      await payments.create(identity(a.id), { START: 10 }, 'shared-text');
       await expect(
-        payments.create(identity(b.id), 10, 'shared-text'),
+        payments.create(identity(b.id), { START: 10 }, 'shared-text'),
       ).resolves.toBeDefined();
     });
   });
@@ -159,7 +321,11 @@ describe('payments against real Postgres', () => {
     it('refuses to show another center a payment', async () => {
       const mine = await makeCenter();
       const theirs = await makeCenter();
-      const payment = await payments.create(identity(theirs.id), 10, 'key-1');
+      const payment = await payments.create(
+        identity(theirs.id),
+        { START: 10 },
+        'key-1',
+      );
 
       // 404, never 403. A 403 would confirm the id exists.
       await expect(payments.get(identity(mine.id), payment.id)).rejects.toThrow(
@@ -167,10 +333,10 @@ describe('payments against real Postgres', () => {
       );
     });
 
-    it('lists newest first, scoped to one center', async () => {
+    it('lists newest first, scoped to one center, breakdown included', async () => {
       const center = await makeCenter();
-      await payments.create(identity(center.id), 10, 'key-1');
-      await payments.create(identity(center.id), 11, 'key-2');
+      await payments.create(identity(center.id), { START: 10 }, 'key-1');
+      await payments.create(identity(center.id), { PRO: 11 }, 'key-2');
 
       const history = await payments.list(identity(center.id), {
         page: 1,
@@ -178,7 +344,28 @@ describe('payments against real Postgres', () => {
       });
 
       expect(history.total).toBe(2);
-      expect(history.payments[0].seats).toBe(11);
+      expect(history.payments[0].totalSeats).toBe(11);
+      expect(history.payments[0].lines).toEqual([
+        { tier: 'PRO', seats: 11, unitPriceXaf: 10_000, amountXaf: 110_000 },
+      ]);
+    });
+
+    it('reads lines back cheapest first, whatever order they were stored in', async () => {
+      // A payment and the quote that produced it have to read the same way.
+      const center = await makeCenter();
+      const created = await payments.create(
+        identity(center.id),
+        { PREMIUM: 4, START: 3, PRO: 3 },
+        'key-1',
+      );
+
+      const read = await payments.get(identity(center.id), created.id);
+
+      expect(read.lines.map((line) => line.tier)).toEqual([
+        'START',
+        'PRO',
+        'PREMIUM',
+      ]);
     });
   });
 });

@@ -5,7 +5,8 @@ import {
   SubscriptionPolicyService,
   type CenterSubscriptionStatus,
 } from './subscription-policy.service';
-import { PricingService, type Quote } from './pricing.service';
+import { PricingService, type Quote, type SeatMix } from './pricing.service';
+import { CenterSeatsService } from './center-seats.service';
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
 
@@ -33,6 +34,7 @@ export class CenterSubscriptionService {
     private readonly prisma: PrismaService,
     private readonly policy: SubscriptionPolicyService,
     private readonly pricing: PricingService,
+    private readonly seats: CenterSeatsService,
   ) {}
 
   async getSubscription(
@@ -79,32 +81,18 @@ export class CenterSubscriptionService {
   }
 
   /**
-   * What the signed-in center would owe for a given number of seats.
+   * What the signed-in center would owe for a given mix of seats.
    *
-   * The seat count is the only thing the caller contributes. The price comes
-   * from the center's own billing terms and the floors from its own student
-   * count, so no request can talk this number down.
+   * The mix is the only thing the caller contributes, and the numbers in it
+   * are totals rather than increments. Prices come from what this center has
+   * already agreed to, or today's list price for a tier it does not yet hold,
+   * and the floors come from its own student counts — so no request can talk
+   * the number down.
    */
-  async quote(identity: SignedCenterIdentity, seats: number): Promise<Quote> {
-    const [center, studentCount] = await Promise.all([
-      this.prisma.center.findUnique({
-        where: { id: identity.centerId },
-        select: { unit_price_xaf: true, min_seats: true },
-      }),
-      this.prisma.student.count({ where: { center_id: identity.centerId } }),
-    ]);
-
-    if (!center) {
-      throw new NotFoundException('CENTER_NOT_FOUND');
-    }
-
+  async quote(identity: SignedCenterIdentity, mix: SeatMix): Promise<Quote> {
     return this.pricing.quote(
-      {
-        unitPriceXaf: center.unit_price_xaf,
-        minSeats: center.min_seats,
-        studentCount,
-      },
-      seats,
+      mix,
+      await this.seats.tierContextFor(identity.centerId),
     );
   }
 

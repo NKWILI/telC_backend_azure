@@ -15,6 +15,7 @@ import { StudentActivationService } from './student-activation.service';
 import { StudentProvisioningService } from './student-provisioning.service';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 import { PricingService } from './pricing.service';
+import { CenterSeatsService } from './center-seats.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { CenterAuthGuard } from './guards/center-auth.guard';
@@ -40,6 +41,7 @@ import { CentersService } from './centers.service';
     CenterSubscriptionService,
     SubscriptionPolicyService,
     PricingService,
+    CenterSeatsService,
     PaymentsService,
     StudentProvisioningService,
     StudentActivationService,

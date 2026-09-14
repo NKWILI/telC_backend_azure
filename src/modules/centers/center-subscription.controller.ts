@@ -80,7 +80,14 @@ export class CenterSubscriptionController {
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
     @Body() dto: SubscriptionQuoteRequestDto,
   ): Promise<SubscriptionQuoteResponseDto> {
-    return this.subscriptions.quote(centerUser, dto.seats);
+    // Mapped field by field onto the tier keys rather than passed through, so
+    // an unexpected property on the body can never reach pricing even if the
+    // global pipe were ever relaxed.
+    return this.subscriptions.quote(centerUser, {
+      START: dto.start,
+      PRO: dto.pro,
+      PREMIUM: dto.premium,
+    });
   }
 
   @Get('usage')

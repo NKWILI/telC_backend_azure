@@ -229,15 +229,16 @@ enum PaymentStatus {
 /// the start but is never written in this phase — Phase 7 needs somewhere to
 /// put a verified result without another migration.
 model Payment {
-  id        String        @id @default(uuid())
+  id        String @id @default(uuid())
   center_id String
-  seats     Int
 
-  /// Both snapshotted at creation. A price change next year must not rewrite
-  /// what a center agreed to this year, so these are copies rather than a
-  /// join back to the center's current terms.
-  unit_price_xaf Int
-  amount_xaf     Int
+  /// Seats across every tier in this payment. A convenience total; the
+  /// authoritative per-tier figures live in `lines`.
+  total_seats Int
+  /// What the whole payment comes to, snapshotted at creation. A price change
+  /// next year must not rewrite what a center agreed to this year, so this is
+  /// a copy rather than a join back to today's prices.
+  amount_xaf  Int
 
   status PaymentStatus @default(PENDING)
 
@@ -253,11 +254,33 @@ model Payment {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+  center Center        @relation(fields: [center_id], references: [id], onDelete: Cascade)
+  lines  PaymentLine[]
 
   @@unique([center_id, idempotency_key])
   @@index([center_id, created_at])
   @@map("payments")
+}
+
+/// One tier within a payment.
+///
+/// A payment can cover several tiers at different prices, so the breakdown
+/// cannot live in a single pair of columns on the payment. Each line carries
+/// the price that applied at the time, which is what keeps an old invoice
+/// truthful after the list price moves.
+model PaymentLine {
+  id         String @id @default(uuid())
+  payment_id String
+  tier       Tier
+  seats      Int
+
+  unit_price_xaf Int
+  amount_xaf     Int
+
+  payment Payment @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+
+  @@unique([payment_id, tier])
+  @@map("payment_lines")
 }
 
 model CenterUser {

@@ -96,9 +96,11 @@ export class PaymentsController {
     // because a fresh key is a fresh payment by design.
     await this.rateLimitService.checkPaymentCreateLimit(centerUser.centerId);
 
+    // Mapped field by field onto the tier keys rather than passed through, so
+    // an unexpected property on the body can never reach pricing.
     return this.payments.create(
       centerUser,
-      dto.seats,
+      { START: dto.start, PRO: dto.pro, PREMIUM: dto.premium },
       this.requireIdempotencyKey(idempotencyKey),
     );
   }

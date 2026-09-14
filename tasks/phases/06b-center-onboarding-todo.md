@@ -55,30 +55,35 @@ The part the frontend needs soonest. Independent of tiers.
 - [x] Nothing dropped; the tree builds unchanged
 - [x] Commit the green increment
 
+Tasks 5, 6 and 7 landed in **one commit**, not three. Changing the pricing
+signature changes both of its callers in the same breath, so splitting them
+would have meant either a commit that does not build or a shim carrying two
+pricing paths. The breakdown was wrong about this, not the implementation.
+
 ### Task 5: Tier prices and the rewritten pricing service
 
-- [ ] Start 4,500, Pro 10,000, Premium 20,000, per seat per month, as constants
-- [ ] Floor is ten seats in total, not per tier
-- [ ] Per-tier floor against students already provisioned in that tier
-- [ ] Refusals name the tier and carry requiredSeats
-- [ ] Integer amounts; a three-tier mix sums exactly
-- [ ] Commit the green increment
+- [x] Start 4,500, Pro 10,000, Premium 20,000, per seat per month, as constants
+- [x] Floor is ten seats in total, not per tier
+- [x] Per-tier floor against students already provisioned in that tier
+- [x] Refusals name the tier and carry requiredSeats
+- [x] Integer amounts; a three-tier mix sums exactly
+- [x] Commit the green increment
 
 ### Task 6: Quote takes a mix
 
-- [ ] Accepts `{ start, pro, premium }`, returns itemised lines and totals
-- [ ] A price, total or currency in the body is rejected
-- [ ] Reachable while blocked
-- [ ] Commit the green increment
+- [x] Accepts `{ start, pro, premium }`, returns itemised lines and totals
+- [x] A price, total or currency in the body is rejected
+- [x] Reachable while blocked
+- [x] Commit the green increment
 
 ### Task 7: Payment takes a mix
 
-- [ ] Accepts the mix, records a per-tier breakdown
-- [ ] Idempotency key, payload fingerprint, unique index and rate limit intact
-- [ ] Fingerprint covers the whole mix, so a different mix on one key is 409
-- [ ] Concurrency re-proven against real Postgres
-- [ ] Still grants nothing: `paid_until` untouched
-- [ ] Commit the green increment
+- [x] Accepts the mix, records a per-tier breakdown
+- [x] Idempotency key, payload fingerprint, unique index and rate limit intact
+- [x] Fingerprint covers the whole mix, so a different mix on one key is 409
+- [x] Concurrency re-proven against real Postgres
+- [x] Still grants nothing: `paid_until` untouched
+- [x] Commit the green increment
 
 ### Checkpoint B
 

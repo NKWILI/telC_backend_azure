@@ -4,17 +4,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
-import type { PaymentStatus } from '@prisma/client';
+import type { PaymentStatus, Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
-import { PricingService } from './pricing.service';
+import { PricingService, type SeatMix, type Quote } from './pricing.service';
+import { CenterSeatsService } from './center-seats.service';
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
 
-export interface PaymentView {
-  id: string;
+export interface PaymentLineView {
+  tier: Tier;
   seats: number;
   unitPriceXaf: number;
+  amountXaf: number;
+}
+
+export interface PaymentView {
+  id: string;
+  /** Per tier, so an invoice can be read back exactly as it was agreed. */
+  lines: PaymentLineView[];
+  totalSeats: number;
   amountXaf: number;
   status: PaymentStatus;
   createdAt: Date;
@@ -30,11 +39,15 @@ export interface PaymentPage {
 /** Prisma's unique-violation code. The insert race is decided by this. */
 const UNIQUE_VIOLATION = 'P2002';
 
+/** Cheapest first, matching the order a quote lists its lines in. */
+const TIER_VIEW_ORDER: Record<Tier, number> = { START: 0, PRO: 1, PREMIUM: 2 };
+
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricing: PricingService,
+    private readonly seats: CenterSeatsService,
   ) {}
 
   /**
@@ -49,44 +62,38 @@ export class PaymentsService {
    */
   async create(
     identity: SignedCenterIdentity,
-    seats: number,
+    mix: SeatMix,
     idempotencyKey: string,
   ): Promise<PaymentView> {
-    const [center, studentCount] = await Promise.all([
-      this.prisma.center.findUnique({
-        where: { id: identity.centerId },
-        select: { unit_price_xaf: true, min_seats: true },
-      }),
-      this.prisma.student.count({ where: { center_id: identity.centerId } }),
-    ]);
-
-    if (!center) {
-      throw new NotFoundException('CENTER_NOT_FOUND');
-    }
-
-    // Priced before anything is written, so a refused seat count leaves no
-    // record behind.
+    // Priced before anything is written, so a refused mix leaves no record
+    // behind.
     const quote = this.pricing.quote(
-      {
-        unitPriceXaf: center.unit_price_xaf,
-        minSeats: center.min_seats,
-        studentCount,
-      },
-      seats,
+      mix,
+      await this.seats.tierContextFor(identity.centerId),
     );
 
-    const requestHash = this.fingerprint(identity.centerId, seats);
+    const requestHash = this.fingerprint(identity.centerId, quote);
 
     try {
       const created = await this.prisma.payment.create({
         data: {
           center_id: identity.centerId,
-          seats: quote.seats,
-          unit_price_xaf: quote.unitPriceXaf,
-          amount_xaf: quote.amountXaf,
+          total_seats: quote.totalSeats,
+          amount_xaf: quote.totalXaf,
           idempotency_key: idempotencyKey,
           request_hash: requestHash,
+          // Written in the same insert as the payment, so a payment can never
+          // exist without the breakdown that explains its amount.
+          lines: {
+            create: quote.lines.map((line) => ({
+              tier: line.tier,
+              seats: line.seats,
+              unit_price_xaf: line.unitPriceXaf,
+              amount_xaf: line.amountXaf,
+            })),
+          },
         },
+        include: { lines: true },
       });
 
       return this.toView(created);
@@ -113,6 +120,7 @@ export class PaymentsService {
       // Scoped by center in the query itself. Fetching then comparing would
       // work too, and would be one refactor away from leaking.
       where: { id: paymentId, center_id: identity.centerId },
+      include: { lines: true },
     });
 
     // 404 rather than 403 for another center's payment, matching the student
@@ -136,6 +144,7 @@ export class PaymentsService {
         orderBy: { created_at: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: { lines: true },
       }),
       this.prisma.payment.count({ where }),
     ]);
@@ -168,6 +177,7 @@ export class PaymentsService {
           idempotency_key: idempotencyKey,
         },
       },
+      include: { lines: true },
     });
 
     // Only reachable if the row disappeared between the failed insert and this
@@ -184,12 +194,28 @@ export class PaymentsService {
   }
 
   /**
-   * What the key was first used for. Deliberately covers the center as well as
-   * the seats, so a hash can never be compared across centers by accident.
+   * What the key was first used for.
+   *
+   * Covers the center and every tier line, so a replay that changes any part
+   * of the mix is a different intent wearing the same name. Hashing only the
+   * total would let five Start plus five Pro pass as ten Start at the same
+   * price, which is the one collision that matters.
+   *
+   * The center is included so a hash can never be compared across centers by
+   * accident.
    */
-  private fingerprint(centerId: string, seats: number): string {
+  private fingerprint(centerId: string, quote: Quote): string {
     return createHash('sha256')
-      .update(JSON.stringify({ centerId, seats }))
+      .update(
+        JSON.stringify({
+          centerId,
+          lines: quote.lines.map((line) => [
+            line.tier,
+            line.seats,
+            line.unitPriceXaf,
+          ]),
+        }),
+      )
       .digest('hex');
   }
 
@@ -204,16 +230,30 @@ export class PaymentsService {
   /** Built field by field, so a column added later cannot leak into a response. */
   private toView(row: {
     id: string;
-    seats: number;
-    unit_price_xaf: number;
+    total_seats: number;
     amount_xaf: number;
     status: PaymentStatus;
     created_at: Date;
+    lines: {
+      tier: Tier;
+      seats: number;
+      unit_price_xaf: number;
+      amount_xaf: number;
+    }[];
   }): PaymentView {
     return {
       id: row.id,
-      seats: row.seats,
-      unitPriceXaf: row.unit_price_xaf,
+      // Cheapest tier first, matching the order a quote lists them in, so a
+      // payment and the quote that produced it read the same way.
+      lines: [...row.lines]
+        .sort((a, b) => TIER_VIEW_ORDER[a.tier] - TIER_VIEW_ORDER[b.tier])
+        .map((line) => ({
+          tier: line.tier,
+          seats: line.seats,
+          unitPriceXaf: line.unit_price_xaf,
+          amountXaf: line.amount_xaf,
+        })),
+      totalSeats: row.total_seats,
       amountXaf: row.amount_xaf,
       status: row.status,
       createdAt: row.created_at,
