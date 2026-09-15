@@ -210,6 +210,141 @@ describe('student provisioning and activation against real Postgres', () => {
     });
   });
 
+  /**
+   * Moving a student between tiers, against the rows.
+   *
+   * The seat limit and the concurrency guarantee are both claims about the
+   * database: a mock returns whatever count it was told to, and cannot race.
+   */
+  describe('moving a student between tiers', () => {
+    const mixedCenter = (name: string, start: number, pro: number) =>
+      prisma.center.create({
+        data: {
+          name,
+          country: 'Cameroon',
+          city: 'Douala',
+          subscription: { create: { plan: 'TRIAL', seats: 10 } },
+          seats: {
+            create: [
+              { tier: 'START', quantity: start, unit_price_xaf: 4500 },
+              { tier: 'PRO', quantity: pro, unit_price_xaf: 10000 },
+            ],
+          },
+        },
+      });
+
+    it('moves a Start student into a free Pro seat', async () => {
+      const center = await mixedCenter('Move Center', 2, 1);
+      const student = await provisioning.provision(
+        identity(center.id),
+        input(1, 'START'),
+      );
+
+      const view = await students.update(identity(center.id), student.id, {
+        tier: 'PRO',
+      });
+
+      expect(view.tier).toBe('PRO');
+      // The Start seat is released by the same write, so the tier the student
+      // left has room again.
+      expect(
+        await prisma.student.count({
+          where: { center_id: center.id, tier: 'START' },
+        }),
+      ).toBe(0);
+    });
+
+    it('refuses a move into a full tier and leaves the student where they are', async () => {
+      const center = await mixedCenter('Full Pro Center', 2, 1);
+      const staying = await provisioning.provision(
+        identity(center.id),
+        input(1, 'PRO'),
+      );
+      const moving = await provisioning.provision(
+        identity(center.id),
+        input(2, 'START'),
+      );
+
+      await expect(
+        students.update(identity(center.id), moving.id, { tier: 'PRO' }),
+      ).rejects.toThrow('SEAT_LIMIT_REACHED');
+
+      const row = await prisma.student.findUniqueOrThrow({
+        where: { id: moving.id },
+        select: { tier: true },
+      });
+      expect(row.tier).toBe('START');
+      expect(staying.id).toBeDefined();
+    });
+
+    it('refuses a move into a tier the center holds no seats in', async () => {
+      const center = await mixedCenter('No Premium Center', 2, 1);
+      const student = await provisioning.provision(
+        identity(center.id),
+        input(1, 'START'),
+      );
+
+      await expect(
+        students.update(identity(center.id), student.id, { tier: 'PREMIUM' }),
+      ).rejects.toThrow('TIER_NOT_HELD');
+    });
+
+    it('lets a student be sent to the tier they already hold', async () => {
+      // A client re-sending the value it already has must not be refused just
+      // because the tier is exactly full.
+      const center = await mixedCenter('Idempotent Move Center', 2, 1);
+      const student = await provisioning.provision(
+        identity(center.id),
+        input(1, 'PRO'),
+      );
+
+      const view = await students.update(identity(center.id), student.id, {
+        tier: 'PRO',
+      });
+
+      expect(view.tier).toBe('PRO');
+    });
+
+    it('never lets two concurrent moves share one free seat', async () => {
+      const center = await mixedCenter('Race Move Center', 2, 1);
+      const a = await provisioning.provision(
+        identity(center.id),
+        input(1, 'START'),
+      );
+      const b = await provisioning.provision(
+        identity(center.id),
+        input(2, 'START'),
+      );
+
+      const results = await Promise.allSettled([
+        students.update(identity(center.id), a.id, { tier: 'PRO' }),
+        students.update(identity(center.id), b.id, { tier: 'PRO' }),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(
+        await prisma.student.count({
+          where: { center_id: center.id, tier: 'PRO' },
+        }),
+      ).toBe(1);
+    });
+
+    it('refuses to move another center student', async () => {
+      const mine = await mixedCenter('Mine Center', 2, 1);
+      const theirs = await mixedCenter('Theirs Center', 2, 1);
+      const student = await provisioning.provision(
+        identity(theirs.id),
+        input(1, 'START'),
+      );
+
+      // 404, and before any seat is inspected: a seat answer would confirm
+      // the id exists.
+      await expect(
+        students.update(identity(mine.id), student.id, { tier: 'PRO' }),
+      ).rejects.toThrow('STUDENT_NOT_FOUND');
+    });
+  });
+
   it('starts the trial exactly once, on the first activation', async () => {
     const center = await makeCenter('Trial Center', 3);
     const first = await provisioning.provision(identity(center.id), input(1));

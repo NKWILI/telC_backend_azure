@@ -270,6 +270,60 @@ describe('CenterStudentsController contract', () => {
     expect(students.update).not.toHaveBeenCalled();
   });
 
+  describe('moving a student between tiers over HTTP', () => {
+    it('passes the tier through', async () => {
+      await http()
+        .patch('/api/centers/me/students/student-1')
+        .send({ tier: 'PRO' })
+        .expect(200);
+
+      expect(students.update).toHaveBeenCalledWith(
+        signedIdentity,
+        'student-1',
+        { tier: 'PRO' },
+      );
+    });
+
+    it.each(['GOLD', 'pro', '', 3])('rejects %s as a tier', async (tier) => {
+      await http()
+        .patch('/api/centers/me/students/student-1')
+        .send({ tier })
+        .expect(400);
+
+      expect(students.update).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a full target tier as 403, naming the tier', async () => {
+      students.update.mockRejectedValue(
+        new ForbiddenException({ message: 'SEAT_LIMIT_REACHED', tier: 'PRO' }),
+      );
+
+      const response = await http()
+        .patch('/api/centers/me/students/student-1')
+        .send({ tier: 'PRO' })
+        .expect(403);
+
+      expect(response.body.error).toBe('SEAT_LIMIT_REACHED');
+      // The detail that makes the refusal actionable has to survive the
+      // exception filter, or a dashboard cannot say which tier to buy.
+      expect(response.body.tier).toBe('PRO');
+    });
+
+    it('surfaces an unheld target tier as 403, naming the tier', async () => {
+      students.update.mockRejectedValue(
+        new ForbiddenException({ message: 'TIER_NOT_HELD', tier: 'PREMIUM' }),
+      );
+
+      const response = await http()
+        .patch('/api/centers/me/students/student-1')
+        .send({ tier: 'PREMIUM' })
+        .expect(403);
+
+      expect(response.body.error).toBe('TIER_NOT_HELD');
+      expect(response.body.tier).toBe('PREMIUM');
+    });
+  });
+
   it('removes a student, freeing the seat', async () => {
     await http()
       .delete('/api/centers/me/students/student-1')
