@@ -115,6 +115,16 @@ describe('AiUsageService', () => {
       );
     });
 
+    it('can skip rows that must expire before capacity returns', async () => {
+      const since = new Date('2026-09-15T00:00:00.000Z');
+
+      await service.oldestSince('student-1', 'SPEAKING_EVALUATION', since, 7);
+
+      expect(prisma.aiUsage.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 7 }),
+      );
+    });
+
     it('reports null rather than a date when the window is empty', async () => {
       await expect(
         service.oldestSince(

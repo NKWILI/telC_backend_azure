@@ -81,11 +81,9 @@ export interface TierContext {
  * What pricing needs to know about a center. Nothing else about it matters.
  *
  * `totalStudents` is every student the center governs, including those in no
- * tier, and it is not the sum of the per-tier counts. Nothing writes
- * `students.tier` until provisioning learns to, so today every per-tier count
- * is zero while `totalStudents` is the real number — and a student in no tier
- * still occupies a seat. Keeping both means the floor holds before tiers are
- * assigned and after.
+ * tier, and it is not necessarily the sum of the per-tier counts. Legacy
+ * students can have no tier and still occupy a seat. Keeping both means the
+ * floor holds before those rows are assigned and after.
  */
 export interface CenterPricingContext {
   tiers: Partial<Record<Tier, TierContext>>;
@@ -127,7 +125,8 @@ export interface QuoteRefusal {
   code: QuoteRefusalCode;
   /**
    * Per tier, the fewest seats that tier may hold, because that many students
-   * already sit in it. Only tiers at fault appear.
+   * already sit in it. When any tier is short, every occupied tier appears so
+   * applying the response cannot uncover a second tier refusal.
    */
   requiredSeatsPerTier?: Partial<Record<Tier, number>>;
   /**
@@ -230,19 +229,23 @@ export class PricingService {
     // reporting only the rule hit first sends it away with a number that does
     // not unblock it.
     const requiredSeatsPerTier: Partial<Record<Tier, number>> = {};
+    let tierIsShort = false;
 
     for (const tier of TIER_ORDER) {
       const students = context.tiers[tier]?.studentCount ?? 0;
-      if (students > (wanted[tier] ?? 0)) {
+      if (students > 0) {
         requiredSeatsPerTier[tier] = students;
+      }
+      if (students > (wanted[tier] ?? 0)) {
+        tierIsShort = true;
       }
     }
 
-    // The smallest total that satisfies every tier floor, which can exceed the
-    // contract minimum on its own.
+    // The tier floor depends only on students already provisioned, never on
+    // the caller's current cart. Otherwise asking for surplus seats in one
+    // tier inflates the reported minimum even though those seats are optional.
     const floorFromTiers = TIER_ORDER.reduce(
-      (total, tier) =>
-        total + (requiredSeatsPerTier[tier] ?? wanted[tier] ?? 0),
+      (total, tier) => total + (requiredSeatsPerTier[tier] ?? 0),
       0,
     );
 
@@ -255,7 +258,7 @@ export class PricingService {
       floorFromTiers,
     );
 
-    if (Object.keys(requiredSeatsPerTier).length > 0) {
+    if (tierIsShort) {
       return {
         code: 'SEATS_BELOW_STUDENT_COUNT',
         requiredSeatsPerTier,

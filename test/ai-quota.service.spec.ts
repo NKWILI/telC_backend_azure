@@ -25,6 +25,8 @@ describe('AiQuotaService', () => {
       studentsMayLearn: true,
       graceEndsAt: null,
       tier: 'START',
+      studentExists: true,
+      wasGoverned: true,
       ...over,
     }) as StudentEntitlement;
 
@@ -85,7 +87,7 @@ describe('AiQuotaService', () => {
      */
     it('gives a student no center governs the Start allowance', async () => {
       entitlement.forStudent.mockResolvedValue(
-        entitled({ status: 'NONE', tier: null }),
+        entitled({ status: 'NONE', tier: null, wasGoverned: false }),
       );
 
       const decision = await service.check('s1', 'SPEAKING_EVALUATION');
@@ -110,7 +112,7 @@ describe('AiQuotaService', () => {
       // The loophole this closes: a center could otherwise release its
       // students to give them an unmetered allowance we pay for.
       entitlement.forStudent.mockResolvedValue(
-        entitled({ status: 'NONE', tier: null }),
+        entitled({ status: 'NONE', tier: null, wasGoverned: false }),
       );
       const ungoverned = await service.check('s1', 'SPEAKING_EVALUATION');
 
@@ -118,6 +120,53 @@ describe('AiQuotaService', () => {
       const start = await service.check('s1', 'SPEAKING_EVALUATION');
 
       expect(ungoverned.allowedToday).toBeLessThanOrEqual(start.allowedToday);
+    });
+  });
+
+  /**
+   * A caller whose usage cannot be recorded must not be allowed to spend.
+   *
+   * `/api/auth/guest` mints a token carrying a random uuid and writes no
+   * `students` row. `ai_usage.student_id` is a foreign key to that table, so
+   * every insert for such a caller fails — and `recordDelivered` swallows the
+   * failure by design, because its job is to protect a delivered result. The
+   * two together meant the count stayed permanently at zero: an unmetered,
+   * unauthenticated caller with an unbounded supply of paid Gemini calls.
+   *
+   * A meter that cannot count must refuse, not wave through.
+   */
+  describe('a caller that cannot be metered', () => {
+    it('is refused rather than given an allowance', async () => {
+      entitlement.forStudent.mockResolvedValue(
+        entitled({ status: 'NONE', tier: null, studentExists: false }),
+      );
+
+      const decision = await service.check('s1', 'SPEAKING_EVALUATION');
+
+      expect(decision).toMatchObject({ allowed: false, allowedToday: 0 });
+    });
+
+    it('does not even ask how much they have used', async () => {
+      // There is nothing to count, and asking would imply there might be.
+      entitlement.forStudent.mockResolvedValue(
+        entitled({ status: 'NONE', tier: null, studentExists: false }),
+      );
+
+      await service.check('s1', 'SPEAKING_EVALUATION');
+
+      expect(usage.countSince).not.toHaveBeenCalled();
+    });
+
+    it('says the account is what is missing, not the allowance', async () => {
+      entitlement.forStudent.mockResolvedValue(
+        entitled({ status: 'NONE', tier: null, studentExists: false }),
+      );
+
+      await expect(
+        service.assertWithinQuota('s1', 'SPEAKING_EVALUATION'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ message: 'AI_REQUIRES_ACCOUNT' }),
+      });
     });
   });
 
@@ -198,6 +247,26 @@ describe('AiQuotaService', () => {
       // A different cutoff would find a row that was not counted, and report
       // a reset time that has already passed.
       expect(oldestSince.getTime()).toBe(countSince.getTime());
+    });
+
+    it('waits for enough rows to expire when usage is over the allowance', async () => {
+      // With nine rows and an allowance of two, the eighth-oldest row must
+      // expire before only one remains and another operation is allowed.
+      const unlockRow = new Date(Date.now() - 18 * HOUR_MS);
+      usage.countSince.mockResolvedValue(9);
+      usage.oldestSince.mockResolvedValue(unlockRow);
+
+      const decision = await service.check('s1', 'SPEAKING_EVALUATION');
+
+      expect(usage.oldestSince).toHaveBeenCalledWith(
+        's1',
+        'SPEAKING_EVALUATION',
+        expect.any(Date),
+        7,
+      );
+      expect(decision.resetsAt?.getTime()).toBe(
+        unlockRow.getTime() + 24 * HOUR_MS,
+      );
     });
   });
 

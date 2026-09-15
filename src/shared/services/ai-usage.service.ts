@@ -87,18 +87,15 @@ export class AiUsageService {
   }
 
   /**
-   * When this student's oldest counted operation happened, or null if none is
-   * in the window.
-   *
-   * This is what a reset time is computed from: the moment that row falls out
-   * of the window is its timestamp plus the window length. A fixed midnight
-   * would be wrong for everyone outside one timezone, and a rolling window has
-   * no midnight to pick.
+   * When a counted operation happened, ordered oldest first, or null if that
+   * row does not exist. `skip` lets the quota service select the row whose
+   * expiry actually restores capacity when usage is over the allowance.
    */
   async oldestSince(
     studentId: string,
     operation: AiOperation,
     since: Date,
+    skip = 0,
   ): Promise<Date | null> {
     const row = await this.prisma.aiUsage.findFirst({
       where: {
@@ -107,6 +104,7 @@ export class AiUsageService {
         created_at: { gte: since },
       },
       orderBy: { created_at: 'asc' },
+      skip,
       select: { created_at: true },
     });
 

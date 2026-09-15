@@ -86,6 +86,13 @@ export class CenterUsageResponseDto {
   seatsAvailable: number;
 
   @ApiProperty({
+    example: 0,
+    description:
+      'Legacy students who occupy a center seat but have no tier assignment yet. Add this to perTier seatsUsed to reconcile with the total seatsUsed.',
+  })
+  unassignedSeatsUsed: number;
+
+  @ApiProperty({
     type: [CenterTierUsageDto],
     description:
       'The same figures per tier, cheapest first. A seat belongs to a tier, so a total alone cannot answer "may I add a Start student" — which is what provisioning refuses on. A tier appears if the center holds seats in it or has students in it.',

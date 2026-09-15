@@ -237,11 +237,31 @@ describe('CenterSubscriptionService', () => {
         seatsUsed: 2,
         seatsLimit: 3,
         seatsAvailable: 1,
+        unassignedSeatsUsed: 0,
         perTier: [
           { tier: 'START', seatsHeld: 3, seatsUsed: 2, seatsAvailable: 1 },
         ],
         status: 'TRIAL_PENDING',
       });
+    });
+
+    it('reports legacy students with no tier outside the tier breakdown', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 3 },
+      ]);
+      prisma.student.count.mockResolvedValue(3);
+      prisma.student.groupBy.mockResolvedValue([
+        { tier: 'START', _count: { _all: 2 } },
+        { tier: null, _count: { _all: 1 } },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.unassignedSeatsUsed).toBe(1);
+      expect(
+        result.perTier.reduce((sum, row) => sum + row.seatsUsed, 0) +
+          result.unassignedSeatsUsed,
+      ).toBe(result.seatsUsed);
     });
 
     it('takes the limit from the seat rows, with no status-dependent branch', async () => {

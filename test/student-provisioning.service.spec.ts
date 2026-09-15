@@ -39,6 +39,7 @@ describe('StudentProvisioningService', () => {
       centerSeat: {
         // One Start seat is what a fresh trialling center holds.
         findUnique: jest.fn().mockResolvedValue({ tier: 'START', quantity: 3 }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { quantity: 3 } }),
       },
     };
     prisma = {
@@ -141,6 +142,20 @@ describe('StudentProvisioningService', () => {
     tx.student.count.mockResolvedValue(2);
 
     await expect(service.provision(identity, input)).resolves.toBeDefined();
+  });
+
+  it('counts untiered legacy students against the center-wide seat limit', async () => {
+    // The requested tier itself is empty, but three legacy students with a
+    // null tier already consume all three seats held by the center.
+    tx.student.count.mockResolvedValueOnce(0).mockResolvedValueOnce(3);
+
+    await expect(service.provision(identity, input)).rejects.toThrow(
+      'SEAT_LIMIT_REACHED',
+    );
+    expect(tx.student.count).toHaveBeenCalledWith({
+      where: { center_id: 'center-1' },
+    });
+    expect(tx.student.create).not.toHaveBeenCalled();
   });
 
   /**

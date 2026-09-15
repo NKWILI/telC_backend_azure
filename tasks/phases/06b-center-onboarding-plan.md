@@ -436,9 +436,10 @@ sessions. A quota that a client can reset is not a quota.
 **What a rolling window buys beyond fairness:** nothing to store, nothing to
 configure, and no daylight-saving arithmetic anywhere.
 
-**It also improves the message.** `resetsAt` becomes the oldest counted session
-plus 24 hours, so the app can say "your next session unlocks at 14:32" instead
-of "come back tomorrow". More precise, and true everywhere on earth.
+**It also improves the message.** `resetsAt` is the counted session whose
+expiry restores capacity, plus 24 hours. At the exact allowance that is the
+oldest row; after an allowance reduction or a race it may be a later row. The
+app can still say "your next session unlocks at 14:32" precisely and truthfully.
 
 ## Agreed change 19: a trial seat behaves like Start
 

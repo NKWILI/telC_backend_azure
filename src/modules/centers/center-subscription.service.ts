@@ -44,6 +44,8 @@ export interface CenterUsageView {
   seatsUsed: number;
   seatsLimit: number;
   seatsAvailable: number;
+  /** Legacy students that occupy a seat but have not been assigned a tier. */
+  unassignedSeatsUsed: number;
   /**
    * The same figures per tier, cheapest first.
    *
@@ -112,8 +114,13 @@ export class CenterSubscriptionService {
 
     const held = new Map(seatRows.map((row) => [row.tier, row.quantity]));
     const used = new Map<Tier, number>();
+    let unassignedSeatsUsed = 0;
     for (const group of studentsByTier) {
-      if (group.tier) used.set(group.tier, group._count._all);
+      if (group.tier) {
+        used.set(group.tier, group._count._all);
+      } else {
+        unassignedSeatsUsed = group._count._all;
+      }
     }
 
     const seatsLimit = seatRows.reduce((total, row) => total + row.quantity, 0);
@@ -125,6 +132,7 @@ export class CenterSubscriptionService {
       // dropping to a smaller plan — and that blocks new provisioning without
       // evicting anyone, so the number to report is "none left", not a deficit.
       seatsAvailable: Math.max(0, seatsLimit - seatsUsed),
+      unassignedSeatsUsed,
       perTier: TIER_ORDER.filter(
         (tier) => held.has(tier) || used.has(tier),
       ).map((tier) => {

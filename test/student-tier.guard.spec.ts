@@ -29,6 +29,8 @@ describe('StudentTierGuard', () => {
       studentsMayLearn: true,
       graceEndsAt: null,
       tier: 'PRO',
+      studentExists: true,
+      wasGoverned: true,
       ...over,
     }) as StudentEntitlement;
 
@@ -95,9 +97,56 @@ describe('StudentTierGuard', () => {
      * The regression this guard must not cause. Independent students hold no
      * tier and no center, and they have the exam module today.
      */
-    it('admits a student no center governs', async () => {
+    it('admits a student no center has EVER governed', async () => {
       entitlement.forStudent.mockResolvedValue(
-        entitled({ status: 'NONE', tier: null }),
+        entitled({ status: 'NONE', tier: null, wasGoverned: false }),
+      );
+
+      await expect(
+        guard.canActivate(contextFor({ student: { studentId: 's1' } })),
+      ).resolves.toBe(true);
+    });
+
+    /**
+     * The paywall bypass this closes.
+     *
+     * `remove` releases a student by nulling `center_id` and keeping the
+     * account, so they used to come back as simply "ungoverned" and be
+     * admitted. A center could therefore provision a student, let them
+     * activate, release them — freeing the seat, since the seat check counts
+     * only students still carrying a center — and the released student kept
+     * the exam module for nothing. Revenue loss scaling with roster size,
+     * through a first-class UI action that looks like roster management.
+     *
+     * A genuine independent student is unaffected: they were never governed.
+     */
+    it('refuses a student a center RELEASED', async () => {
+      entitlement.forStudent.mockResolvedValue(
+        entitled({ status: 'NONE', tier: null, wasGoverned: true }),
+      );
+
+      await expect(
+        guard.canActivate(contextFor({ student: { studentId: 's1' } })),
+      ).rejects.toThrow('TIER_TOO_LOW');
+    });
+
+    it('leaves a guest token to the guard whose job that is', async () => {
+      // A guest has no row and never held a tier, so by this guard's rule it
+      // is admitted — and that is deliberate. Guests reach the exam module
+      // today, and whether a demo should include it is a product question
+      // about guests, not about tiers. What a guest must not reach is an
+      // operation that SPENDS money: `GuestBlockGuard` refuses speaking, and
+      // `AiQuotaService` refuses anything it cannot meter.
+      //
+      // Keeping the two questions apart is why this guard does not grow a
+      // guest branch it would then own the meaning of.
+      entitlement.forStudent.mockResolvedValue(
+        entitled({
+          status: 'NONE',
+          tier: null,
+          wasGoverned: false,
+          studentExists: false,
+        }),
       );
 
       await expect(

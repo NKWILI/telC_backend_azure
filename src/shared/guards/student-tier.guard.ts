@@ -69,9 +69,24 @@ export class StudentTierGuard implements CanActivate {
 
     const entitlement = await this.load(request, studentId);
 
-    // No center, no tier requirement. See the class comment: this is the
-    // independent student, not a governed one who happens to lack a tier.
-    if (entitlement.status === 'NONE') {
+    // Only a student no center has EVER governed. A genuine independent
+    // student predates the center model and keeps what they have.
+    //
+    // NOT one a center released. `remove` nulls `center_id` and keeps the
+    // account, so a released student also reports NONE — and admitting them
+    // let a center provision, let the student activate, release them (freeing
+    // the seat, since the seat check counts only students still carrying a
+    // center) and hand them the exam module for nothing. That is the paywall
+    // bypassed by the party with the strongest incentive to bypass it,
+    // through an action that looks like ordinary roster management.
+    //
+    // A guest token — no row, never governed — is admitted by this rule, and
+    // that is deliberate. Guests reach the exam module today, and whether a
+    // demo should include it is a product question about guests rather than
+    // about tiers. What a guest must not reach is an operation that SPENDS
+    // money: `GuestBlockGuard` refuses speaking, and `AiQuotaService` refuses
+    // anything it cannot meter.
+    if (entitlement.status === 'NONE' && !entitlement.wasGoverned) {
       return true;
     }
 

@@ -154,7 +154,7 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 - [x] Start 2, Pro 5, Premium 20, over a rolling 24 hours
 - [x] No timezone anywhere
 - [x] Refusal carries tier, usedToday, allowedToday, resetsAt
-- [x] `resetsAt` is the oldest counted row plus 24 hours
+- [x] `resetsAt` is the counted row whose expiry restores capacity, plus 24 hours
 - [x] Commit the green increment
 
 ### Task 15: Apply it to speaking

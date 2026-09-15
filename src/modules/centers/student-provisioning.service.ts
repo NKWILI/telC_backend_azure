@@ -62,8 +62,9 @@ export class StudentProvisioningService {
    * outside it would let two administrators both read the second-to-last seat
    * and both insert, putting the center over its limit with no way to notice.
    *
-   * The check is per tier, because a seat belongs to a tier: a Start student
-   * cannot sit in a Pro seat.
+   * Capacity is checked both per tier and center-wide. The total check covers
+   * legacy students with no tier; the tier check prevents a Start student
+   * from borrowing a spare Pro seat.
    */
   async provision(
     identity: SignedCenterIdentity,
@@ -127,6 +128,22 @@ export class StudentProvisioningService {
             message: 'SEAT_LIMIT_REACHED',
             tier: input.tier,
           });
+        }
+
+        // Legacy students can still have a null tier. They do not appear in
+        // the per-tier count above, but each still occupies one of the
+        // center's seats. Keep this check in the same transaction so a new
+        // provision cannot push total students beyond total seats held.
+        const [totalSeatsUsed, seatTotals] = await Promise.all([
+          tx.student.count({ where: { center_id: identity.centerId } }),
+          tx.centerSeat.aggregate({
+            where: { center_id: identity.centerId },
+            _sum: { quantity: true },
+          }),
+        ]);
+        const totalSeatsHeld = seatTotals._sum.quantity ?? 0;
+        if (totalSeatsUsed >= totalSeatsHeld) {
+          throw new ForbiddenException('SEAT_LIMIT_REACHED');
         }
 
         // Refuse rather than attach. Attaching would hand this center control

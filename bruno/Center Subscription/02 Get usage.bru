@@ -56,6 +56,21 @@ docs {
   and the PRO row stays, reporting `seatsHeld: 0` with `seatsUsed: 3`. That
   overage is what a dashboard needs to show, not hide.
 
+  ## unassignedSeatsUsed
+
+  Students who occupy a seat but carry no tier — legacy rows from before
+  provisioning assigned one. They count in `seatsUsed` but belong to no row in
+  `perTier`, so without this field the breakdown would not add up to the total:
+
+      seatsUsed = unassignedSeatsUsed + sum of perTier[].seatsUsed
+
+  Check it by hand: `UPDATE students SET tier = NULL WHERE id = '...'` for a
+  student of this center and re-run. `unassignedSeatsUsed` goes up by one,
+  that tier's `seatsUsed` goes down by one, and `seatsUsed` does not move.
+
+  They are also counted by provisioning's center-wide check, so a center
+  cannot fill its tiered seats on top of them.
+
   ## Buying more seats
 
   `center_seats` is unique per (center, tier), so buying more of a tier raises

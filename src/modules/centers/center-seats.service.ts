@@ -78,8 +78,8 @@ export class CenterSeatsService {
     for (const group of studentsByTier) {
       // A student carrying no tier sits in no particular tier's seats, so
       // there is nothing to count them against here. They are counted in
-      // `totalStudents` below, because they still occupy a seat — and today
-      // that is every student, since nothing writes `students.tier` yet.
+      // `totalStudents` below because they still occupy a seat. These are
+      // legacy rows from before provisioning assigned a tier.
       if (!group.tier) continue;
 
       tiers[group.tier] = {

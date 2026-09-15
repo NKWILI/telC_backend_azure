@@ -1,5 +1,9 @@
 import { ForbiddenException } from '@nestjs/common';
 import { EvaluationService } from '../src/modules/speaking/services/evaluation.service';
+import { SpeakingController } from '../src/modules/speaking/speaking.controller';
+import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
+import { GuestBlockGuard } from '../src/shared/guards/guest-block.guard';
+import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 
 /**
  * The quota where it actually costs money.
@@ -26,6 +30,7 @@ describe('speaking evaluation and the AI quota', () => {
   let gemini: { generateTextResponse: jest.Mock };
   let quota: { assertWithinQuota: jest.Mock };
   let usage: { recordDelivered: jest.Mock };
+  let rateLimit: { checkAiEvaluationLimit: jest.Mock };
   let service: EvaluationService;
 
   beforeEach(() => {
@@ -36,11 +41,15 @@ describe('speaking evaluation and the AI quota', () => {
     };
     quota = { assertWithinQuota: jest.fn().mockResolvedValue(undefined) };
     usage = { recordDelivered: jest.fn().mockResolvedValue(undefined) };
+    rateLimit = {
+      checkAiEvaluationLimit: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new EvaluationService(
       gemini as never,
       quota as never,
       usage as never,
+      rateLimit as never,
     );
   });
 
@@ -138,6 +147,10 @@ describe('speaking evaluation and the AI quota', () => {
   describe('the order is not an accident', () => {
     it('checks, then calls, then records', async () => {
       const order: string[] = [];
+      rateLimit.checkAiEvaluationLimit.mockImplementation(() => {
+        order.push('limit');
+        return Promise.resolve();
+      });
       quota.assertWithinQuota.mockImplementation(() => {
         order.push('check');
         return Promise.resolve();
@@ -153,7 +166,7 @@ describe('speaking evaluation and the AI quota', () => {
 
       await evaluate();
 
-      expect(order).toEqual(['check', 'call', 'record']);
+      expect(order).toEqual(['limit', 'check', 'call', 'record']);
     });
   });
 
@@ -168,5 +181,41 @@ describe('speaking evaluation and the AI quota', () => {
       expect(quota.assertWithinQuota).not.toHaveBeenCalled();
       expect(usage.recordDelivered).not.toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * The door, as opposed to the meter.
+ *
+ * A guest token is the one caller the quota could never count: it carries a
+ * random uuid and no `students` row, so every `ai_usage` insert fails the
+ * foreign key and `recordDelivered` swallows it. Unmetered paid calls, no
+ * credentials required. `GuestBlockGuard` was written for exactly this, was
+ * promised by the guest-session documentation, and was mounted nowhere.
+ */
+describe('the guards on the speaking controller', () => {
+  const guardsOn = (target: object): unknown[] =>
+    (Reflect.getMetadata('__guards__', target) ?? []) as unknown[];
+
+  it('refuses guests before anything costs money', () => {
+    expect(guardsOn(SpeakingController)).toContain(GuestBlockGuard);
+  });
+
+  it('still authenticates and still checks the subscription', () => {
+    const guards = guardsOn(SpeakingController);
+
+    expect(guards).toContain(JwtAuthGuard);
+    expect(guards).toContain(StudentSubscriptionGuard);
+  });
+
+  it('identifies the caller before deciding whether they are a guest', () => {
+    // GuestBlockGuard reads request.student, which JwtAuthGuard puts there.
+    // Reversed, it would see no student, find no isGuest flag, and admit
+    // every guest — a guard that looks like protection and is not.
+    const guards = guardsOn(SpeakingController);
+
+    expect(guards.indexOf(JwtAuthGuard)).toBeLessThan(
+      guards.indexOf(GuestBlockGuard),
+    );
   });
 });

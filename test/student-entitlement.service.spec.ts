@@ -81,6 +81,8 @@ describe('StudentEntitlementService', () => {
         studentsMayLearn: true,
         graceEndsAt: null,
         tier: null,
+        studentExists: true,
+        wasGoverned: false,
       });
     });
 
@@ -143,6 +145,67 @@ describe('StudentEntitlementService', () => {
         status: 'BLOCKED',
         studentsMayLearn: false,
         tier: null,
+      });
+    });
+  });
+
+  /**
+   * Two different kinds of "no center", which the service used to collapse
+   * into one answer.
+   *
+   * A genuine independent student has a row and no center. A guest token has
+   * NO ROW AT ALL — `/api/auth/guest` mints a random uuid and writes nothing.
+   * And a student a center released has a row, no center, and a tier left
+   * behind by the release.
+   *
+   * Callers that only ask "may they learn" can treat all three alike. Callers
+   * that spend money or gate a paid feature cannot.
+   */
+  describe('telling the three ungoverned cases apart', () => {
+    it('reports a real independent student as existing, never governed', async () => {
+      givenRow({ center_id: null, tier: null });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'NONE',
+        studentExists: true,
+        wasGoverned: false,
+      });
+    });
+
+    it('reports a guest token as not existing at all', async () => {
+      // No row. Nothing can be attributed to this id — an ai_usage insert for
+      // it fails on the foreign key — so a caller that meters must be able to
+      // see that rather than being handed a cheerful allowance.
+      givenRow(null);
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'NONE',
+        studentExists: false,
+        wasGoverned: false,
+      });
+    });
+
+    it('reports a released student as formerly governed', async () => {
+      // center_id is SET NULL on release while tier is not, so a leftover
+      // tier is evidence that a center once governed this student. It is used
+      // as evidence only — `tier` itself stays null, so nothing grants access
+      // on the strength of it.
+      givenRow({ center_id: null, tier: 'PREMIUM' });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'NONE',
+        studentExists: true,
+        wasGoverned: true,
+        tier: null,
+      });
+    });
+
+    it('reports a governed student as governed', async () => {
+      givenRow(withSubscription({ tier: 'PRO' }));
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentExists: true,
+        wasGoverned: true,
       });
     });
   });

@@ -16,6 +16,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
+import { GuestBlockGuard } from '../../shared/guards/guest-block.guard';
 import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
 import { EvaluationService } from './services';
 import { EvaluateSpeakingDto, SpeakingEvaluationResponseDto } from './dto';
@@ -23,7 +24,21 @@ import { EvaluateSpeakingDto, SpeakingEvaluationResponseDto } from './dto';
 @ApiTags('Speaking')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
-@UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
+/**
+ * `GuestBlockGuard` is what the guest-session contract already promised and
+ * nothing enforced: `POST /api/auth/guest` documents that Speaking returns 403
+ * for a guest, and the guard was written for exactly that and mounted on no
+ * route at all.
+ *
+ * It matters more than a broken promise. A guest token carries a random uuid
+ * and no `students` row, `ai_usage.student_id` is a foreign key to that table,
+ * and `recordDelivered` swallows the resulting failure by design — so a guest
+ * could run paid Gemini evaluations that were never counted, with no
+ * credentials and no upper bound. `AiQuotaService` now refuses anything it
+ * cannot meter as well, so the hole is closed twice: once at the door, once
+ * at the meter.
+ */
+@UseGuards(JwtAuthGuard, GuestBlockGuard, StudentSubscriptionGuard)
 @Controller('api/speaking')
 export class SpeakingController {
   private readonly logger = new Logger(SpeakingController.name);

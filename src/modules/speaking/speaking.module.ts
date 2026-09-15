@@ -6,10 +6,11 @@ import { GeminiService } from './services/gemini.service';
 import { EvaluationService } from './services/evaluation.service';
 import { AuthModule } from '../auth/auth.module';
 import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
+import { RateLimitModule } from '../../shared/rate-limit.module';
 import { RoomModule } from './room/room.module';
 
 @Module({
-  imports: [AuthModule, SubscriptionAccessModule, RoomModule],
+  imports: [AuthModule, SubscriptionAccessModule, RateLimitModule, RoomModule],
   controllers: [SpeakingController, SpeakingCatalogController],
   providers: [SpeakingService, GeminiService, EvaluationService],
   exports: [SpeakingService, GeminiService, EvaluationService],

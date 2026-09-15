@@ -9,6 +9,8 @@ const TRIAL: StudentEntitlement = {
   studentsMayLearn: true,
   graceEndsAt: null,
   tier: 'START',
+  studentExists: true,
+  wasGoverned: true,
 };
 
 const BLOCKED: StudentEntitlement = {
@@ -16,6 +18,8 @@ const BLOCKED: StudentEntitlement = {
   studentsMayLearn: false,
   graceEndsAt: null,
   tier: null,
+  studentExists: true,
+  wasGoverned: true,
 };
 
 describe('login and refresh report the subscription', () => {

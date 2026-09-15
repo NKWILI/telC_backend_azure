@@ -91,11 +91,18 @@ export class PaymentsService {
     await this.assertProfileComplete(identity);
 
     try {
-      // Priced and written in one transaction. Reading the stamped prices and
-      // the student counts outside it would decide both against a snapshot:
-      // a concurrent price stamp would be charged at the old price, and a
-      // concurrent provisioning run would let a payment be recorded for fewer
-      // seats than the tier has students — the invariant Phase 7 will act on.
+      // Priced and written in one transaction, so a refused quote leaves no
+      // row and a payment never exists without its lines.
+      //
+      // What this does NOT guarantee: the transaction is READ COMMITTED, so a
+      // price stamp or a provisioning run committing between the reads and the
+      // insert is not seen. That is accepted rather than fixed with
+      // Serializable, which would turn the same-key insert race below into
+      // serialization failures and 500s. Nothing here moves money or grants
+      // access, and the guarantees that matter live in
+      // PaymentActivationService: it stamps each line's own price, sets seats
+      // exactly once, and honours a payment even if students were added in
+      // the meantime.
       const created = await this.prisma.$transaction(async (tx) => {
         const quote = this.pricing.quote(
           wanted,

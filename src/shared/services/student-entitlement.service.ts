@@ -32,14 +32,45 @@ export interface StudentEntitlement {
    * cheapest one.
    */
   tier: Tier | null;
+  /**
+   * Whether a `students` row exists for this id at all.
+   *
+   * False for a guest token: `/api/auth/guest` mints a random uuid and writes
+   * nothing. Such a caller cannot be metered — an `ai_usage` insert for them
+   * fails on the foreign key — so anything that spends money must be able to
+   * see that rather than be handed an allowance it can never count against.
+   */
+  studentExists: boolean;
+  /**
+   * Whether a center has ever governed this student.
+   *
+   * True while they are in a center, and still true after one released them:
+   * `students.center_id` is SET NULL on release while `students.tier` is not,
+   * so a leftover tier is evidence that a center once governed them. It is
+   * evidence ONLY — `tier` above stays null for anyone no center governs, so
+   * nothing grants access on the strength of a stale value.
+   *
+   * It separates a genuine independent student, who predates the center model
+   * and keeps what they have, from one a center released — which is otherwise
+   * a way for a center to hand its students a paid tier for free.
+   */
+  wasGoverned: boolean;
 }
 
-const UNGOVERNED: StudentEntitlement = {
+/** A student no center governs. `studentExists` and `wasGoverned` are filled
+ *  in per row, because those are the parts that differ between an independent
+ *  student, a released one, and a token naming nobody. */
+const ungoverned = (
+  studentExists: boolean,
+  wasGoverned: boolean,
+): StudentEntitlement => ({
   status: 'NONE',
   studentsMayLearn: true,
   graceEndsAt: null,
   tier: null,
-};
+  studentExists,
+  wasGoverned,
+});
 
 /** One row per student, or none at all if the student is gone. */
 interface EntitlementRow {
@@ -95,9 +126,20 @@ export class StudentEntitlementService {
 
     const row = rows[0];
 
-    // No row, or no center: nobody's subscription governs this student.
-    if (!row?.center_id) {
-      return UNGOVERNED;
+    // No row at all. A guest token, or an id that never existed: nothing can
+    // be attributed to it, and nothing ever governed it.
+    if (!row) {
+      return ungoverned(false, false);
+    }
+
+    // A row, but no center. Either a genuine independent student or one a
+    // center released — the leftover tier is what tells them apart.
+    if (!row.center_id) {
+      // Truthiness rather than `!== null`: a missing column reads as
+      // undefined, and treating that as "holds a tier" would mark a genuine
+      // independent student as formerly governed and take the exam module
+      // away from them.
+      return ungoverned(true, Boolean(row.tier));
     }
 
     // Every center is created with a subscription row, so its absence is a
@@ -116,6 +158,8 @@ export class StudentEntitlementService {
         studentsMayLearn: false,
         graceEndsAt: null,
         tier: null,
+        studentExists: true,
+        wasGoverned: true,
       };
     }
 
@@ -133,6 +177,8 @@ export class StudentEntitlementService {
       // Only ever read alongside a center, which the `center_id` check above
       // has already established.
       tier: row.tier,
+      studentExists: true,
+      wasGoverned: true,
     };
   }
 }

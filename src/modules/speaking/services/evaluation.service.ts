@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GeminiService } from './gemini.service';
 import { AiQuotaService } from '../../../shared/services/ai-quota.service';
 import { AiUsageService } from '../../../shared/services/ai-usage.service';
+import { RateLimitService } from '../../../shared/services/rate-limit.service';
 import {
   SpeakingEvaluationResponseDto,
   CorrectionDto,
@@ -17,6 +18,7 @@ export class EvaluationService {
     private readonly geminiService: GeminiService,
     private readonly quota: AiQuotaService,
     private readonly usage: AiUsageService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   /**
@@ -52,6 +54,12 @@ export class EvaluationService {
     // StudentSubscriptionGuard makes for the same reason. Refusing here would
     // be a decision about authentication taken in the wrong place.
     if (studentId) {
+      // Before the quota, and atomic where the quota is not. The quota counts
+      // rows and then the caller acts, so a concurrent burst all reads the
+      // same count and all passes — a student allowed two could land dozens
+      // in parallel before the first row commits. This bounds the pile-up in
+      // Valkey; the quota remains the rule that decides the answer.
+      await this.rateLimit.checkAiEvaluationLimit(studentId);
       await this.quota.assertWithinQuota(studentId, 'SPEAKING_EVALUATION');
     }
 

@@ -31,9 +31,8 @@ const withStudents = (
 /**
  * Students the center governs who sit in no tier at all.
  *
- * This is every student provisioned before tiers existed, which today is all
- * of them: nothing writes `students.tier` until provisioning learns to. They
- * still occupy seats, so they still set a floor.
+ * These are students provisioned before tiers existed. They still occupy
+ * seats, so they still set a floor.
  */
 const untiered = (totalStudents: number): CenterPricingContext => ({
   tiers: {},
@@ -208,9 +207,9 @@ describe('PricingService', () => {
    * The floor that must hold whatever tiers exist.
    *
    * `dev` counted students center-wide, which always worked. Moving to a
-   * per-tier count broke it silently: nothing writes `students.tier`, so every
-   * per-tier count is zero and a center with forty students could buy ten
-   * seats. A student in no tier still occupies a seat.
+   * per-tier count broke it silently for legacy students with a null tier: a
+   * center with forty such students could buy ten seats. A student in no tier
+   * still occupies a seat.
    */
   describe('seats can never be fewer than students, tiers or no tiers', () => {
     it('refuses ten seats to a center with forty untiered students', () => {
@@ -287,9 +286,9 @@ describe('PricingService', () => {
       expect(refusal).toMatchObject({
         code: 'SEATS_BELOW_STUDENT_COUNT',
         requiredSeatsPerTier: { START: 12 },
-        // Twelve Start plus the two Pro they asked for. The total floor moves
-        // with the tier floor, so this is the order that would go through.
-        requiredSeatsTotal: 14,
+        // Twelve Start already clears the contract and student floors. The
+        // optional Pro seats in the rejected cart do not raise the minimum.
+        requiredSeatsTotal: 12,
       });
     });
 
@@ -382,6 +381,123 @@ describe('PricingService', () => {
         maximumAmountXaf: MAX_AMOUNT_XAF,
       });
     });
+  });
+
+  /**
+   * The property `QuoteRefusal` promises: complying with a refusal works the
+   * first time, and the number it names is really the minimum.
+   *
+   * Both halves were false. `requiredSeatsTotal` folded in the caller's own
+   * ask for tiers that were NOT at fault, so it over-reported — a client that
+   * rendered it would sell 25 seats where 10 would do. And per-tier floors
+   * appeared only for tiers currently at fault, so complying with everything
+   * the refusal said could earn a second, different refusal: exactly the
+   * failure this field was introduced to end.
+   */
+  describe('a refusal names the real minimum, in full', () => {
+    it('does not inflate the total with seats the caller merely asked for', () => {
+      // PRO needs 5 for its students; START is not at fault at all. The
+      // smallest mix that clears every rule is ten seats, not twenty-five.
+      const context: CenterPricingContext = {
+        tiers: { PRO: { stampedPriceXaf: null, studentCount: 5 } },
+        totalStudents: 5,
+      };
+
+      expect(service.explain({ START: 20, PRO: 2 }, context)).toMatchObject({
+        code: 'SEATS_BELOW_STUDENT_COUNT',
+        requiredSeatsPerTier: { PRO: 5 },
+        requiredSeatsTotal: 10,
+      });
+      // And that minimum really is satisfiable.
+      expect(service.explain({ START: 5, PRO: 5 }, context)).toBeNull();
+    });
+
+    it('names every tier that has students, not only the ones short today', () => {
+      // START is already covered and PRO is not. Reporting only PRO lets a
+      // client put the whole total into PRO and be refused again on START.
+      const context: CenterPricingContext = {
+        tiers: {
+          START: { stampedPriceXaf: null, studentCount: 5 },
+          PRO: { stampedPriceXaf: null, studentCount: 5 },
+        },
+        totalStudents: 10,
+      };
+
+      expect(service.explain({ START: 5, PRO: 3 }, context)).toMatchObject({
+        requiredSeatsPerTier: { START: 5, PRO: 5 },
+        requiredSeatsTotal: 10,
+      });
+    });
+
+    /**
+     * The general property, over several shapes rather than the one case the
+     * old test happened to pick. Applying a refusal exactly as stated must
+     * always clear every rule.
+     */
+    it.each([
+      [
+        'one tier short',
+        {
+          tiers: { PRO: { stampedPriceXaf: null, studentCount: 3 } },
+          totalStudents: 3,
+        },
+        { PRO: 1 },
+      ],
+      [
+        'two tiers, one short',
+        {
+          tiers: {
+            START: { stampedPriceXaf: null, studentCount: 5 },
+            PRO: { stampedPriceXaf: null, studentCount: 5 },
+          },
+          totalStudents: 10,
+        },
+        { START: 5, PRO: 3 },
+      ],
+      [
+        'two tiers, both short',
+        {
+          tiers: {
+            START: { stampedPriceXaf: null, studentCount: 8 },
+            PRO: { stampedPriceXaf: null, studentCount: 6 },
+          },
+          totalStudents: 14,
+        },
+        { START: 1, PRO: 1 },
+      ],
+      [
+        'untiered students only',
+        { tiers: {}, totalStudents: 40 },
+        { START: 10 },
+      ],
+      [
+        'nothing wrong but the total',
+        { tiers: {}, totalStudents: 0 },
+        { START: 4 },
+      ],
+    ])(
+      'accepts the mix its own refusal asked for: %s',
+      (_case, context, mix) => {
+        const refusal = service.explain(mix, context as CenterPricingContext);
+        expect(refusal).not.toBeNull();
+
+        // Apply it literally: every named tier floor, and the total made up
+        // in whichever tier the center already uses most.
+        const applied: SeatMix = { ...refusal!.requiredSeatsPerTier };
+        const named = Object.values(applied).reduce(
+          (total, seats) => total + (seats ?? 0),
+          0,
+        );
+        const shortfall = (refusal!.requiredSeatsTotal ?? 0) - named;
+        if (shortfall > 0) {
+          applied.START = (applied.START ?? 0) + shortfall;
+        }
+
+        expect(
+          service.explain(applied, context as CenterPricingContext),
+        ).toBeNull();
+      },
+    );
   });
 
   describe('explain reports without refusing', () => {

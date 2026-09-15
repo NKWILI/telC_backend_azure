@@ -72,7 +72,7 @@ export class CenterSubscriptionController {
   @ApiBadRequestResponse({
     type: CenterErrorResponseDto,
     description:
-      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT, each carrying requiredSeatsTotal, plus requiredSeatsPerTier naming every tier that has more students than the seats asked for. Both arrive together, so one correction is enough. AMOUNT_ABOVE_MAXIMUM carries maximumAmountXaf.',
+      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT carries requiredSeatsTotal. A tier-floor refusal also carries requiredSeatsPerTier for every occupied tier, so applying it cannot uncover another tier refusal. AMOUNT_ABOVE_MAXIMUM carries maximumAmountXaf.',
   })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
   @ApiNotFoundResponse({ type: CenterErrorResponseDto })
@@ -95,7 +95,7 @@ export class CenterSubscriptionController {
   @ApiOperation({
     summary: 'Read seat usage for the signed-in center',
     description:
-      'A seat is a student carrying this center id, so usage is counted rather than stored and cannot drift. seatsAvailable is never negative.',
+      'A seat is a student carrying this center id, so usage is counted rather than stored and cannot drift. seatsAvailable is never negative; legacy students without a tier are reported in unassignedSeatsUsed.',
   })
   @ApiOkResponse({ type: CenterUsageResponseDto })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })

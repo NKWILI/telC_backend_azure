@@ -91,9 +91,8 @@ docs {
     `requiredSeatsTotal: 10`. Nine seats however they are split.
   - with 12 Start students provisioned, `{"start": 10, "pro": 2}` -> 400
     SEATS_BELOW_STUDENT_COUNT with `requiredSeatsPerTier: {"START": 12}` AND
-    `requiredSeatsTotal: 14`. Both numbers, because the tier floor and the
-    total are different problems and complying with one must not reveal the
-    other.
+    `requiredSeatsTotal: 12`. The total is the true minimum imposed by the
+    existing student body; the two optional Pro seats do not inflate it.
   - with 12 untiered students, `{"start": 10}` -> 400
     SEATS_BELOW_STUDENT_COUNT with `requiredSeatsTotal: 12` and no per-tier
     entry. A student in no tier still occupies a seat.
