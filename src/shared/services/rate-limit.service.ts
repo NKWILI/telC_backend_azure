@@ -485,4 +485,50 @@ export class RateLimitService {
       },
     ]);
   }
+
+  /**
+   * A hard ceiling on AI evaluations per student, independent of the quota.
+   *
+   * The quota is the product rule and this is not a second copy of it — it is
+   * the atomicity the quota does not have. `AiQuotaService` counts `ai_usage`
+   * rows and then the caller acts: a burst of concurrent requests all read the
+   * same count and all pass, so a student allowed two could land thirty in
+   * parallel before the first row commits. Rows cannot be reserved without
+   * either charging for failures or locking, so the burst is bounded here, in
+   * Valkey, where a counter increments atomically.
+   *
+   * Set at the most generous tier's allowance rather than the caller's own, so
+   * this never refuses a request the quota would have allowed — the quota
+   * stays the rule anyone reads, and this only stops the pile-up. It is an
+   * hour rather than the quota's 24, because a burst is what it exists to
+   * catch and a longer window would start doing the quota's job badly.
+   */
+  checkAiEvaluationLimit(studentId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:ai:evaluate:student:${studentId}`,
+        max: 20,
+        ttlSeconds: 60 * 60,
+      },
+    ]);
+  }
+
+  /**
+   * Checkouts a center may start per hour.
+   *
+   * Its own budget rather than the payment-creation one. A first checkout asks
+   * the provider to open a transaction, which is worth bounding; but a center
+   * clicking "pay" a few times must not use up the slots it needs to create a
+   * payment in the first place. Repeats of an existing checkout are answered
+   * from the database, so honest use stays far below this.
+   */
+  checkCheckoutStartLimit(centerId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:payments:checkout:center:${centerId}`,
+        max: 20,
+        ttlSeconds: 60 * 60,
+      },
+    ]);
+  }
 }

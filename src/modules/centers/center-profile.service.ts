@@ -8,6 +8,10 @@ import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-pay
 import { PrismaService } from '../../shared/services/prisma.service';
 import { CenterProfileResponseDto } from './dto/center-profile.dto';
 import type { UpdateCenterProfileDto } from './dto/center-profile.dto';
+import {
+  deriveOnboardingState,
+  type OnboardingState,
+} from './center-onboarding';
 
 type SignedCenterIdentity = Pick<
   CenterAccessTokenPayload,
@@ -111,13 +115,16 @@ export class CenterProfileService {
     first_name: string;
     last_name: string;
     email: string;
-    phone: string;
+    // Nullable because registration no longer collects them. A center that has
+    // not finished onboarding genuinely has no country, city or manager phone,
+    // and the response says so rather than inventing an empty string.
+    phone: string | null;
     email_verified: boolean;
     center: {
       id: string;
       name: string;
-      country: string;
-      city: string;
+      country: string | null;
+      city: string | null;
       logo_url: string | null;
     };
   }): CenterProfileResponseDto {
@@ -138,6 +145,33 @@ export class CenterProfileService {
         city: centerUser.center.city,
         logoUrl: centerUser.center.logo_url,
       },
+      onboarding: this.toOnboardingState(centerUser),
     };
+  }
+
+  /**
+   * Worked out on every read rather than stored.
+   *
+   * A stored flag needs a job or a trigger to keep it true, and when that runs
+   * late the value is wrong — the same reasoning that left subscription status
+   * derived from timestamps. This cannot drift, because there is nothing to
+   * drift from.
+   *
+   * `missing` is reported so the dashboard renders its checklist without
+   * holding a second copy of these rules. A fourth required field added here
+   * updates every checklist with no frontend change, and the client never ends
+   * up with a rival definition of "complete".
+   */
+  private toOnboardingState(centerUser: {
+    phone: string | null;
+    center: { country: string | null; city: string | null };
+  }): OnboardingState {
+    // The rules live in `center-onboarding` because payment creation asks the
+    // same question, and a second copy here is the one that would drift.
+    return deriveOnboardingState({
+      country: centerUser.center.country,
+      city: centerUser.center.city,
+      phone: centerUser.phone,
+    });
   }
 }

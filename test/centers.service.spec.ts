@@ -6,13 +6,9 @@ import { CentersService } from '../src/modules/centers/centers.service';
 describe('CentersService registration', () => {
   const registration = {
     centerName: 'Goethe Language Center',
-    country: 'Cameroon',
-    city: 'Douala',
-    logoUrl: 'https://cdn.example.com/center.webp',
     managerFirstName: 'Alain',
     managerLastName: 'Ngeukeu',
     email: ' Manager@Example.COM ',
-    phone: '+237690000000',
     password: 'private-password',
   };
 
@@ -32,6 +28,9 @@ describe('CentersService registration', () => {
       },
       centerSubscription: {
         create: jest.fn().mockResolvedValue({ id: 'subscription-1' }),
+      },
+      centerSeat: {
+        create: jest.fn().mockResolvedValue({ id: 'seat-1' }),
       },
     };
     prisma = {
@@ -63,13 +62,11 @@ describe('CentersService registration', () => {
       where: { email: 'manager@example.com' },
       select: expect.any(Object),
     });
+    // A draft center: the name and nothing else. Country, city and the logo
+    // are collected during onboarding, and writing placeholders here would
+    // make an unfinished profile look complete.
     expect(tx.center.create).toHaveBeenCalledWith({
-      data: {
-        name: 'Goethe Language Center',
-        country: 'Cameroon',
-        city: 'Douala',
-        logo_url: 'https://cdn.example.com/center.webp',
-      },
+      data: { name: 'Goethe Language Center' },
       select: { id: true },
     });
 
@@ -81,7 +78,6 @@ describe('CentersService registration', () => {
         first_name: 'Alain',
         last_name: 'Ngeukeu',
         email: 'manager@example.com',
-        phone: '+237690000000',
         email_verified: false,
         email_verification_token: 'hashed-verification-token',
       }),
@@ -258,13 +254,53 @@ describe('CentersService registration', () => {
   it('creates the subscription inside the same transaction as the center', async () => {
     await service.register(registration);
 
+    // No seat count on the subscription any more: center_seats is the only
+    // authority, and the trial seat is granted as a row of its own below.
     expect(tx.centerSubscription.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        center_id: 'center-1',
-        plan: 'TRIAL',
-        seats: 3,
-      }),
+      data: { center_id: 'center-1', plan: 'TRIAL' },
     });
+  });
+
+  /**
+   * A trial is an ordinary seat row priced at zero, not a special case.
+   *
+   * Seat counting, tier lookup and the quota check would each otherwise need
+   * an "unless they are on trial" branch — three branches in three places all
+   * saying the same thing, and the day someone adds a fourth they forget one.
+   * With a real row, a trial student and a paid Start student behave
+   * identically everywhere except the clock, which is the only thing genuinely
+   * different about them.
+   */
+  it('grants the one trial seat in the same transaction', async () => {
+    await service.register(registration);
+
+    expect(tx.centerSeat.create).toHaveBeenCalledWith({
+      data: {
+        center_id: 'center-1',
+        tier: 'START',
+        quantity: 1,
+        unit_price_xaf: 0,
+      },
+    });
+  });
+
+  it('prices the trial seat at zero, which is what makes it a trial', async () => {
+    await service.register(registration);
+
+    const data = tx.centerSeat.create.mock.calls[0][0].data;
+    // Not the launch price, and not null. Zero is legal on center_seats and
+    // illegal on a payment line, which is what keeps a granted seat and a
+    // bought seat from ever being confused.
+    expect(data.unit_price_xaf).toBe(0);
+    expect(data.tier).toBe('START');
+  });
+
+  it('leaves no seat behind when the subscription insert fails', async () => {
+    // One transaction, so a half-registered center cannot end up holding a
+    // seat it never agreed to.
+    tx.centerSubscription.create.mockRejectedValue(new Error('boom'));
+
+    await expect(service.register(registration)).rejects.toThrow();
   });
 
   it('starts a new center pending, with no trial clock running', async () => {
@@ -272,7 +308,7 @@ describe('CentersService registration', () => {
 
     const data = tx.centerSubscription.create.mock.calls[0][0].data;
     // The trial begins at the first student activation (Phase 4), not here, so
-    // a center that never provisions anyone never burns its 30 days.
+    // a center that never provisions anyone never burns its 14 days.
     expect(data.trial_started_at ?? null).toBeNull();
     expect(data.trial_ends_at ?? null).toBeNull();
     expect(data.paid_until ?? null).toBeNull();

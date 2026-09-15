@@ -53,7 +53,6 @@ export class CenterSubscriptionGuard implements CanActivate {
         where: { center_id: centerId },
         select: {
           plan: true,
-          seats: true,
           trial_started_at: true,
           trial_ends_at: true,
           paid_until: true,

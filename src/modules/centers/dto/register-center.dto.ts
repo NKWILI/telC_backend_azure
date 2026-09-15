@@ -1,20 +1,30 @@
 import {
   IsEmail,
   IsNotEmpty,
-  IsOptional,
   IsString,
-  IsUrl,
-  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   MaxUtf8Bytes,
   NormalizeEmail,
   Trim,
 } from './center-validation.decorators';
 
+/**
+ * Everything registration collects. Five fields, deliberately.
+ *
+ * Country, city, the manager's phone and the logo were all required here and
+ * have moved to onboarding, where they are collected at the point a center
+ * goes to pay. The reasoning: none of them is needed to run a trial, and all
+ * of them are needed to take money, so asking at registration is paperwork
+ * before the product has proved anything.
+ *
+ * The global pipe runs with `forbidNonWhitelisted`, so a client still sending
+ * one of the four is refused rather than silently ignored. A client that
+ * believes it set a country should not be left believing it.
+ */
 export class RegisterCenterDto {
   @ApiProperty({ example: 'Goethe Language Center', maxLength: 150 })
   @Trim()
@@ -22,32 +32,6 @@ export class RegisterCenterDto {
   @IsNotEmpty()
   @MaxLength(150)
   centerName: string;
-
-  @ApiProperty({ example: 'Cameroon', maxLength: 100 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  country: string;
-
-  @ApiProperty({ example: 'Douala', maxLength: 100 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  city: string;
-
-  @ApiPropertyOptional({
-    example: 'https://cdn.example.com/centers/logo.webp',
-    maxLength: 2048,
-  })
-  @Trim()
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  @Matches(/^https:\/\//i, { message: 'Logo URL must use HTTPS' })
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  logoUrl?: string;
 
   @ApiProperty({ example: 'Alain', maxLength: 100 })
   @Trim()
@@ -70,14 +54,6 @@ export class RegisterCenterDto {
   @MaxLength(254)
   @IsEmail()
   email: string;
-
-  @ApiProperty({ example: '+237690000000', maxLength: 30 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(30)
-  @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
-  phone: string;
 
   @ApiProperty({ minLength: 8, maxLength: 72, format: 'password' })
   @IsString()

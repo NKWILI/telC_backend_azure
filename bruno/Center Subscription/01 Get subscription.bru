@@ -18,10 +18,16 @@ assert {
   res.status: eq 200
   res.body.status: eq TRIAL_PENDING
   res.body.studentsMayLearn: eq false
+  res.body.seatsHeld: eq 1
 }
 
 docs {
   Run `Center Auth / 03 Login` first — this needs a live `accessToken`.
+
+  `seatsHeld` is summed from `center_seats` — one on a fresh trial. It
+  replaces the old `seats` field, which was a second number claiming the same
+  thing and has been removed. For the per-tier breakdown see
+  `02 Get usage`.
 
   A freshly registered center sits at TRIAL_PENDING with `studentsMayLearn`
   false. The trial clock starts at the first student activation (Phase 4), not

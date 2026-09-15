@@ -2,33 +2,22 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { AuthExceptionFilter } from './shared/filters/auth-exception.filter';
-import { createGlobalValidationPipe } from './shared/pipes/global-validation.pipe';
+import { APP_CREATE_OPTIONS, configureSecurity } from './bootstrap-config';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
-  // DigitalOcean App Platform (like most PaaS) puts this container behind a
-  // single reverse proxy. Without this, Express req.ip — and every @Ip()
-  // rate limiter — resolves to the proxy's address, identical for all clients,
-  // collapsing per-IP limits into one shared global bucket. Trust exactly one
-  // hop so req.ip reads the real client from X-Forwarded-For. Use 1 (not true)
-  // so clients cannot spoof X-Forwarded-For to evade limits.
-  app.set('trust proxy', 1);
-  app.use(helmet());
+  // APP_CREATE_OPTIONS keeps each request's raw bytes, which payment webhook
+  // signatures are computed over. See bootstrap-config.
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule,
+    APP_CREATE_OPTIONS,
+  );
+  // Trust proxy, helmet, the validation pipe, the auth filter and CORS. In
+  // `bootstrap-config` so they can be tested without starting a server —
+  // `void bootstrap()` below is why importing this file to check them cannot
+  // work.
+  configureSecurity(app);
   app.useStaticAssets(join(__dirname, '..', 'public'), { prefix: '/static' });
-  app.useGlobalPipes(createGlobalValidationPipe());
-  app.useGlobalFilters(new AuthExceptionFilter());
-
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-    : ['http://localhost:3000', 'http://localhost:5173'];
-
-  app.enableCors({
-    origin: allowedOrigins,
-    credentials: true,
-  });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Lerniqo API')

@@ -1,3 +1,12 @@
+> **Superseded in part — read before relying on this plan.**
+> Phase 6b replaced single-price billing with tiers: `centers.unit_price_xaf`,
+> `centers.min_seats` and `center_subscriptions.seats` no longer exist. Prices
+> are stamped per tier on `center_seats`, the minimum is a code constant, and a
+> payment carries per-tier `payment_lines`. Phase 7a added activation, checkout
+> and webhooks. Current plans: `06b-center-onboarding-plan.md` and
+> `07a-payment-activation-plan.md`; for Notch Pay, `07-notchpay-handover.md`.
+> Kept as the record of what Phase 6 decided and why.
+
 # Phase 6 Plan: Price quotation and payment records
 
 Companion todo: `tasks/phases/06-subscription-payments-todo.md`

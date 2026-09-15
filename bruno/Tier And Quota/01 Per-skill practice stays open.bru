@@ -1,0 +1,46 @@
+meta {
+  name: 01 Per-skill practice stays open
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/reading/exercise?modelltest=1
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentAccessToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  A START student reaches this. So does a Pro student, a Premium student, and
+  an independent one.
+
+  Per-skill practice — `/api/reading`, `/api/listening`, `/api/writing`,
+  `/api/sprachbausteine` and speaking practice — is what makes Start a usable
+  product rather than a stub. It is deliberately NOT gated on tier.
+
+  (The reading module is served at `/api/reading`; its controller class is
+  still called Lesen.)
+
+  Run this with a START student (see `00 How to set a student tier`) and it
+  must return 200. If it ever returns 403 TIER_TOO_LOW, the exam gate has
+  spread beyond the exam module — and `test/subscription-enforcement.spec.ts`
+  should have failed first, since it counts exactly which controllers carry
+  the tier guard.
+
+  Try the other skills too. All 200 for Start:
+
+  - `GET {{baseUrl}}/api/listening/teils`
+  - `GET {{baseUrl}}/api/sprachbausteine/exercise?modelltest=1`
+  - `GET {{baseUrl}}/api/writing/exercise?modelltest=1`
+
+  What a Start student does NOT get is the full timed simulation — that is
+  `02 Exam module`.
+}

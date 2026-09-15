@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { EmailService } from '../auth/email.service';
@@ -24,6 +24,14 @@ export interface ProvisionStudentInput {
   lastName: string;
   email: string;
   phone?: string;
+  /**
+   * Which tier's seat this student takes, chosen by the center.
+   *
+   * Required rather than defaulted. A center holding several tiers has no
+   * obvious default, and guessing the cheapest would quietly put a student the
+   * school meant to give the exam module into a tier without it.
+   */
+  tier: Tier;
 }
 
 export interface ProvisionedStudent {
@@ -53,6 +61,10 @@ export class StudentProvisioningService {
    * The seat check and the insert share one Serializable transaction. Counting
    * outside it would let two administrators both read the second-to-last seat
    * and both insert, putting the center over its limit with no way to notice.
+   *
+   * Capacity is checked both per tier and center-wide. The total check covers
+   * legacy students with no tier; the tier check prevents a Start student
+   * from borrowing a spare Pro seat.
    */
   async provision(
     identity: SignedCenterIdentity,
@@ -70,18 +82,67 @@ export class StudentProvisioningService {
 
     const student = await this.prisma.$transaction(
       async (tx) => {
+        // Existence only. The seat limit used to come from this row and now
+        // comes from center_seats, so there is nothing to read here beyond
+        // "does this center have a subscription at all".
         const subscription = await tx.centerSubscription.findUnique({
           where: { center_id: identity.centerId },
-          select: { seats: true },
+          select: { id: true },
         });
         if (!subscription) {
           throw new NotFoundException('CENTER_SUBSCRIPTION_NOT_FOUND');
         }
 
-        const seatsUsed = await tx.student.count({
-          where: { center_id: identity.centerId },
+        // The seats of the requested tier, and nothing else. A missing row is
+        // not an empty one: a center that has never bought Premium is told to
+        // buy it, while a center whose Premium seats are full is told to wait
+        // or buy more. Those ask for different actions, so they get different
+        // codes.
+        const seat = await tx.centerSeat.findUnique({
+          where: {
+            center_id_tier: {
+              center_id: identity.centerId,
+              tier: input.tier,
+            },
+          },
+          select: { quantity: true },
         });
-        if (seatsUsed >= subscription.seats) {
+        if (!seat) {
+          throw new ForbiddenException({
+            message: 'TIER_NOT_HELD',
+            tier: input.tier,
+          });
+        }
+
+        // Counted within the tier. Counting the whole center would let a
+        // center with its Start seats full and a spare Pro seat add another
+        // Start student, entitled to Start's allowance in a seat nobody bought
+        // at that tier.
+        const seatsUsed = await tx.student.count({
+          where: { center_id: identity.centerId, tier: input.tier },
+        });
+        if (seatsUsed >= seat.quantity) {
+          // Named, because "no seats left" is useless to a center holding
+          // three tiers and short in only one of them.
+          throw new ForbiddenException({
+            message: 'SEAT_LIMIT_REACHED',
+            tier: input.tier,
+          });
+        }
+
+        // Legacy students can still have a null tier. They do not appear in
+        // the per-tier count above, but each still occupies one of the
+        // center's seats. Keep this check in the same transaction so a new
+        // provision cannot push total students beyond total seats held.
+        const [totalSeatsUsed, seatTotals] = await Promise.all([
+          tx.student.count({ where: { center_id: identity.centerId } }),
+          tx.centerSeat.aggregate({
+            where: { center_id: identity.centerId },
+            _sum: { quantity: true },
+          }),
+        ]);
+        const totalSeatsHeld = seatTotals._sum.quantity ?? 0;
+        if (totalSeatsUsed >= totalSeatsHeld) {
           throw new ForbiddenException('SEAT_LIMIT_REACHED');
         }
 
@@ -103,6 +164,7 @@ export class StudentProvisioningService {
             last_name: input.lastName.trim(),
             email,
             phone: input.phone?.trim() || null,
+            tier: input.tier,
             // The center vouched for the address, so reset stays available
             // without a second confirmation step the student never asked for.
             email_verified: true,

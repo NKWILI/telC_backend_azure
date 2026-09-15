@@ -1,15 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   INestApplication,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PaymentsController } from '../src/modules/centers/payments.controller';
 import { PaymentsService } from '../src/modules/centers/payments.service';
+import { PaymentCheckoutService } from '../src/modules/centers/payment-checkout.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
@@ -26,9 +29,12 @@ const signedIdentity = {
 
 const aPayment = {
   id: 'payment-1',
-  seats: 10,
-  unitPriceXaf: 4800,
-  amountXaf: 48000,
+  lines: [
+    { tier: 'START', seats: 5, unitPriceXaf: 4500, amountXaf: 22500 },
+    { tier: 'PRO', seats: 5, unitPriceXaf: 10000, amountXaf: 50000 },
+  ],
+  totalSeats: 10,
+  amountXaf: 72500,
   status: 'PENDING',
   createdAt: new Date('2026-08-24T00:00:00.000Z'),
 };
@@ -36,6 +42,7 @@ const aPayment = {
 describe('PaymentsController', () => {
   let app: INestApplication<App>;
   let payments: Record<string, jest.Mock>;
+  let checkout: Record<string, jest.Mock>;
   let rateLimit: Record<string, jest.Mock>;
 
   beforeEach(async () => {
@@ -50,14 +57,24 @@ describe('PaymentsController', () => {
       }),
     };
 
+    checkout = {
+      startCheckout: jest.fn().mockResolvedValue({
+        paymentId: 'payment-1',
+        providerReference: 'fake_payment-1',
+        checkoutUrl: 'https://checkout.fake-payments.invalid/fake_payment-1',
+      }),
+    };
+
     rateLimit = {
       checkPaymentCreateLimit: jest.fn().mockResolvedValue(undefined),
+      checkCheckoutStartLimit: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({
       controllers: [PaymentsController],
       providers: [
         { provide: PaymentsService, useValue: payments },
+        { provide: PaymentCheckoutService, useValue: checkout },
         { provide: RateLimitService, useValue: rateLimit },
       ],
     })
@@ -88,18 +105,37 @@ describe('PaymentsController', () => {
   };
 
   describe('creating a payment', () => {
-    it('records the seats for the signed-in center', async () => {
-      await pay({ seats: 10 }, 'key-1').expect(201);
+    it('passes the mix on the tier keys the service expects', async () => {
+      await pay({ start: 5, pro: 3, premium: 2 }, 'key-1').expect(201);
 
-      expect(payments.create).toHaveBeenCalledWith(signedIdentity, 10, 'key-1');
+      expect(payments.create).toHaveBeenCalledWith(
+        signedIdentity,
+        { START: 5, PRO: 3, PREMIUM: 2 },
+        'key-1',
+      );
     });
 
-    it('returns the record', async () => {
-      const response = await pay({ seats: 10 }, 'key-1').expect(201);
+    it('records the mix for the signed-in center, never one named in the body', async () => {
+      await pay({ start: 10 }, 'key-1').expect(201);
+
+      expect(payments.create).toHaveBeenCalledWith(
+        signedIdentity,
+        { START: 10, PRO: undefined, PREMIUM: undefined },
+        'key-1',
+      );
+    });
+
+    it('returns the record, itemised per tier', async () => {
+      const response = await pay({ start: 5, pro: 5 }, 'key-1').expect(201);
 
       expect(response.body).toMatchObject({
         id: 'payment-1',
-        amountXaf: 48000,
+        lines: [
+          { tier: 'START', seats: 5, unitPriceXaf: 4500, amountXaf: 22500 },
+          { tier: 'PRO', seats: 5, unitPriceXaf: 10000, amountXaf: 50000 },
+        ],
+        totalSeats: 10,
+        amountXaf: 72500,
         status: 'PENDING',
       });
     });
@@ -107,7 +143,7 @@ describe('PaymentsController', () => {
     it('requires an idempotency key', async () => {
       // Without one there is nothing to make a retry safe, and a dropped
       // response would leave the center unable to tell whether it had paid.
-      await pay({ seats: 10 }).expect(400);
+      await pay({ start: 10 }).expect(400);
 
       expect(payments.create).not.toHaveBeenCalled();
     });
@@ -117,7 +153,7 @@ describe('PaymentsController', () => {
       ['a whitespace key', '   '],
       ['an absurdly long key', 'k'.repeat(256)],
     ])('refuses %s', async (_case, key) => {
-      await pay({ seats: 10 }, key).expect(400);
+      await pay({ start: 10 }, key).expect(400);
       expect(payments.create).not.toHaveBeenCalled();
     });
 
@@ -125,7 +161,7 @@ describe('PaymentsController', () => {
       // Every call creates a durable row, and a fresh key makes a fresh one.
       // The idempotency index stops duplicates of ONE intent; it does nothing
       // about a flood of distinct ones.
-      await pay({ seats: 10 }, 'key-1').expect(201);
+      await pay({ start: 10 }, 'key-1').expect(201);
 
       expect(rateLimit.checkPaymentCreateLimit).toHaveBeenCalledWith(
         signedIdentity.centerId,
@@ -137,7 +173,7 @@ describe('PaymentsController', () => {
         new HttpException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS),
       );
 
-      await pay({ seats: 10 }, 'key-1').expect(429);
+      await pay({ start: 10 }, 'key-1').expect(429);
 
       expect(payments.create).not.toHaveBeenCalled();
     });
@@ -147,19 +183,156 @@ describe('PaymentsController', () => {
         new ConflictException('IDEMPOTENCY_KEY_REUSED'),
       );
 
-      await pay({ seats: 20 }, 'key-1').expect(409);
+      await pay({ start: 20 }, 'key-1').expect(409);
+    });
+
+    /**
+     * A refused request must not cost the center its budget.
+     *
+     * Every tier field is optional, so `{}` clears the validation pipe and
+     * reaches the handler. Spending one of twenty an hour on a request that
+     * buys nothing means twenty empty submits can 429 a center out of the one
+     * route a lapsed center has to be able to reach.
+     */
+    describe('an unusable mix costs no rate-limit budget', () => {
+      it.each([
+        ['an empty body', {}],
+        ['every tier at zero', { start: 0, pro: 0, premium: 0 }],
+      ])('refuses %s without spending a slot', async (_case, body) => {
+        await pay(body, 'key-1').expect(400);
+
+        expect(rateLimit.checkPaymentCreateLimit).not.toHaveBeenCalled();
+        expect(payments.create).not.toHaveBeenCalled();
+      });
+
+      it('says which refusal it is, not just 400', async () => {
+        const response = await pay({}, 'key-1').expect(400);
+
+        expect(response.body.error).toBe('SEAT_MIX_EMPTY');
+      });
+
+      it('still spends a slot on a mix worth pricing', async () => {
+        // The limiter has to keep doing its job for real attempts, including
+        // ones the pricing floors go on to refuse.
+        await pay({ start: 10 }, 'key-1').expect(201);
+
+        expect(rateLimit.checkPaymentCreateLimit).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('surfaces an unfinished profile as 403, with the missing list', async () => {
+      // The list is what makes the refusal actionable: the client renders the
+      // remaining checklist from it rather than keeping its own copy of the
+      // rules, so a fourth required field needs no frontend change.
+      payments.create.mockRejectedValue(
+        new ForbiddenException({
+          message: 'CENTER_PROFILE_INCOMPLETE',
+          missing: ['city', 'phone'],
+        }),
+      );
+
+      const response = await pay({ start: 10 }, 'key-1').expect(403);
+
+      expect(response.body.error).toBe('CENTER_PROFILE_INCOMPLETE');
+      expect(response.body.missing).toEqual(['city', 'phone']);
     });
 
     describe('the client cannot influence the price', () => {
       it.each([
-        ['a unit price', { seats: 10, unitPriceXaf: 1 }],
-        ['a total', { seats: 10, amountXaf: 1 }],
-        ['a status', { seats: 10, status: 'SUCCEEDED' }],
-        ['another center', { seats: 10, centerId: 'someone-else' }],
+        ['a unit price', { start: 10, unitPriceXaf: 1 }],
+        ['a total', { start: 10, amountXaf: 1 }],
+        ['a status', { start: 10, status: 'SUCCEEDED' }],
+        ['another center', { start: 10, centerId: 'someone-else' }],
+        ['a line breakdown of its own', { start: 10, lines: [] }],
+        // The pre-tier shape. A body the old client sends must fail loudly
+        // rather than be read as an empty mix and priced at zero.
+        ['a seat count by its old name', { seats: 10 }],
       ])('refuses %s', async (_case, body) => {
         await pay(body, 'key-1').expect(400);
         expect(payments.create).not.toHaveBeenCalled();
       });
+    });
+
+    describe('each tier count must be a seat count', () => {
+      it.each([
+        ['a string', { start: '10' }],
+        ['a fraction', { start: 10.5 }],
+        ['a negative', { start: -10 }],
+        ['an absurd number', { start: 20000 }],
+      ])('refuses %s', async (_case, body) => {
+        await pay(body, 'key-1').expect(400);
+        expect(payments.create).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('starting a checkout', () => {
+    const start = (paymentId = 'payment-1') =>
+      http().post(`/api/payments/${paymentId}/checkout`);
+
+    it('returns where to pay, for the signed-in center payment', async () => {
+      const response = await start().expect(200);
+
+      expect(checkout.startCheckout).toHaveBeenCalledWith(
+        signedIdentity,
+        'payment-1',
+      );
+      expect(response.body).toEqual({
+        paymentId: 'payment-1',
+        checkoutUrl: 'https://checkout.fake-payments.invalid/fake_payment-1',
+      });
+    });
+
+    it('keeps the provider reference on the server', async () => {
+      // The client needs somewhere to go, not the provider's transaction id.
+      const response = await start().expect(200);
+
+      expect(response.body).not.toHaveProperty('providerReference');
+    });
+
+    it('is rate limited per center', async () => {
+      // Each first checkout asks the provider to open a transaction.
+      await start().expect(200);
+
+      expect(rateLimit.checkCheckoutStartLimit).toHaveBeenCalledWith(
+        signedIdentity.centerId,
+      );
+    });
+
+    it('opens nothing once the limit is reached', async () => {
+      rateLimit.checkCheckoutStartLimit.mockRejectedValue(
+        new HttpException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS),
+      );
+
+      await start().expect(429);
+
+      expect(checkout.startCheckout).not.toHaveBeenCalled();
+    });
+
+    it('has its own budget, so checkouts cannot lock a center out of creating payments', async () => {
+      await start().expect(200);
+
+      expect(rateLimit.checkPaymentCreateLimit).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a payment that is no longer pending as 409', async () => {
+      checkout.startCheckout.mockRejectedValue(
+        new ConflictException('PAYMENT_NOT_PENDING'),
+      );
+
+      const response = await start().expect(409);
+
+      expect(response.body.error).toBe('PAYMENT_NOT_PENDING');
+    });
+
+    it('surfaces an unconfigured provider as 503, not 500', async () => {
+      checkout.startCheckout.mockRejectedValue(
+        new ServiceUnavailableException('PAYMENT_PROVIDER_NOT_CONFIGURED'),
+      );
+
+      const response = await start().expect(503);
+
+      expect(response.body.error).toBe('PAYMENT_PROVIDER_NOT_CONFIGURED');
     });
   });
 
@@ -195,6 +368,17 @@ describe('PaymentsController', () => {
 
       expect(payments.list).not.toHaveBeenCalled();
     });
+
+    it('carries the tier breakdown into history', async () => {
+      // An invoice read back months later has to still say what was bought,
+      // at the price that applied then.
+      const response = await http().get('/api/centers/me/payments').expect(200);
+
+      expect(response.body.payments[0].lines).toEqual([
+        { tier: 'START', seats: 5, unitPriceXaf: 4500, amountXaf: 22500 },
+        { tier: 'PRO', seats: 5, unitPriceXaf: 10000, amountXaf: 50000 },
+      ]);
+    });
   });
 
   /**
@@ -212,7 +396,7 @@ describe('PaymentsController', () => {
       );
     });
 
-    it.each(['create', 'get', 'list'])(
+    it.each(['create', 'get', 'list', 'startCheckout'])(
       'carries no subscription guard on %s',
       (method) => {
         const handler = (PaymentsController.prototype as Record<string, any>)[

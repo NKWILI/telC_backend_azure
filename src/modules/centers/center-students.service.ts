@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma, type Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
@@ -21,6 +23,14 @@ export interface UpdateStudentInput {
   firstName?: string;
   lastName?: string;
   phone?: string;
+  /**
+   * Move this student into another tier.
+   *
+   * Allowed only when the center holds a free seat there. No pro-rating: the
+   * move takes effect immediately for access and the price difference settles
+   * at the next renewal.
+   */
+  tier?: Tier;
 }
 
 export interface CenterStudentView {
@@ -35,6 +45,11 @@ export interface CenterStudentView {
   activationKeyExpiresAt: Date | null;
   createdAt: Date;
   lastSeenAt: Date;
+  /**
+   * Which tier's seat they occupy, and therefore what they may do. Null for a
+   * student provisioned before tiers existed.
+   */
+  tier: Tier | null;
 }
 
 @Injectable()
@@ -80,6 +95,19 @@ export class CenterStudentsService {
     return this.toView(await this.loadOwned(identity, studentId));
   }
 
+  /**
+   * Edits a student, and moves them between tiers.
+   *
+   * A tier move is the most common thing a school does after buying: a Start
+   * student decides to sit the exam and needs Pro. The alternative was
+   * remove-and-re-add, which works but invites mistakes on an account holding
+   * the student's whole history.
+   *
+   * The whole update runs in one Serializable transaction because a tier move
+   * consumes a seat. Two administrators moving two students into the last free
+   * Pro seat would otherwise both read it free and both write, putting the
+   * tier over its quantity with nothing to notice.
+   */
   async update(
     identity: SignedCenterIdentity,
     studentId: string,
@@ -91,16 +119,75 @@ export class CenterStudentsService {
       }),
       ...(changes.lastName !== undefined && { last_name: changes.lastName }),
       ...(changes.phone !== undefined && { phone: changes.phone }),
+      ...(changes.tier !== undefined && { tier: changes.tier }),
     };
 
     if (Object.keys(data).length === 0) {
       throw new BadRequestException('NO_STUDENT_FIELDS_SUPPLIED');
     }
 
-    await this.loadOwned(identity, studentId);
-    await this.prisma.student.update({ where: { id: studentId }, data });
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        // Ownership first, so another center's student is a 404 before any
+        // seat is inspected — the seat answer would otherwise confirm the id.
+        const student = await tx.student.findFirst({
+          where: { id: studentId, center_id: identity.centerId },
+        });
 
-    return this.toView(await this.loadOwned(identity, studentId));
+        if (!student) {
+          throw new NotFoundException('STUDENT_NOT_FOUND');
+        }
+
+        if (changes.tier !== undefined) {
+          await this.assertSeatFreeInTier(
+            tx,
+            identity.centerId,
+            changes.tier,
+            studentId,
+          );
+        }
+
+        return tx.student.update({ where: { id: studentId }, data });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    return this.toView(updated);
+  }
+
+  /**
+   * Whether this center may put one more student into a tier.
+   *
+   * The student being moved is excluded from the count. Without that, a
+   * student already in Pro could never be sent to Pro again — a client
+   * re-sending the value it already holds would be refused on a tier that is
+   * exactly full, which looks like a bug to everyone involved.
+   *
+   * A missing seat row and a full one stay distinct, as in provisioning: one
+   * is fixed by buying the tier, the other by buying more seats.
+   */
+  private async assertSeatFreeInTier(
+    tx: Pick<PrismaService, 'centerSeat' | 'student'>,
+    centerId: string,
+    tier: Tier,
+    movingStudentId: string,
+  ): Promise<void> {
+    const seat = await tx.centerSeat.findUnique({
+      where: { center_id_tier: { center_id: centerId, tier } },
+      select: { quantity: true },
+    });
+
+    if (!seat) {
+      throw new ForbiddenException({ message: 'TIER_NOT_HELD', tier });
+    }
+
+    const seatsUsed = await tx.student.count({
+      where: { center_id: centerId, tier, id: { not: movingStudentId } },
+    });
+
+    if (seatsUsed >= seat.quantity) {
+      throw new ForbiddenException({ message: 'SEAT_LIMIT_REACHED', tier });
+    }
   }
 
   /**
@@ -217,6 +304,7 @@ export class CenterStudentsService {
     activation_key_expires: Date | null;
     created_at: Date;
     last_seen_at: Date;
+    tier: Tier | null;
   }): CenterStudentView {
     return {
       id: row.id,
@@ -229,6 +317,7 @@ export class CenterStudentsService {
       activationKeyExpiresAt: row.activation_key_expires,
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at,
+      tier: row.tier,
     };
   }
 }

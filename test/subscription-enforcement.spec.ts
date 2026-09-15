@@ -7,6 +7,8 @@ import { readdirSync, statSync } from 'fs';
 import { join, resolve } from 'path';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
+import { StudentTierGuard } from '../src/shared/guards/student-tier.guard';
+import { REQUIRES_TIER } from '../src/shared/decorators/requires-tier.decorator';
 
 /**
  * Controllers that authenticate a student but must NOT require a live
@@ -46,6 +48,8 @@ function findControllerFiles(dir: string): string[] {
 
 interface DiscoveredController {
   name: string;
+  /** The class itself, so metadata other than guards can be read from it. */
+  target: object;
   /** Guards from `@UseGuards` on the class itself. */
   guards: unknown[];
   /** Guards on each handler, keyed by method name. */
@@ -85,7 +89,12 @@ function discoverControllers(): DiscoveredController[] {
         if (onHandler.length > 0) routeGuards.set(method, onHandler);
       }
 
-      found.push({ name, guards: guardsOn(value), routeGuards });
+      found.push({
+        name,
+        target: value as object,
+        guards: guardsOn(value),
+        routeGuards,
+      });
     }
   }
 
@@ -277,5 +286,75 @@ describe('subscription enforcement across learning controllers', () => {
       expect(controllers.some((c) => c.name === name)).toBe(true);
       expect(reason.length).toBeGreaterThan(0);
     }
+  });
+});
+/**
+ * Which learning controllers gate on tier, and — the half that quietly rots —
+ * which must not.
+ *
+ * The exam module is the line between Start and Pro. Per-skill practice is
+ * what makes Start a usable product rather than a stub, so a tier requirement
+ * spreading to any of it would be sold as a hardening and land as a refund
+ * request.
+ */
+describe('tier enforcement is exactly where it was decided', () => {
+  const controllers = discoverControllers();
+  const tierOn = (target: object): unknown =>
+    Reflect.getMetadata(REQUIRES_TIER, target);
+
+  /** Only the full exam simulation. Every other learning route is open to Start. */
+  const TIER_GATED = ['ModelltestsController'];
+
+  const OPEN_TO_START = EXPECTED_LEARNING_CONTROLLERS.filter(
+    (name) => !TIER_GATED.includes(name),
+  );
+
+  it.each(TIER_GATED)('%s requires Pro or better', (name) => {
+    const controller = controllers.find((c) => c.name === name);
+
+    expect(controller).toBeDefined();
+    // Both halves matter: the guard is what refuses, and the decorator is what
+    // tells it to. Either one missing is an open route, and the guard without
+    // a decorator is the quieter of the two failures.
+    expect(controller!.guards).toContain(StudentTierGuard);
+    expect(tierOn(controller!.target)).toBe('PRO');
+  });
+
+  it.each(TIER_GATED)('%s checks entitlement before tier', (name) => {
+    const { guards } = controllers.find((c) => c.name === name)!;
+
+    // The tier guard reuses the entitlement the subscription guard leaves on
+    // the request. It fetches its own if there is none, so the order is not
+    // load-bearing for correctness — but a blocked center should hear
+    // SUBSCRIPTION_INACTIVE rather than TIER_TOO_LOW, because only one of
+    // those is the thing they need to fix.
+    expect(guards.indexOf(StudentSubscriptionGuard)).toBeLessThan(
+      guards.indexOf(StudentTierGuard),
+    );
+  });
+
+  it.each(OPEN_TO_START)('%s stays open to a Start student', (name) => {
+    const controller = controllers.find((c) => c.name === name);
+
+    expect(controller).toBeDefined();
+    expect(controller!.guards).not.toContain(StudentTierGuard);
+    // Per-route as well as per-class: a gate added to one handler is exactly
+    // how this would spread without anyone noticing.
+    expect([...controller!.routeGuards.values()].flat()).not.toContain(
+      StudentTierGuard,
+    );
+    expect(tierOn(controller!.target)).toBeUndefined();
+  });
+
+  it('gates the exam module and nothing else', () => {
+    // A guard can only refuse where it is mounted, so counting the mounts is
+    // what stops this spreading one controller at a time.
+    const gated = controllers.filter(
+      (c) =>
+        c.guards.includes(StudentTierGuard) ||
+        [...c.routeGuards.values()].flat().includes(StudentTierGuard),
+    );
+
+    expect(gated.map((c) => c.name).sort()).toEqual(TIER_GATED);
   });
 });

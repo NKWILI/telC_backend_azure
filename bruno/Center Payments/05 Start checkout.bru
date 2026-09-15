@@ -1,0 +1,75 @@
+meta {
+  name: 05 Start checkout
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/payments/{{paymentId}}/checkout
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.paymentId: eq {{paymentId}}
+  res.body.checkoutUrl: isDefined
+}
+
+docs {
+  Where the center goes to pay for a PENDING payment. Run
+  `02 Create payment` first — it captures `{{paymentId}}`.
+
+  ## The server must be running with a provider
+
+  With nothing configured this answers 503 PAYMENT_PROVIDER_NOT_CONFIGURED.
+  That is the default on purpose: forgetting a variable leaves payments
+  unavailable, never open.
+
+  For local testing, start the API with:
+
+      PAYMENT_PROVIDER=fake
+      FAKE_PAYMENT_WEBHOOK_SECRET=<any value of 32 characters or more>
+
+  The fake refuses to switch on if NODE_ENV is `production` or the secret is
+  shorter than 32 characters. NEVER set PAYMENT_PROVIDER=fake on DigitalOcean.
+
+  With the fake, `checkoutUrl` points at `checkout.fake-payments.invalid`. The
+  `.invalid` domain never resolves, so it can never be mistaken for a real
+  payment page. To finish the payment, use `06 Simulate provider webhook`.
+
+  ## What to check by hand
+
+  1. SEND IT TWICE. Both return the SAME `checkoutUrl`. The second call is
+     answered from the database and never asks the provider again — a second
+     provider transaction for one payment could be paid as well.
+
+  2. THE PROVIDER REFERENCE IS NOT IN THE RESPONSE. The client needs somewhere
+     to go, not the provider's transaction id. With the fake it is
+     `fake_{{paymentId}}`, stored in `payments.provider_reference`:
+
+         SELECT provider_reference, checkout_url FROM payments WHERE id = '...';
+
+  3. A PAID OR FAILED PAYMENT -> 409 PAYMENT_NOT_PENDING. Finish the payment
+     with `06`, then send this again. A failed payment is finished too: the
+     center creates a new payment instead.
+
+  4. ANOTHER CENTER'S PAYMENT -> 404, never 403. A 403 would confirm the id
+     exists.
+
+  ## While BLOCKED
+
+  This works. Creating a payment a lapsed center could not then go and pay
+  would leave it exactly as locked out as before.
+  `test/center-blocked-surface.spec.ts` pins it.
+
+  ## Rate limit
+
+  20 checkouts an hour per center, on a budget separate from creating
+  payments, so clicking "pay" a few times never uses up the slots needed to
+  create one.
+}

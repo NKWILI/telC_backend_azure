@@ -17,7 +17,6 @@ describe('SubscriptionPolicyService', () => {
     over: Partial<CenterSubscriptionRecord> = {},
   ): CenterSubscriptionRecord => ({
     plan: 'TRIAL',
-    seats: 3,
     trial_started_at: null,
     trial_ends_at: null,
     paid_until: null,
@@ -84,7 +83,6 @@ describe('SubscriptionPolicyService', () => {
   describe('ACTIVE', () => {
     const paid = subscription({
       plan: 'PAID',
-      seats: 10,
       trial_started_at: at(-60 * DAY),
       trial_ends_at: at(-30 * DAY),
       paid_until: at(10 * DAY),
@@ -116,7 +114,6 @@ describe('SubscriptionPolicyService', () => {
   describe('GRACE_PERIOD', () => {
     const lapsed = subscription({
       plan: 'PAID',
-      seats: 10,
       paid_until: at(-2 * DAY),
     });
 

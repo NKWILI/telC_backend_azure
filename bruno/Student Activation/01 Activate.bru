@@ -49,11 +49,17 @@ docs {
   `Center Subscription / 01 Get subscription` before and after:
 
       before   status TRIAL_PENDING, trialStartedAt null
-      after    status TRIAL,         trialEndsAt = +30 days
+      after    status TRIAL,         trialEndsAt = +14 days
+
+  Fourteen days, not thirty: the clock starts HERE rather than at signup, so
+  these are fourteen ACTIVE days rather than a typical thirty where the first
+  fortnight goes on forgetting to set the thing up.
 
   Then provision and activate a SECOND student and check again. The timestamps
-  must be unchanged — a second student does not buy the center another thirty
-  days.
+  must be unchanged — a second student does not buy the center another
+  fortnight. On a fresh trial center there is only one seat anyway, so the
+  second provisioning is refused before it gets this far; raise the Start
+  quantity in `center_seats` to try it.
 
   The password set here belongs to the student. Their center never learns it,
   and cannot re-key the account now that it is active.

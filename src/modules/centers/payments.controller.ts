@@ -21,6 +21,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -29,6 +30,7 @@ import { CenterExceptionFilter } from './center-exception.filter';
 import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
 import {
+  CheckoutSessionResponseDto,
   CreatePaymentDto,
   ListPaymentsQueryDto,
   PaymentPageDto,
@@ -37,6 +39,7 @@ import {
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { PaymentsService } from './payments.service';
+import { PaymentCheckoutService } from './payment-checkout.service';
 
 /** Long enough for a uuid or a nanoid, short enough not to be a payload. */
 const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
@@ -63,6 +66,7 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 200;
 export class PaymentsController {
   constructor(
     private readonly payments: PaymentsService,
+    private readonly checkout: PaymentCheckoutService,
     private readonly rateLimitService: RateLimitService,
   ) {}
 
@@ -90,6 +94,18 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentResponseDto> {
+    // Mapped field by field onto the tier keys rather than passed through, so
+    // an unexpected property on the body can never reach pricing.
+    const mix = { START: dto.start, PRO: dto.pro, PREMIUM: dto.premium };
+
+    // Refused before any budget is spent. Every tier field is optional, so an
+    // empty body clears the validation pipe and arrives here; charging a slot
+    // for a request that buys nothing lets twenty empty submits lock a center
+    // out of the one route a lapsed center has to be able to reach. This is a
+    // pure check — no database, no writes — so doing it first costs nothing.
+    // The service checks again, because it must hold for any caller.
+    this.requireSomethingToBuy(mix);
+
     // Keyed on the center, not the IP: the caller is authenticated, and what
     // needs protecting is this center's own row count. The idempotency index
     // stops duplicates of ONE intent; nothing stops a flood of distinct ones,
@@ -98,9 +114,39 @@ export class PaymentsController {
 
     return this.payments.create(
       centerUser,
-      dto.seats,
+      mix,
       this.requireIdempotencyKey(idempotencyKey),
     );
+  }
+
+  @Post('api/payments/:paymentId/checkout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get the URL where the center pays for a pending payment',
+    description:
+      'Opens a checkout with the payment provider the first time, and returns the same URL on every later call, so a retry or double-click never opens a second provider transaction. Only a PENDING payment can be checked out. Reachable by a blocked center: paying is the way back.',
+  })
+  @ApiOkResponse({ type: CheckoutSessionResponseDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
+  @ApiConflictResponse({
+    type: CenterErrorResponseDto,
+    description: 'PAYMENT_NOT_PENDING — already paid, failed or expired.',
+  })
+  @ApiServiceUnavailableResponse({
+    type: CenterErrorResponseDto,
+    description: 'PAYMENT_PROVIDER_NOT_CONFIGURED — no provider is set up.',
+  })
+  async startCheckout(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+    @Param('paymentId') paymentId: string,
+  ): Promise<CheckoutSessionResponseDto> {
+    await this.rateLimitService.checkCheckoutStartLimit(centerUser.centerId);
+
+    const session = await this.checkout.startCheckout(centerUser, paymentId);
+
+    // Built field by field so the provider reference stays on the server.
+    return { paymentId: session.paymentId, checkoutUrl: session.checkoutUrl };
   }
 
   @Get('api/centers/me/payments')
@@ -134,6 +180,25 @@ export class PaymentsController {
     @Param('paymentId') paymentId: string,
   ): Promise<PaymentResponseDto> {
     return this.payments.get(centerUser, paymentId);
+  }
+
+  /**
+   * Whether this body asks to buy anything at all.
+   *
+   * Deliberately the same code `PricingService` raises for the same condition,
+   * so a client sees one answer to one mistake regardless of which layer
+   * noticed. The rule cannot live in the DTO: `class-validator` runs per
+   * property, and "at least one of these three" is a statement about the
+   * object.
+   */
+  private requireSomethingToBuy(mix: Record<string, number | undefined>): void {
+    const wanted = Object.values(mix).some(
+      (seats) => typeof seats === 'number' && seats > 0,
+    );
+
+    if (!wanted) {
+      throw new BadRequestException('SEAT_MIX_EMPTY');
+    }
   }
 
   /**

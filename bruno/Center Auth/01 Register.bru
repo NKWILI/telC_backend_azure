@@ -13,13 +13,9 @@ post {
 body:json {
   {
     "centerName": "Goethe Language Center",
-    "country": "Cameroon",
-    "city": "Douala",
-    "logoUrl": "https://cdn.example.com/centers/logo.webp",
     "managerFirstName": "Alain",
     "managerLastName": "Ngeukeu",
     "email": "{{centerEmail}}",
-    "phone": "+237690000000",
     "password": "{{centerPassword}}"
   }
 }
@@ -33,9 +29,41 @@ docs {
   Set `centerEmail` and `centerPassword` in the environment first. Use a fresh
   address each run, or step 02 will fail — a verified account cannot re-verify.
 
+  ## Five fields, and only five
+
+  Registration takes the center name, the manager's name, an email and a
+  password. Nothing else. A center registers, verifies, and lands on a
+  dashboard; country, city, phone and logo arrive later during onboarding,
+  because none of them is needed to run a trial.
+
+  Each of these must return 400 VALIDATION_ERROR, not a 201:
+
+  - `"country": "Cameroon"`
+  - `"city": "Douala"`
+  - `"phone": "+237690000000"`
+  - `"logoUrl": "https://cdn.example.com/logo.webp"`
+
+  They are REFUSED, not ignored. A client still sending the old shape has to
+  hear about it rather than have its data silently dropped — which is exactly
+  what would have happened if the fields were merely unused.
+
+  ## What one registration creates
+
+  Four rows, in one transaction: the center, its owner, its subscription, and
+  its single trial seat — `center_seats(START, 1, 0)`. A trial is an ordinary
+  seat row priced at zero rather than a flag, so nothing downstream needs an
+  "unless they are on trial" branch. Check it with
+  `Center Subscription / 02 Get usage`: `seatsLimit` is 1 and `perTier` has one
+  START entry.
+
+  If registration fails, none of the four exists. Re-run with the same address
+  and count `center_seats` — it must not grow.
+
+  ## The anti-enumeration property
+
   Re-run this request with the same address: it must return the identical 201
-  body, never a conflict. That generic response is the anti-enumeration
-  property, so a different answer here is a defect.
+  body, never a conflict. A different answer here tells an attacker which
+  addresses are registered, so it is a defect rather than a nicety.
 
   The verification token is emailed, not returned. Copy it from the server
   console into the `verificationToken` variable before running step 02.

@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await */
 import { BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { StudentActivationService } from '../src/modules/centers/student-activation.service';
+import {
+  StudentActivationService,
+  TRIAL_DURATION_DAYS,
+} from '../src/modules/centers/student-activation.service';
 
 describe('StudentActivationService', () => {
   const DAY = 24 * 60 * 60 * 1000;
@@ -188,13 +191,17 @@ describe('StudentActivationService', () => {
       expect(call.data.trial_started_at).toBeInstanceOf(Date);
     });
 
-    it('runs for thirty days', async () => {
+    it('runs for fourteen days', async () => {
       await activate();
 
       const { trial_started_at, trial_ends_at } =
         tx.centerSubscription.updateMany.mock.calls[0][0].data;
       const days = (trial_ends_at.getTime() - trial_started_at.getTime()) / DAY;
-      expect(days).toBe(30);
+      // Fourteen, not thirty. The clock starts at activation rather than at
+      // signup, so these are fourteen *active* days — and a long trial with a
+      // single seat creates no urgency, it just lets a school forget.
+      expect(days).toBe(TRIAL_DURATION_DAYS);
+      expect(TRIAL_DURATION_DAYS).toBe(14);
     });
 
     it('cannot be restarted by a second student', async () => {

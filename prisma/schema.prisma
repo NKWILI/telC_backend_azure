@@ -17,6 +17,18 @@ enum CenterUserRole {
   MANAGER
 }
 
+/// What a seat entitles its student to.
+///
+/// A trial is not a tier: it is an ordinary START seat priced at zero with a
+/// 14-day clock, so trial and paid Start students behave identically
+/// everywhere except the clock. That keeps the quota logic to three cases
+/// rather than four.
+enum Tier {
+  START
+  PRO
+  PREMIUM
+}
+
 model Student {
   id           String   @id @default(uuid())
   first_name   String?
@@ -57,7 +69,13 @@ model Student {
   /// independent student, simply have none.
   center_id String?
 
+  /// Which tier this student's seat is, assigned by their center. Null for a
+  /// student no center governs — anyone predating centers, and anyone removed
+  /// from one. It decides what the student may do, so it is read per request.
+  tier Tier?
+
   center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
+  ai_usage        AiUsage[]
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
@@ -102,28 +120,26 @@ model DeviceSession {
 }
 
 model Center {
-  id         String   @id @default(uuid())
-  name       String
-  country    String
-  city       String
+  id   String @id @default(uuid())
+  /// The only thing registration collects about the center itself, so it stays
+  /// required — optional here would let a five-field signup write a row that
+  /// says nothing.
+  name String
+
+  /// Collected during onboarding rather than at registration, so both are
+  /// nullable until a center completes its profile. Nothing reads them today;
+  /// they exist for invoices and for knowing which market a school is in.
+  /// Profile completeness is derived from these being present, never stored.
+  country    String?
+  city       String?
   logo_url   String?
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  /// The contracted price per seat per month, in whole XAF. Standard is 4,800;
-  /// a consumed partnership code copies its contracted price here (Phase 2),
-  /// which is what makes the terms a snapshot rather than a lookup — editing a
-  /// code later cannot silently change an existing agreement.
-  ///
-  /// Integer, not decimal: XAF has no minor units, so there is nothing for a
-  /// fractional part to mean and nothing for a rounding error to hide in.
-  unit_price_xaf Int @default(4800)
-  /// The fewest seats a paid plan may buy. The real floor is
-  /// max(min_seats, students already provisioned), enforced in pricing.
-  min_seats      Int @default(10)
 
   users        CenterUser[]
   payments     Payment[]
+  seats        CenterSeat[]
   students     Student[]
   subscription CenterSubscription?
 
@@ -141,9 +157,6 @@ model CenterSubscription {
   id         String     @id @default(uuid())
   center_id  String     @unique
   plan       CenterPlan @default(TRIAL)
-  /// 3 while on trial, 10 or more once paid. Always the authority for the seat
-  /// limit, so there is no status-dependent branch in the seat logic.
-  seats      Int        @default(3)
 
   /// Set by the first student activation (Phase 4), not at registration.
   trial_started_at DateTime?
@@ -160,6 +173,45 @@ model CenterSubscription {
   @@map("center_subscriptions")
 }
 
+/// The seats a center holds in one tier.
+///
+/// One row per tier, so a seat count never depends on remembering to sum
+/// several rows. A center may hold all three tiers at once — five Start,
+/// three Pro and two Premium is a valid arrangement.
+/// A chargeable AI operation, one value per thing a quota is counted against.
+///
+/// An enum rather than free text so a typo cannot silently create a new
+/// category that no allowance covers. Only speaking is metered today; Premium's
+/// "AI in every module" adds values here, and each new value needs an
+/// allowance before it is written.
+enum AiOperation {
+  SPEAKING_EVALUATION
+}
+
+model CenterSeat {
+  id        String @id @default(uuid())
+  center_id String
+  tier      Tier
+  /// Seats held in this tier. Never zero: a row saying "no seats" is not the
+  /// same as no row, and would make every count ambiguous.
+  quantity  Int
+
+  /// The price this center pays for this tier, copied in at purchase rather
+  /// than looked up. This is what makes grandfathering automatic — raising the
+  /// list price later cannot rewrite what a center already agreed to.
+  ///
+  /// Zero is legal, and is how a free trial seat is held.
+  unit_price_xaf Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+
+  @@unique([center_id, tier])
+  @@map("center_seats")
+}
+
 enum PaymentStatus {
   PENDING
   SUCCEEDED
@@ -174,17 +226,35 @@ enum PaymentStatus {
 /// the start but is never written in this phase — Phase 7 needs somewhere to
 /// put a verified result without another migration.
 model Payment {
-  id        String        @id @default(uuid())
+  id        String @id @default(uuid())
   center_id String
-  seats     Int
 
-  /// Both snapshotted at creation. A price change next year must not rewrite
-  /// what a center agreed to this year, so these are copies rather than a
-  /// join back to the center's current terms.
-  unit_price_xaf Int
-  amount_xaf     Int
+  /// Seats across every tier in this payment. A convenience total; the
+  /// authoritative per-tier figures live in `lines`.
+  total_seats Int
+  /// What the whole payment comes to, snapshotted at creation. A price change
+  /// next year must not rewrite what a center agreed to this year, so this is
+  /// a copy rather than a join back to today's prices.
+  amount_xaf  Int
 
   status PaymentStatus @default(PENDING)
+
+  /// The payment provider's own id for this transaction, stored when a
+  /// checkout starts. A webhook finds its payment by this, and it is unique so
+  /// one provider transaction can never be applied to two payments. Null until
+  /// a checkout exists; Postgres allows any number of nulls under a unique
+  /// index.
+  provider_reference String?   @unique
+  /// Where the center is sent to pay, stored with the reference. A repeated or
+  /// double-clicked checkout returns this instead of asking the provider
+  /// again, which would open a second provider transaction for one payment.
+  checkout_url       String?
+  /// When activation granted access. Set once, by the same statement that
+  /// moves the status, so the two can never disagree.
+  succeeded_at       DateTime?
+  /// When the provider reported the payment failed. A later success still
+  /// activates — the provider is the authority on whether money moved.
+  failed_at          DateTime?
 
   /// Supplied by the client and claimed atomically by the unique index below.
   /// The index is the concurrency control: two simultaneous requests race to
@@ -198,11 +268,39 @@ model Payment {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+  center Center        @relation(fields: [center_id], references: [id], onDelete: Cascade)
+  lines  PaymentLine[]
 
   @@unique([center_id, idempotency_key])
   @@index([center_id, created_at])
   @@map("payments")
+}
+
+/// One tier within a payment.
+///
+/// A payment can cover several tiers at different prices, so the breakdown
+/// cannot live in a single pair of columns on the payment. Each line carries
+/// the price that applied at the time, which is what keeps an old invoice
+/// truthful after the list price moves.
+model PaymentLine {
+  id         String @id @default(uuid())
+  payment_id String
+  tier       Tier
+  seats      Int
+
+  unit_price_xaf Int
+  /// Always seats * unit_price_xaf, and a CHECK constraint enforces it. The
+  /// column is stored rather than computed so an invoice keeps its own total
+  /// even if the arithmetic here ever changes.
+  amount_xaf     Int
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  payment Payment @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+
+  @@unique([payment_id, tier])
+  @@map("payment_lines")
 }
 
 model CenterUser {
@@ -212,7 +310,10 @@ model CenterUser {
   first_name   String
   last_name    String
   email        String         @unique
-  phone        String
+  /// The manager's own number, not the school's public line, and collected
+  /// during onboarding rather than at registration. Nullable for that reason.
+  /// This is who gets contacted about a late payment or a locked account.
+  phone        String?
   created_at   DateTime       @default(now())
   updated_at   DateTime       @default(now()) @updatedAt
   last_seen_at DateTime       @default(now())
@@ -791,4 +892,31 @@ model WritingExercise {
 
   @@unique([modelltest_id])
   @@map("writing_exercises")
+}
+
+/// One row per successful chargeable AI operation.
+///
+/// Written after the AI returns something usable, never when the student
+/// presses start: the alternative charges a student for our own outage, and a
+/// bad afternoon on our side would cost a Start student their whole day.
+/// Metered APIs do not bill a 500, and neither does this.
+///
+/// The rows are the quota. Nothing is stored per student and nothing resets on
+/// a schedule — the allowance is "how many of these are newer than 24 hours
+/// ago", which is why there is no counter here to drift from the rows it
+/// claims to describe. They double as the measurement of whether the
+/// allowances are set right, which arrives as a side effect of enforcing them.
+model AiUsage {
+  id         String      @id @default(uuid())
+  student_id String
+  operation  AiOperation
+  created_at DateTime    @default(now())
+
+  student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  /// Exactly the quota question: this student, this operation, newer than a
+  /// timestamp. Column order matters — student first because it is the
+  /// equality, created_at second because it is the range.
+  @@index([student_id, operation, created_at])
+  @@map("ai_usage")
 }

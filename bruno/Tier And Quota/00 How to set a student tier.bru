@@ -1,0 +1,66 @@
+meta {
+  name: 00 How to set a student tier
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/centers/me/students
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{accessToken}}
+}
+
+docs {
+  Not a test — the setup every request in this folder depends on, and a place
+  to read the current tiers back.
+
+  Each student row carries `tier`. It decides what that student may do, which
+  is the second and narrower entitlement question: Phase 5 asked whether a
+  center's students may learn at all, and tiers ask what THIS student may do.
+  Two students in the same center, both fully paid, can now get different
+  answers.
+
+  ## Setting one up
+
+  The supported way is `Center Students / 04 Update student` with
+  `{"tier": "PRO"}`, which checks that a free seat exists in the target tier.
+
+  For testing the student-facing gates you often want a tier without buying
+  seats, so by hand:
+
+      -- give the center seats to hold
+      INSERT INTO center_seats (id, center_id, tier, quantity, unit_price_xaf)
+      VALUES (gen_random_uuid()::text, '<center>', 'PRO', 5, 10000);
+
+      -- and put a student in that tier
+      UPDATE students SET tier = 'PRO' WHERE id = '<student>';
+
+  ## The three cases the gates distinguish
+
+  | student | tier | governed by a center |
+  |---|---|---|
+  | a center's Start student | START | yes |
+  | a center's Pro student | PRO | yes |
+  | an independent student | NULL | no |
+
+  That third row is the one to keep in mind. An independent student — anyone
+  who predates centers, or whom a center removed — has no tier, and the two
+  gates treat them DIFFERENTLY on purpose:
+
+  - the exam module admits them, because they have it today and taking it away
+    would be a regression for a reason that has nothing to do with them;
+  - the AI quota meters them at Start's allowance, because nobody is paying
+    for those calls and leaving them unmetered would let a center release its
+    students to hand them unlimited AI.
+
+  The unifying rule: they keep every FEATURE they have, and unpaid AI runs at
+  the floor rate.
+
+  To make one: `UPDATE students SET center_id = NULL WHERE id = '<student>';`
+  Note the tier column survives that — see `02 Exam module` for why that
+  matters.
+}

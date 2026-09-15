@@ -1,5 +1,10 @@
-/* eslint-disable @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
 import { CenterStudentsController } from '../src/modules/centers/center-students.controller';
+import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
+import { PricingService } from '../src/modules/centers/pricing.service';
+import { CenterSeatsService } from '../src/modules/centers/center-seats.service';
+import { PaymentsService } from '../src/modules/centers/payments.service';
 import { CenterProfileController } from '../src/modules/centers/center-profile.controller';
 import { CenterSubscriptionController } from '../src/modules/centers/center-subscription.controller';
 import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
@@ -56,6 +61,12 @@ describe('what a blocked center can and cannot do', () => {
 
     it('can still read its payment history', () => {
       expect(enforced(PaymentsController.prototype.list)).toBe(false);
+    });
+
+    it('can still start a checkout', () => {
+      // Creating a payment a center cannot then go and pay would leave a
+      // lapsed center exactly as locked out as before.
+      expect(enforced(PaymentsController.prototype.startCheckout)).toBe(false);
     });
 
     it('has no subscription guard at the class level either', () => {
@@ -115,6 +126,86 @@ describe('what a blocked center can and cannot do', () => {
       expect(
         enforced(CenterStudentsController.prototype.revokeActivationKey),
       ).toBe(false);
+    });
+  });
+  /**
+   * The second gate, and the one that is not a guard.
+   *
+   * Profile completeness is checked inside payment creation rather than by a
+   * guard, so reflection cannot pin it — but the property is the same shape as
+   * everything above: the refusal must be narrow. A center that has not
+   * finished its profile still needs to see what seats cost, because that is
+   * the page that explains why finishing is worth it.
+   */
+  describe('a center that has not finished its profile', () => {
+    const identity = { centerId: 'center-1', centerUserId: 'owner-1' } as never;
+
+    const draftPrisma = () => ({
+      // No country, no city, no manager phone: a center that registered and
+      // stopped.
+      centerUser: {
+        findFirst: jest.fn().mockResolvedValue({
+          phone: null,
+          center: { country: null, city: null },
+        }),
+      },
+      center: {
+        findUnique: jest.fn().mockResolvedValue({ _count: { students: 0 } }),
+      },
+      centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
+      student: { groupBy: jest.fn().mockResolvedValue([]) },
+      payment: { findUnique: jest.fn() },
+      $transaction: jest.fn((run: (tx: unknown) => unknown) =>
+        Promise.resolve(run({})),
+      ),
+    });
+
+    it('can still be quoted', async () => {
+      const prisma = draftPrisma();
+      const subscriptions = new CenterSubscriptionService(
+        prisma as never,
+        new SubscriptionPolicyService(),
+        new PricingService(),
+        new CenterSeatsService(prisma as never),
+      );
+
+      await expect(
+        subscriptions.quote(identity, { START: 10 }),
+      ).resolves.toMatchObject({ totalXaf: 45000 });
+    });
+
+    it('cannot pay, and is told exactly what it still owes', async () => {
+      const prisma = draftPrisma();
+      const payments = new PaymentsService(
+        prisma as never,
+        new PricingService(),
+        new CenterSeatsService(prisma as never),
+      );
+
+      await expect(
+        payments.create(identity, { START: 10 }, 'key-1'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          message: 'CENTER_PROFILE_INCOMPLETE',
+          missing: ['country', 'city', 'phone'],
+        }),
+      });
+    });
+
+    it('is refused before anything is written', async () => {
+      const prisma = draftPrisma();
+      const payments = new PaymentsService(
+        prisma as never,
+        new PricingService(),
+        new CenterSeatsService(prisma as never),
+      );
+
+      await expect(
+        payments.create(identity, { START: 10 }, 'key-1'),
+      ).rejects.toThrow('CENTER_PROFILE_INCOMPLETE');
+
+      // Never opened a transaction, so no row and no seat read.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 });

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -11,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Tier } from '@prisma/client';
 import { NormalizeEmail, Trim } from './center-validation.decorators';
 
 /**
@@ -57,6 +59,15 @@ export class ProvisionStudentDto {
   @MaxLength(30)
   @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
   phone?: string;
+
+  @ApiProperty({
+    enum: Tier,
+    example: Tier.START,
+    description:
+      "Which tier's seat this student takes. Required: a center holding several tiers has no obvious default, and defaulting to the cheapest would quietly put a student into a tier without the exam module. A trialling center holds one START seat, so START is the only value it can use.",
+  })
+  @IsEnum(Tier)
+  tier: Tier;
 }
 
 /** Name and phone only. Email is identity and is not editable here. */
@@ -85,6 +96,16 @@ export class UpdateStudentDto {
   @MaxLength(30)
   @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
   phone?: string;
+
+  @ApiPropertyOptional({
+    enum: Tier,
+    example: Tier.PRO,
+    description:
+      'Move this student into another tier. Allowed only when the center holds a free seat there — a full tier answers SEAT_LIMIT_REACHED and a tier the center has never bought answers TIER_NOT_HELD, both naming the tier. No pro-rating: access changes immediately and the price difference settles at the next renewal.',
+  })
+  @IsOptional()
+  @IsEnum(Tier)
+  tier?: Tier;
 }
 
 export class ListStudentsQueryDto {

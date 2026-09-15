@@ -1,0 +1,81 @@
+meta {
+  name: 02 Exam module needs Pro
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/modelltests
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentAccessToken}}
+}
+
+docs {
+  The line between Start and Pro, and the thing that makes Pro worth buying.
+
+  `/api/modelltests` is the full timed simulation across Hören, Lesen,
+  Schreiben and Sprechen, with results afterwards. Pro and Premium only.
+
+  ## What each student gets
+
+  | student | result |
+  |---|---|
+  | PRO | 200 |
+  | PREMIUM | 200 |
+  | START | 403 TIER_TOO_LOW |
+  | a center student with no tier | 403 TIER_TOO_LOW |
+  | an independent student (no center) | **200** |
+
+  Change the student's tier per `00 How to set a student tier` and re-run each
+  time.
+
+  ## The refusal
+
+      {
+        "error": "TIER_TOO_LOW",
+        "tier": "START",
+        "requiredTier": "PRO"
+      }
+
+  Both numbers travel with it so a client can offer the upgrade the school has
+  to buy, rather than showing a bare failure. `tier` comes back as `null`
+  rather than a substituted value when the student holds none — never show a
+  tier a student does not have.
+
+  It is a 403, not a 401. The student is perfectly authenticated; telling them
+  to log in again would send them round a loop that cannot help.
+
+  ## The independent student, and why 200
+
+  An independent student has the exam module TODAY. Gating on tier alone would
+  have taken it away from real users for a reason that has nothing to do with
+  them, so a student no center governs is admitted. When independent paid
+  plans arrive, this is the line that changes.
+
+  ## The stale tier — worth proving by hand
+
+  `students.center_id` is ON DELETE SET NULL while `students.tier` is not, so
+  deleting a center leaves the tier behind on the row. Set a student to
+  PREMIUM, then release them:
+
+      UPDATE students SET tier = 'PREMIUM' WHERE id = '<student>';
+      UPDATE students SET center_id = NULL WHERE id = '<student>';
+
+  They are admitted — but as an ungoverned student, not as a Premium one.
+  Confirm with `03 AI quota`: their allowance is 2, not 20. Reading the tier
+  without a center would have handed them Premium for ever on the strength of
+  a row nobody governs.
+
+  ## Order of refusals
+
+  A student whose center has stopped paying must hear
+  403 SUBSCRIPTION_INACTIVE, not TIER_TOO_LOW. Block the center per
+  `Subscription Access / 00 How to block and restore` and re-run with a START
+  student: the subscription refusal wins, because "your school stopped paying"
+  and "your school needs to buy Pro" are different problems and only one of
+  them is theirs to fix.
+}

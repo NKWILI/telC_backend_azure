@@ -75,6 +75,11 @@ describe('CenterProfileService', () => {
         city: 'Douala',
         logoUrl: null,
       },
+      // Derived on every read, never stored. This row has all three required
+      // fields, so it is complete. The rules themselves are covered in
+      // center-onboarding-state.spec.ts; this asserts the block belongs to the
+      // response shape, so a future refactor cannot quietly drop it.
+      onboarding: { complete: true, missing: [] },
     });
   });
 

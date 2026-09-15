@@ -41,6 +41,7 @@ class FakeDb {
   users = new Map<string, any>();
   sessions = new Map<string, any>();
   subscriptions = new Map<string, any>();
+  seats = new Map<string, any>();
   private seq = 0;
 
   id(prefix: string) {
@@ -53,6 +54,10 @@ class FakeDb {
   sessionsList() {
     return [...this.sessions.values()];
   }
+  seatsList() {
+    return [...this.seats.values()];
+  }
+
   subscriptionsList() {
     return [...this.subscriptions.values()];
   }
@@ -137,6 +142,15 @@ function buildPrisma(db: FakeDb) {
           db.subscriptionsList().find((x) => matches(x, where)) ?? null,
         ),
     },
+    centerSeat: {
+      create: ({ data }: any) => {
+        const row = { id: db.id('seat'), ...data };
+        db.seats.set(row.id, row);
+        return Promise.resolve(row);
+      },
+      findMany: ({ where }: any) =>
+        Promise.resolve(db.seatsList().filter((x) => matches(x, where))),
+    },
     centerDeviceSession: {
       create: ({ data }: any) => {
         const row = { revoked_at: null, device_name: null, ...data };
@@ -186,14 +200,13 @@ describe('center identity end to end', () => {
   let db: FakeDb;
   let mailer: { [k: string]: jest.Mock };
 
+  // Five fields. Country, city and the manager phone moved to onboarding, and
+  // the global pipe refuses them here rather than ignoring them.
   const registration = {
     centerName: 'Goethe Language Center',
-    country: 'Cameroon',
-    city: 'Douala',
     managerFirstName: 'Alain',
     managerLastName: 'Ngeukeu',
     email: 'owner@example.com',
-    phone: '+237690000000',
     password: 'a-strong-password',
   };
   const DEVICE = 'browser-installation-1';
@@ -273,12 +286,21 @@ describe('center identity end to end', () => {
     // to handle a center that has none.
     expect(db.subscriptionsList()).toHaveLength(1);
     expect(db.subscriptionsList()[0]).toEqual(
-      expect.objectContaining({
-        plan: 'TRIAL',
-        seats: 3,
-        trial_started_at: null,
-      }),
+      expect.objectContaining({ plan: 'TRIAL', trial_started_at: null }),
     );
+    // The seat count is no longer on the subscription — center_seats is the
+    // only authority, and the trial seat row is asserted next.
+
+    // And the trial seat itself, granted in the same transaction. A trial is
+    // an ordinary Start seat priced at zero rather than a flag on the
+    // subscription, so nothing downstream needs a trial branch.
+    expect(db.seatsList()).toEqual([
+      expect.objectContaining({
+        tier: 'START',
+        quantity: 1,
+        unit_price_xaf: 0,
+      }),
+    ]);
 
     // 2. Login is refused until the address is verified.
     await http()

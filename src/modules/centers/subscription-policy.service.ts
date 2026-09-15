@@ -22,7 +22,6 @@ export type CenterSubscriptionStatus =
  *  must not start depending on ids, timestamps or anything else incidental. */
 export interface CenterSubscriptionRecord {
   plan: CenterPlan;
-  seats: number;
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
   paid_until: Date | null;

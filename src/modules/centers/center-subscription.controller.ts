@@ -72,7 +72,7 @@ export class CenterSubscriptionController {
   @ApiBadRequestResponse({
     type: CenterErrorResponseDto,
     description:
-      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT, each carrying requiredSeats — the number this center has to reach.',
+      'SEATS_BELOW_MINIMUM or SEATS_BELOW_STUDENT_COUNT carries requiredSeatsTotal. A tier-floor refusal also carries requiredSeatsPerTier for every occupied tier, so applying it cannot uncover another tier refusal. AMOUNT_ABOVE_MAXIMUM carries maximumAmountXaf.',
   })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
   @ApiNotFoundResponse({ type: CenterErrorResponseDto })
@@ -80,7 +80,14 @@ export class CenterSubscriptionController {
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
     @Body() dto: SubscriptionQuoteRequestDto,
   ): Promise<SubscriptionQuoteResponseDto> {
-    return this.subscriptions.quote(centerUser, dto.seats);
+    // Mapped field by field onto the tier keys rather than passed through, so
+    // an unexpected property on the body can never reach pricing even if the
+    // global pipe were ever relaxed.
+    return this.subscriptions.quote(centerUser, {
+      START: dto.start,
+      PRO: dto.pro,
+      PREMIUM: dto.premium,
+    });
   }
 
   @Get('usage')
@@ -88,7 +95,7 @@ export class CenterSubscriptionController {
   @ApiOperation({
     summary: 'Read seat usage for the signed-in center',
     description:
-      'A seat is a student carrying this center id, so usage is counted rather than stored and cannot drift. seatsAvailable is never negative.',
+      'A seat is a student carrying this center id, so usage is counted rather than stored and cannot drift. seatsAvailable is never negative; legacy students without a tier are reported in unassignedSeatsUsed.',
   })
   @ApiOkResponse({ type: CenterUsageResponseDto })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })

@@ -17,9 +17,33 @@ headers {
 assert {
   res.status: eq 200
   res.body.centerUser.emailVerified: eq true
+  res.body.onboarding.complete: isDefined
 }
 
 docs {
+  ## The onboarding block
+
+  Every response carries it:
+
+      "onboarding": { "complete": false, "missing": ["country", "city", "phone"] }
+
+  This is what the dashboard renders its checklist from. It is DERIVED on
+  every read, never stored — there is no flag to keep true and therefore none
+  that can be stale. Fill the three fields via `02 Patch me` and it becomes
+  `{ "complete": true, "missing": [] }` on the very next request, with no job
+  to wait for.
+
+  `missing` lists exactly the absent fields, in a stable order, so a client
+  never holds a rival copy of the rules: a fourth required field added on the
+  server updates every checklist with no frontend change.
+
+  Worth checking by hand: set a field to whitespace (`"city": "   "`) via
+  `02 Patch me`. It must still count as missing. Spaces are not an answer.
+
+  The same three fields gate payment — see
+  `Center Payments / 02 Create payment` — and that gate reads this same
+  derivation, so the checklist and the refusal can never disagree.
+
   Checks worth doing by hand:
 
   - no Authorization header      -> 401

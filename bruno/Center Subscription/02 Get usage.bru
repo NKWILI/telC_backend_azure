@@ -17,20 +17,70 @@ headers {
 assert {
   res.status: eq 200
   res.body.seatsUsed: eq 0
-  res.body.seatsLimit: eq 3
-  res.body.seatsAvailable: eq 3
+  res.body.seatsLimit: eq 1
+  res.body.seatsAvailable: eq 1
+  res.body.perTier[0].tier: eq START
+  res.body.perTier[0].seatsHeld: eq 1
 }
 
 docs {
-  A seat is a student row carrying this center id. Usage is counted on every
-  read rather than stored in a column, so there is no counter that can drift
-  away from the students it claims to describe.
+  A seat USED is a student row carrying this center id, counted on every read
+  rather than stored — so there is no counter that can drift away from the
+  students it claims to describe.
 
-  Nothing can provision students until Phase 4, so `seatsUsed` is 0 here. To
-  exercise it now, set `center_id` on a student row in the database and re-run:
-  the count moves immediately.
+  A seat HELD is a `center_seats` row. That table is the only authority on how
+  many seats a center has; `center_subscriptions.seats` used to hold a rival
+  number and was removed, because two places each claiming to know the seat
+  count meant nobody could say which was true.
 
-  Two things to verify by hand:
+  A fresh center holds exactly one START seat, priced at zero — its trial. So
+  `seatsLimit` is 1 until it buys more.
+
+  ## perTier is the useful half
+
+      "perTier": [
+        { "tier": "START",   "seatsHeld": 2, "seatsUsed": 2, "seatsAvailable": 0 },
+        { "tier": "PRO",     "seatsHeld": 5, "seatsUsed": 1, "seatsAvailable": 4 }
+      ]
+
+  A seat belongs to a tier, so the total alone cannot answer the question a
+  center actually has. "Two seats left" is useless to a school holding three
+  tiers and full in one of them — and a full tier is exactly what provisioning
+  refuses on. Cheapest first, always.
+
+  A tier appears if the center holds seats in it OR has students in it. Drop a
+  tier while students still sit in it:
+
+      DELETE FROM center_seats WHERE center_id = '...' AND tier = 'PRO';
+
+  and the PRO row stays, reporting `seatsHeld: 0` with `seatsUsed: 3`. That
+  overage is what a dashboard needs to show, not hide.
+
+  ## unassignedSeatsUsed
+
+  Students who occupy a seat but carry no tier — legacy rows from before
+  provisioning assigned one. They count in `seatsUsed` but belong to no row in
+  `perTier`, so without this field the breakdown would not add up to the total:
+
+      seatsUsed = unassignedSeatsUsed + sum of perTier[].seatsUsed
+
+  Check it by hand: `UPDATE students SET tier = NULL WHERE id = '...'` for a
+  student of this center and re-run. `unassignedSeatsUsed` goes up by one,
+  that tier's `seatsUsed` goes down by one, and `seatsUsed` does not move.
+
+  They are also counted by provisioning's center-wide check, so a center
+  cannot fill its tiered seats on top of them.
+
+  ## Buying more seats
+
+  `center_seats` is unique per (center, tier), so buying more of a tier raises
+  the quantity rather than adding a second row:
+
+      UPDATE center_seats SET quantity = 10 WHERE center_id = '...' AND tier = 'START';
+
+  `seatsLimit` follows immediately.
+
+  Two more things to verify by hand:
 
   - Students of a DIFFERENT center must never appear in this count. Point a
     second center's students at that center and confirm this number ignores

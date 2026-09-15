@@ -1,0 +1,113 @@
+meta {
+  name: 03 AI quota on speaking
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/speaking/evaluate
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{studentAccessToken}}
+}
+
+body:json {
+  {
+    "teilNumber": 1,
+    "transcript": "Ich heiße Awa und ich wohne in Douala. Ich lerne Deutsch, weil ich in Deutschland studieren möchte. Am Wochenende treffe ich meine Freunde und wir sprechen zusammen Deutsch."
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The metered operation. Each SUCCESSFUL evaluation writes one `ai_usage` row,
+  and the allowance is how many of those are newer than 24 hours ago.
+
+  ## The allowances
+
+  | tier | evaluations per rolling 24h |
+  |---|---|
+  | START | 2 |
+  | PRO | 5 |
+  | PREMIUM | 20 |
+  | no tier (independent, or removed) | 2 |
+
+  A trial is not a fourth number: it is Start with a fourteen-day clock and
+  one seat.
+
+  ## Spending an allowance
+
+  With a START student, send this three times. The first two return 200; the
+  third returns:
+
+      {
+        "error": "AI_QUOTA_EXCEEDED",
+        "tier": "START",
+        "usedToday": 2,
+        "allowedToday": 2,
+        "resetsAt": "2026-09-16T08:32:11.000Z"
+      }
+
+  It is a sales moment, not an error. Everything needed for "you have used 2
+  of 2 today — back at 09:32, or ask your school about Pro" travels with the
+  refusal.
+
+  `resetsAt` is the OLDEST counted row plus 24 hours, not midnight. A rolling
+  window has no midnight, and a fixed one would be wrong for everyone outside
+  a single timezone — UTC midnight is 1am in Douala and 9am in Tokyo. Confirm
+  it moves with the data:
+
+      SELECT created_at FROM ai_usage WHERE student_id = '<student>'
+       ORDER BY created_at LIMIT 1;
+
+  ## A ROLLING window — the case worth proving
+
+  Age one row out and the student comes straight back, with no job having run:
+
+      UPDATE ai_usage SET created_at = now() - interval '25 hours'
+       WHERE id = (SELECT id FROM ai_usage WHERE student_id = '<student>'
+                    ORDER BY created_at LIMIT 1);
+
+  Re-run: 200. There is no counter anywhere to reset, because the rows ARE the
+  quota.
+
+  ## A FAILED evaluation must cost nothing
+
+  This is the ordering worth checking by hand, because it is the one a happy
+  path never shows. Break the AI call — clear `GEMINI_API_KEY` in the
+  environment the server is running with, or point it at a dead host — and
+  send a request that would otherwise succeed.
+
+  It fails, and `SELECT count(*) FROM ai_usage WHERE student_id = '<student>'`
+  must NOT have grown. Metered APIs do not bill a 500: a Gemini failure would
+  otherwise spend one of a Start student's two daily sessions and hand them
+  nothing, and a bad afternoon on our side would cost them the day.
+
+  The trade is that a genuine failure can be retried for free, so one counted
+  session may cost us two calls to Gemini. That is the right way round — the
+  cost of our failure lands on us.
+
+  ## And a refused request must not reach Gemini
+
+  With the allowance already spent, the check runs BEFORE the call. Watch the
+  server log: a 403 AI_QUOTA_EXCEEDED must show no Gemini request at all.
+  Checking afterwards would let a student over their limit still cost us the
+  request, which is the expense the quota exists to bound.
+
+  ## Independent students are metered too
+
+  Release a student (`UPDATE students SET center_id = NULL ...`) and they get
+  2, not unlimited. Leaving them unmetered would let a center release its
+  whole roster to hand them free AI we pay for. A quota with a way around it
+  is not a quota.
+
+  ## Clearing usage between runs
+
+      DELETE FROM ai_usage WHERE student_id = '<student>';
+}

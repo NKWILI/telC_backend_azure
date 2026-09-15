@@ -8,19 +8,39 @@ import { TokenCryptoService } from '../auth/token-crypto.service';
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 /** Seats a center starts with. The trial clock itself starts at the first
  *  student activation, not here. */
-const TRIAL_SEATS = 3;
+/**
+ * One seat, granted at registration.
+ *
+ * Dropped from three on the founder's call: three seats let a school run a
+ * small class for free and postpone the decision, while one is enough to see
+ * what the product does. A second student is refused with SEAT_LIMIT_REACHED,
+ * which is the moment to sell.
+ *
+ * It is also comfortably below the ten-seat paid minimum, so converting never
+ * trips the student floor.
+ */
+const TRIAL_SEATS = 1;
+
+/**
+ * What a trial seat is, in data: an ordinary Start seat priced at zero.
+ *
+ * Not a special case, deliberately — see the seat row created in `register`.
+ */
+const TRIAL_SEAT_TIER = 'START' as const;
+const TRIAL_SEAT_PRICE_XAF = 0;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 const REGISTRATION_RESPONSE = { message: 'verification email sent' } as const;
 
+/**
+ * Five fields. Country, city, the manager's phone and the logo are collected
+ * during onboarding instead, at the point the center goes to pay — none is
+ * needed to run a trial, and all are needed to take money.
+ */
 export interface RegisterCenterInput {
   centerName: string;
-  country: string;
-  city: string;
-  logoUrl?: string;
   managerFirstName: string;
   managerLastName: string;
   email: string;
-  phone: string;
   password: string;
 }
 
@@ -130,13 +150,11 @@ export class CentersService {
 
     try {
       const centerUserId = await this.prisma.$transaction(async (tx) => {
+        // A draft center: its name and nothing else. Country, city and the
+        // logo arrive during onboarding, so they are left null here rather
+        // than filled with placeholders that would look like real answers.
         const center = await tx.center.create({
-          data: {
-            name: input.centerName.trim(),
-            country: input.country.trim(),
-            city: input.city.trim(),
-            logo_url: input.logoUrl?.trim() || null,
-          },
+          data: { name: input.centerName.trim() },
           select: { id: true },
         });
 
@@ -147,7 +165,6 @@ export class CentersService {
             first_name: input.managerFirstName.trim(),
             last_name: input.managerLastName.trim(),
             email,
-            phone: input.phone.trim(),
             password_hash: passwordHash,
             email_verified: false,
             email_verification_token: tokenHash,
@@ -160,10 +177,23 @@ export class CentersService {
         // exactly one subscription, so nothing downstream needs a
         // missing-row branch. A failed registration leaves neither behind.
         await tx.centerSubscription.create({
+          data: { center_id: center.id, plan: 'TRIAL' },
+        });
+
+        // Fourth insert, same transaction: the trial seat itself. A trial is
+        // an ordinary seat row priced at zero rather than a flag, so seat
+        // counting, tier lookup and the quota check need no "unless they are
+        // on trial" branch. A trial student and a paid Start student then
+        // differ only in the clock.
+        //
+        // Zero is legal here and illegal on a payment line, which is what
+        // keeps a granted seat and a bought seat from being confused.
+        await tx.centerSeat.create({
           data: {
             center_id: center.id,
-            plan: 'TRIAL',
-            seats: TRIAL_SEATS,
+            tier: TRIAL_SEAT_TIER,
+            quantity: TRIAL_SEATS,
+            unit_price_xaf: TRIAL_SEAT_PRICE_XAF,
           },
         });
 

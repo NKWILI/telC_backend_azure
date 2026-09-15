@@ -9,7 +9,7 @@ import { AuthService } from '../auth/auth.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 
 /** Matches the trial length in the product rules. */
-export const TRIAL_DURATION_DAYS = 30;
+export const TRIAL_DURATION_DAYS = 14;
 /** Matches the student registration policy, so activation is not a weaker door. */
 export const MIN_STUDENT_PASSWORD_LENGTH = 8;
 /** Matches `AuthService.register`, so activated and registered accounts hash alike. */

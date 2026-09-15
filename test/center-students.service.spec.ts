@@ -17,14 +17,26 @@ describe('CenterStudentsService', () => {
     activation_key_expires: new Date(Date.now() + 5 * DAY),
     created_at: new Date(),
     last_seen_at: new Date(),
+    tier: 'START',
     ...over,
   });
 
   let prisma: any;
+  let tx: any;
   let tokenCrypto: any;
   let service: CenterStudentsService;
 
   beforeEach(() => {
+    tx = {
+      student: {
+        findFirst: jest.fn().mockResolvedValue(row()),
+        count: jest.fn().mockResolvedValue(0),
+        update: jest.fn().mockImplementation(({ data }) => row(data)),
+      },
+      centerSeat: {
+        findUnique: jest.fn().mockResolvedValue({ quantity: 5 }),
+      },
+    };
     prisma = {
       student: {
         findMany: jest.fn().mockResolvedValue([row()]),
@@ -33,12 +45,128 @@ describe('CenterStudentsService', () => {
         update: jest.fn().mockImplementation(({ data }) => row(data)),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      $transaction: jest.fn((cb: (c: any) => unknown) =>
+        Promise.resolve(cb(tx)),
+      ),
     };
     tokenCrypto = {
       generateToken: jest.fn().mockReturnValue('raw-key'),
       hashToken: jest.fn().mockReturnValue('hashed-key'),
     };
     service = new CenterStudentsService(prisma, tokenCrypto);
+  });
+
+  /**
+   * The most common thing a school does after buying: a Start student decides
+   * to sit the exam and needs Pro.
+   *
+   * The alternative was remove-and-re-add, which works but invites mistakes on
+   * an account holding the student's whole history.
+   */
+  describe('moving a student between tiers', () => {
+    it('writes the new tier', async () => {
+      const view = await service.update(identity, 'student-1', {
+        tier: 'PRO',
+      });
+
+      expect(tx.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { tier: 'PRO' },
+      });
+      expect(view.tier).toBe('PRO');
+    });
+
+    it('checks the target tier for a free seat, not the current one', async () => {
+      await service.update(identity, 'student-1', { tier: 'PREMIUM' });
+
+      expect(tx.centerSeat.findUnique).toHaveBeenCalledWith({
+        where: {
+          center_id_tier: { center_id: 'center-1', tier: 'PREMIUM' },
+        },
+        select: { quantity: true },
+      });
+    });
+
+    it('refuses a move into a full tier', async () => {
+      tx.centerSeat.findUnique.mockResolvedValue({ quantity: 2 });
+      tx.student.count.mockResolvedValue(2);
+
+      await expect(
+        service.update(identity, 'student-1', { tier: 'PRO' }),
+      ).rejects.toThrow('SEAT_LIMIT_REACHED');
+      expect(tx.student.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a move into a tier the center holds no seats in', async () => {
+      tx.centerSeat.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update(identity, 'student-1', { tier: 'PREMIUM' }),
+      ).rejects.toThrow('TIER_NOT_HELD');
+      expect(tx.student.update).not.toHaveBeenCalled();
+    });
+
+    it('does not count the student being moved against the target tier', async () => {
+      // Otherwise a student already in Pro could never be "moved" to Pro, and
+      // a re-send of the same value would fail on a tier that is exactly full.
+      tx.student.findFirst.mockResolvedValue(row({ tier: 'PRO' }));
+      tx.centerSeat.findUnique.mockResolvedValue({ quantity: 1 });
+      tx.student.count.mockResolvedValue(0);
+
+      await expect(
+        service.update(identity, 'student-1', { tier: 'PRO' }),
+      ).resolves.toBeDefined();
+
+      expect(tx.student.count).toHaveBeenCalledWith({
+        where: {
+          center_id: 'center-1',
+          tier: 'PRO',
+          id: { not: 'student-1' },
+        },
+      });
+    });
+
+    it('checks the seat and writes in one serializable transaction', async () => {
+      // Two administrators moving two students into the last free Pro seat
+      // would otherwise both read it free and both write.
+      await service.update(identity, 'student-1', { tier: 'PRO' });
+
+      expect(prisma.$transaction.mock.calls[0][1]).toEqual(
+        expect.objectContaining({ isolationLevel: 'Serializable' }),
+      );
+    });
+
+    it('refuses a student of another center before looking at seats', async () => {
+      tx.student.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(identity, 'student-1', { tier: 'PRO' }),
+      ).rejects.toThrow('STUDENT_NOT_FOUND');
+      expect(tx.centerSeat.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('moves a tier and a name together', async () => {
+      await service.update(identity, 'student-1', {
+        firstName: 'Awa',
+        tier: 'PRO',
+      });
+
+      expect(tx.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { first_name: 'Awa', tier: 'PRO' },
+      });
+    });
+
+    it('charges nothing today', async () => {
+      // No pro-rating, by decision. Access changes now and the price
+      // difference settles at renewal; a school moving a student to Pro on day
+      // two gets Pro for most of a month at Start's price, which is tolerated
+      // because the alternative is building pro-rating.
+      await service.update(identity, 'student-1', { tier: 'PRO' });
+
+      expect(tx.centerSeat.findUnique).toHaveBeenCalled();
+      expect(prisma.payment).toBeUndefined();
+    });
   });
 
   describe('list', () => {
@@ -117,6 +245,9 @@ describe('CenterStudentsService', () => {
     });
   });
 
+  // The read and the write both moved inside the transaction, because an
+  // update can now consume a seat. They are asserted on the transaction client
+  // for that reason, not because the assertions changed meaning.
   describe('update', () => {
     it('changes only the allowlisted fields', async () => {
       await service.update(identity, 'student-1', {
@@ -124,7 +255,7 @@ describe('CenterStudentsService', () => {
         phone: '+237690000001',
       });
 
-      expect(prisma.student.update).toHaveBeenCalledWith({
+      expect(tx.student.update).toHaveBeenCalledWith({
         where: { id: 'student-1' },
         data: { first_name: 'Awa-Marie', phone: '+237690000001' },
       });
@@ -134,16 +265,30 @@ describe('CenterStudentsService', () => {
       await expect(
         service.update(identity, 'student-1', {}),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.student.update).not.toHaveBeenCalled();
+      expect(tx.student.update).not.toHaveBeenCalled();
+      // Refused before a transaction is opened: nothing to check in the
+      // database, so nothing should hold a connection.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('proves ownership before writing', async () => {
-      prisma.student.findFirst.mockResolvedValue(null);
+      tx.student.findFirst.mockResolvedValue(null);
 
       await expect(
         service.update(identity, 'other-1', { firstName: 'X' }),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(prisma.student.update).not.toHaveBeenCalled();
+      expect(tx.student.update).not.toHaveBeenCalled();
+    });
+
+    it('does not touch seats when no tier is supplied', async () => {
+      // A name change must not be able to fail because a tier is full.
+      tx.centerSeat.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update(identity, 'student-1', { firstName: 'Awa-Marie' }),
+      ).resolves.toBeDefined();
+
+      expect(tx.centerSeat.findUnique).not.toHaveBeenCalled();
     });
   });
 

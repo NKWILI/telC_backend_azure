@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Tier } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import {
   SubscriptionPolicyService,
@@ -19,22 +20,66 @@ export interface StudentEntitlement {
   status: StudentEntitlementStatus;
   studentsMayLearn: boolean;
   graceEndsAt: Date | null;
+  /**
+   * Which tier's seat this student occupies, and therefore what they may do.
+   *
+   * Null whenever no center governs them, even if the row still carries a
+   * value: `students.center_id` is ON DELETE SET NULL while `students.tier` is
+   * not, so a deleted center leaves the tier behind. Reading it without a
+   * center would hand a student Premium for ever on the strength of a row
+   * nobody governs. Also null for a governed student provisioned before tiers
+   * existed — they sit in no seat, which is different from sitting in the
+   * cheapest one.
+   */
+  tier: Tier | null;
+  /**
+   * Whether a `students` row exists for this id at all.
+   *
+   * False for a guest token: `/api/auth/guest` mints a random uuid and writes
+   * nothing. Such a caller cannot be metered — an `ai_usage` insert for them
+   * fails on the foreign key — so anything that spends money must be able to
+   * see that rather than be handed an allowance it can never count against.
+   */
+  studentExists: boolean;
+  /**
+   * Whether a center has ever governed this student.
+   *
+   * True while they are in a center, and still true after one released them:
+   * `students.center_id` is SET NULL on release while `students.tier` is not,
+   * so a leftover tier is evidence that a center once governed them. It is
+   * evidence ONLY — `tier` above stays null for anyone no center governs, so
+   * nothing grants access on the strength of a stale value.
+   *
+   * It separates a genuine independent student, who predates the center model
+   * and keeps what they have, from one a center released — which is otherwise
+   * a way for a center to hand its students a paid tier for free.
+   */
+  wasGoverned: boolean;
 }
 
-const UNGOVERNED: StudentEntitlement = {
+/** A student no center governs. `studentExists` and `wasGoverned` are filled
+ *  in per row, because those are the parts that differ between an independent
+ *  student, a released one, and a token naming nobody. */
+const ungoverned = (
+  studentExists: boolean,
+  wasGoverned: boolean,
+): StudentEntitlement => ({
   status: 'NONE',
   studentsMayLearn: true,
   graceEndsAt: null,
-};
+  tier: null,
+  studentExists,
+  wasGoverned,
+});
 
 /** One row per student, or none at all if the student is gone. */
 interface EntitlementRow {
   center_id: string | null;
   plan: CenterSubscriptionRecord['plan'] | null;
-  seats: number | null;
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
   paid_until: Date | null;
+  tier: Tier | null;
 }
 
 /**
@@ -70,10 +115,10 @@ export class StudentEntitlementService {
     const rows = await this.prisma.$queryRaw<EntitlementRow[]>`
       SELECT s.center_id,
              cs.plan::text AS plan,
-             cs.seats,
              cs.trial_started_at,
              cs.trial_ends_at,
-             cs.paid_until
+             cs.paid_until,
+             s.tier::text AS tier
         FROM students s
         LEFT JOIN center_subscriptions cs ON cs.center_id = s.center_id
        WHERE s.id = ${studentId}
@@ -81,27 +126,45 @@ export class StudentEntitlementService {
 
     const row = rows[0];
 
-    // No row, or no center: nobody's subscription governs this student.
-    if (!row?.center_id) {
-      return UNGOVERNED;
+    // No row at all. A guest token, or an id that never existed: nothing can
+    // be attributed to it, and nothing ever governed it.
+    if (!row) {
+      return ungoverned(false, false);
+    }
+
+    // A row, but no center. Either a genuine independent student or one a
+    // center released — the leftover tier is what tells them apart.
+    if (!row.center_id) {
+      // Truthiness rather than `!== null`: a missing column reads as
+      // undefined, and treating that as "holds a tier" would mark a genuine
+      // independent student as formerly governed and take the exam module
+      // away from them.
+      return ungoverned(true, Boolean(row.tier));
     }
 
     // Every center is created with a subscription row, so its absence is a
     // data fault rather than a state. Fail closed: the student does belong to
     // a center, and no row means nothing authorises the access.
-    // Both columns are NOT NULL in the table, so either being null means the
-    // LEFT JOIN found nothing. Testing both together is what lets the compiler
-    // narrow them, rather than needing a cast to assert what the join implies.
-    if (row.plan === null || row.seats === null) {
-      return { status: 'BLOCKED', studentsMayLearn: false, graceEndsAt: null };
+    //
+    // `plan` is NOT NULL in the table, so a null here means the LEFT JOIN
+    // found nothing. It used to be tested alongside `seats` for the same
+    // reason; that column is gone, and one NOT NULL column is all the check
+    // ever needed.
+    if (row.plan === null) {
+      // No tier either. Nothing authorises this access, so nothing about what
+      // the student may do should be reported as settled.
+      return {
+        status: 'BLOCKED',
+        studentsMayLearn: false,
+        graceEndsAt: null,
+        tier: null,
+        studentExists: true,
+        wasGoverned: true,
+      };
     }
 
-    // No status depends on `seats`, but it is read from the row rather than
-    // defaulted: it costs nothing on a row already being fetched, and a
-    // fabricated 0 would read as a real seat count to whoever needs one next.
     const decision = this.policy.evaluate({
       plan: row.plan,
-      seats: row.seats,
       trial_started_at: row.trial_started_at,
       trial_ends_at: row.trial_ends_at,
       paid_until: row.paid_until,
@@ -111,6 +174,11 @@ export class StudentEntitlementService {
       status: decision.status,
       studentsMayLearn: decision.studentsMayLearn,
       graceEndsAt: decision.graceEndsAt,
+      // Only ever read alongside a center, which the `center_id` check above
+      // has already established.
+      tier: row.tier,
+      studentExists: true,
+      wasGoverned: true,
     };
   }
 }
