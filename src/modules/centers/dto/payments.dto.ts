@@ -59,6 +59,23 @@ export class PaymentResponseDto {
   @ApiProperty({ format: 'date-time' }) createdAt: Date;
 }
 
+/**
+ * Where to send the center to pay.
+ *
+ * The provider's own transaction reference is deliberately absent. A client
+ * needs somewhere to go, not an identifier it has no use for.
+ */
+export class CheckoutSessionResponseDto {
+  @ApiProperty({ format: 'uuid' }) paymentId: string;
+
+  @ApiProperty({
+    example: 'https://checkout.fake-payments.invalid/fake_2f1c',
+    description:
+      'Redirect the center here. Calling checkout again for the same payment returns the same URL rather than opening a second provider transaction.',
+  })
+  checkoutUrl: string;
+}
+
 export class ListPaymentsQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @Type(() => Number)

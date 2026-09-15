@@ -63,6 +63,12 @@ describe('what a blocked center can and cannot do', () => {
       expect(enforced(PaymentsController.prototype.list)).toBe(false);
     });
 
+    it('can still start a checkout', () => {
+      // Creating a payment a center cannot then go and pay would leave a
+      // lapsed center exactly as locked out as before.
+      expect(enforced(PaymentsController.prototype.startCheckout)).toBe(false);
+    });
+
     it('has no subscription guard at the class level either', () => {
       // A guard on the class would cover all three at once, which is exactly
       // how this would be broken in a single careless commit.

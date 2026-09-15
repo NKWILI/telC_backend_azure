@@ -5,12 +5,14 @@ import {
   HttpException,
   HttpStatus,
   INestApplication,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PaymentsController } from '../src/modules/centers/payments.controller';
 import { PaymentsService } from '../src/modules/centers/payments.service';
+import { PaymentCheckoutService } from '../src/modules/centers/payment-checkout.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
@@ -40,6 +42,7 @@ const aPayment = {
 describe('PaymentsController', () => {
   let app: INestApplication<App>;
   let payments: Record<string, jest.Mock>;
+  let checkout: Record<string, jest.Mock>;
   let rateLimit: Record<string, jest.Mock>;
 
   beforeEach(async () => {
@@ -54,14 +57,24 @@ describe('PaymentsController', () => {
       }),
     };
 
+    checkout = {
+      startCheckout: jest.fn().mockResolvedValue({
+        paymentId: 'payment-1',
+        providerReference: 'fake_payment-1',
+        checkoutUrl: 'https://checkout.fake-payments.invalid/fake_payment-1',
+      }),
+    };
+
     rateLimit = {
       checkPaymentCreateLimit: jest.fn().mockResolvedValue(undefined),
+      checkCheckoutStartLimit: jest.fn().mockResolvedValue(undefined),
     };
 
     const module = await Test.createTestingModule({
       controllers: [PaymentsController],
       providers: [
         { provide: PaymentsService, useValue: payments },
+        { provide: PaymentCheckoutService, useValue: checkout },
         { provide: RateLimitService, useValue: rateLimit },
       ],
     })
@@ -253,6 +266,76 @@ describe('PaymentsController', () => {
     });
   });
 
+  describe('starting a checkout', () => {
+    const start = (paymentId = 'payment-1') =>
+      http().post(`/api/payments/${paymentId}/checkout`);
+
+    it('returns where to pay, for the signed-in center payment', async () => {
+      const response = await start().expect(200);
+
+      expect(checkout.startCheckout).toHaveBeenCalledWith(
+        signedIdentity,
+        'payment-1',
+      );
+      expect(response.body).toEqual({
+        paymentId: 'payment-1',
+        checkoutUrl: 'https://checkout.fake-payments.invalid/fake_payment-1',
+      });
+    });
+
+    it('keeps the provider reference on the server', async () => {
+      // The client needs somewhere to go, not the provider's transaction id.
+      const response = await start().expect(200);
+
+      expect(response.body).not.toHaveProperty('providerReference');
+    });
+
+    it('is rate limited per center', async () => {
+      // Each first checkout asks the provider to open a transaction.
+      await start().expect(200);
+
+      expect(rateLimit.checkCheckoutStartLimit).toHaveBeenCalledWith(
+        signedIdentity.centerId,
+      );
+    });
+
+    it('opens nothing once the limit is reached', async () => {
+      rateLimit.checkCheckoutStartLimit.mockRejectedValue(
+        new HttpException('TOO_MANY_REQUESTS', HttpStatus.TOO_MANY_REQUESTS),
+      );
+
+      await start().expect(429);
+
+      expect(checkout.startCheckout).not.toHaveBeenCalled();
+    });
+
+    it('has its own budget, so checkouts cannot lock a center out of creating payments', async () => {
+      await start().expect(200);
+
+      expect(rateLimit.checkPaymentCreateLimit).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a payment that is no longer pending as 409', async () => {
+      checkout.startCheckout.mockRejectedValue(
+        new ConflictException('PAYMENT_NOT_PENDING'),
+      );
+
+      const response = await start().expect(409);
+
+      expect(response.body.error).toBe('PAYMENT_NOT_PENDING');
+    });
+
+    it('surfaces an unconfigured provider as 503, not 500', async () => {
+      checkout.startCheckout.mockRejectedValue(
+        new ServiceUnavailableException('PAYMENT_PROVIDER_NOT_CONFIGURED'),
+      );
+
+      const response = await start().expect(503);
+
+      expect(response.body.error).toBe('PAYMENT_PROVIDER_NOT_CONFIGURED');
+    });
+  });
+
   describe('reading payments', () => {
     it('reads one, scoped to the signed-in center', async () => {
       await http().get('/api/payments/payment-1').expect(200);
@@ -313,7 +396,7 @@ describe('PaymentsController', () => {
       );
     });
 
-    it.each(['create', 'get', 'list'])(
+    it.each(['create', 'get', 'list', 'startCheckout'])(
       'carries no subscription guard on %s',
       (method) => {
         const handler = (PaymentsController.prototype as Record<string, any>)[

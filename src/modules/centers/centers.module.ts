@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
 import { CenterAuthController } from './center-auth.controller';
@@ -19,6 +20,11 @@ import { CenterSeatsService } from './center-seats.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentActivationService } from './payment-activation.service';
+import { PaymentCheckoutService } from './payment-checkout.service';
+import {
+  PAYMENT_PROVIDER,
+  selectPaymentProvider,
+} from './payment-providers/payment-provider';
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
@@ -45,6 +51,22 @@ import { CentersService } from './centers.service';
     CenterSeatsService,
     PaymentsService,
     PaymentActivationService,
+    PaymentCheckoutService,
+    // Chosen once at boot, failing closed: anything short of an explicit,
+    // non-production, properly secreted configuration is the disabled
+    // provider. See selectPaymentProvider.
+    {
+      provide: PAYMENT_PROVIDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        selectPaymentProvider({
+          PAYMENT_PROVIDER: config.get<string>('PAYMENT_PROVIDER'),
+          NODE_ENV: config.get<string>('NODE_ENV'),
+          FAKE_PAYMENT_WEBHOOK_SECRET: config.get<string>(
+            'FAKE_PAYMENT_WEBHOOK_SECRET',
+          ),
+        }),
+    },
     StudentProvisioningService,
     StudentActivationService,
     CenterStudentsService,

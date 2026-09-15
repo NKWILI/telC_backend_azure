@@ -87,11 +87,11 @@ transaction, which needs the checkout URL stored alongside the reference.
 ### Task 4b: Start a checkout
 
 **Acceptance criteria:**
-- [ ] `payments.checkout_url` nullable, applied to the scratch branch only
-- [ ] `POST /api/payments/:paymentId/checkout` returns a checkout URL, storing
+- [x] `payments.checkout_url` nullable, applied to the scratch branch only
+- [x] `POST /api/payments/:paymentId/checkout` returns a checkout URL, storing
       reference and URL once; a repeat returns the stored session without a
       second provider call
-- [ ] Refuses a non-PENDING payment; scoped to the signed-in center (404 for
+- [x] Refuses a non-PENDING payment; scoped to the signed-in center (404 for
       another's); no subscription guard; rate limited per center
 
 **Verification:** real-Postgres spec for storage and repeats; controller spec

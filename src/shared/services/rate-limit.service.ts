@@ -512,4 +512,23 @@ export class RateLimitService {
       },
     ]);
   }
+
+  /**
+   * Checkouts a center may start per hour.
+   *
+   * Its own budget rather than the payment-creation one. A first checkout asks
+   * the provider to open a transaction, which is worth bounding; but a center
+   * clicking "pay" a few times must not use up the slots it needs to create a
+   * payment in the first place. Repeats of an existing checkout are answered
+   * from the database, so honest use stays far below this.
+   */
+  checkCheckoutStartLimit(centerId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:payments:checkout:center:${centerId}`,
+        max: 20,
+        ttlSeconds: 60 * 60,
+      },
+    ]);
+  }
 }

@@ -108,7 +108,7 @@ T2 provider_reference migration
 
 ### Slice 3: the provider seam
 - [x] Task 4a: Provider port, fake provider, selection
-- [ ] Task 4b: Start a checkout
+- [x] Task 4b: Start a checkout
 - [ ] Task 5: Verified webhook
 
 ### Checkpoint B

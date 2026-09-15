@@ -245,6 +245,10 @@ model Payment {
   /// a checkout exists; Postgres allows any number of nulls under a unique
   /// index.
   provider_reference String?   @unique
+  /// Where the center is sent to pay, stored with the reference. A repeated or
+  /// double-clicked checkout returns this instead of asking the provider
+  /// again, which would open a second provider transaction for one payment.
+  checkout_url       String?
   /// When activation granted access. Set once, by the same statement that
   /// moves the status, so the two can never disagree.
   succeeded_at       DateTime?
