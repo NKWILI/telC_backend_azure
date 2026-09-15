@@ -3,6 +3,7 @@ import { SubscriptionPolicyService } from '../modules/centers/subscription-polic
 import { StudentEntitlementService } from './services/student-entitlement.service';
 import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
 import { StudentTierGuard } from './guards/student-tier.guard';
+import { AiUsageService } from './services/ai-usage.service';
 
 /**
  * Carries subscription enforcement to the modules that need it: the learning
@@ -23,11 +24,13 @@ import { StudentTierGuard } from './guards/student-tier.guard';
     StudentEntitlementService,
     StudentSubscriptionGuard,
     StudentTierGuard,
+    AiUsageService,
   ],
   exports: [
     StudentSubscriptionGuard,
     StudentTierGuard,
     StudentEntitlementService,
+    AiUsageService,
   ],
 })
 export class SubscriptionAccessModule {}

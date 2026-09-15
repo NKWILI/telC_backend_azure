@@ -75,6 +75,7 @@ model Student {
   tier Tier?
 
   center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
+  ai_usage        AiUsage[]
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
@@ -191,6 +192,16 @@ model CenterSubscription {
 /// One row per tier, so a seat count never depends on remembering to sum
 /// several rows. A center may hold all three tiers at once — five Start,
 /// three Pro and two Premium is a valid arrangement.
+/// A chargeable AI operation, one value per thing a quota is counted against.
+///
+/// An enum rather than free text so a typo cannot silently create a new
+/// category that no allowance covers. Only speaking is metered today; Premium's
+/// "AI in every module" adds values here, and each new value needs an
+/// allowance before it is written.
+enum AiOperation {
+  SPEAKING_EVALUATION
+}
+
 model CenterSeat {
   id        String @id @default(uuid())
   center_id String
@@ -878,4 +889,31 @@ model WritingExercise {
 
   @@unique([modelltest_id])
   @@map("writing_exercises")
+}
+
+/// One row per successful chargeable AI operation.
+///
+/// Written after the AI returns something usable, never when the student
+/// presses start: the alternative charges a student for our own outage, and a
+/// bad afternoon on our side would cost a Start student their whole day.
+/// Metered APIs do not bill a 500, and neither does this.
+///
+/// The rows are the quota. Nothing is stored per student and nothing resets on
+/// a schedule — the allowance is "how many of these are newer than 24 hours
+/// ago", which is why there is no counter here to drift from the rows it
+/// claims to describe. They double as the measurement of whether the
+/// allowances are set right, which arrives as a side effect of enforcing them.
+model AiUsage {
+  id         String      @id @default(uuid())
+  student_id String
+  operation  AiOperation
+  created_at DateTime    @default(now())
+
+  student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  /// Exactly the quota question: this student, this operation, newer than a
+  /// timestamp. Column order matters — student first because it is the
+  /// equality, created_at second because it is the range.
+  @@index([student_id, operation, created_at])
+  @@map("ai_usage")
 }

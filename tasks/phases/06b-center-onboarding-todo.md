@@ -137,10 +137,10 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 13: Record AI usage
 
-- [ ] `ai_usage` table, one row per successful chargeable operation
-- [ ] Written after the call returns; a failed AI call writes nothing
-- [ ] Indexed for "this student, newer than a timestamp"
-- [ ] Commit the green increment
+- [x] `ai_usage` table, one row per successful chargeable operation
+- [x] Written after the call returns; a failed AI call writes nothing
+- [x] Indexed for "this student, newer than a timestamp"
+- [x] Commit the green increment
 
 ### Task 14: Enforce the rolling allowance
 
