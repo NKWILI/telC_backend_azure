@@ -159,9 +159,9 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 15: Apply it to speaking
 
-- [ ] The check runs before a speaking evaluation
-- [ ] The usage row is written only after it succeeds
-- [ ] Commit the green increment
+- [x] The check runs before a speaking evaluation
+- [x] The usage row is written only after it succeeds
+- [x] Commit the green increment
 
 ## Slice 6: contract and finish
 

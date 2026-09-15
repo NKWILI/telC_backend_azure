@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GeminiService } from './gemini.service';
+import { AiQuotaService } from '../../../shared/services/ai-quota.service';
+import { AiUsageService } from '../../../shared/services/ai-usage.service';
 import {
   SpeakingEvaluationResponseDto,
   CorrectionDto,
@@ -11,15 +13,67 @@ export class EvaluationService {
   private readonly logger = new Logger(EvaluationService.name);
   private readonly EVALUATION_TIMEOUT_MS = 30000;
 
-  constructor(private readonly geminiService: GeminiService) {}
+  constructor(
+    private readonly geminiService: GeminiService,
+    private readonly quota: AiQuotaService,
+    private readonly usage: AiUsageService,
+  ) {}
 
+  /**
+   * Evaluates a transcript, and meters it.
+   *
+   * The metering lives here rather than in the controller so it cannot be
+   * bypassed by a second caller. `studentId` is therefore a parameter rather
+   * than something the caller optionally remembers to check.
+   *
+   * The two orderings are the point:
+   *
+   * The allowance is checked BEFORE the call. Checking afterwards would let a
+   * student over their limit still cost us a Gemini request, which is the
+   * expense the quota exists to bound.
+   *
+   * The row is written AFTER the call succeeds, and only then. Charging on the
+   * attempt would make the student pay for our outage: a Gemini failure would
+   * spend one of a Start student's two daily sessions and hand them nothing,
+   * and a bad afternoon on our side would cost them the day. Metered APIs do
+   * not bill a 500. The trade is that a genuine failure can be retried for
+   * free, so one counted session may cost us two calls — the right way round,
+   * because the cost of our failure lands on us.
+   *
+   * A parse failure counts as a failure. A reply we cannot use is not a
+   * session the student had.
+   */
   async evaluateTranscript(
+    studentId: string | undefined,
     teilNumber: number,
     transcript: string,
   ): Promise<SpeakingEvaluationResponseDto> {
+    // A token naming nobody has nobody to charge, which is the same choice
+    // StudentSubscriptionGuard makes for the same reason. Refusing here would
+    // be a decision about authentication taken in the wrong place.
+    if (studentId) {
+      await this.quota.assertWithinQuota(studentId, 'SPEAKING_EVALUATION');
+    }
+
     const prompt = this.buildPrompt(teilNumber, transcript);
     const raw = await this.callWithTimeout(prompt);
-    return this.parseResponse(raw);
+    const evaluation = this.parseResponse(raw);
+
+    if (studentId) {
+      // `recordDelivered`, not `record`: the student already has their result,
+      // so a failure to write the meter must not take it away.
+      //
+      // Caught here as well, deliberately. recordDelivered swallows its own
+      // failures, but the guarantee that matters — an evaluation, once
+      // produced, is always returned — should not depend on a future edit
+      // keeping that method rather than swapping in `record`. The error is
+      // already logged inside; this only stops it reaching the student.
+      await this.usage
+        .recordDelivered(studentId, 'SPEAKING_EVALUATION')
+        .catch(() => undefined);
+    }
+
+    return evaluation;
   }
 
   private buildPrompt(teilNumber: number, transcript: string): string {

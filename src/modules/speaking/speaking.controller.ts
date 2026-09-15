@@ -46,7 +46,9 @@ export class SpeakingController {
   })
   @ApiOkResponse({ type: SpeakingEvaluationResponseDto })
   async evaluate(
-    @Request() req: any,
+    // Typed rather than `any`, because the student id read from it decides
+    // whose allowance is spent. `JwtAuthGuard` is what puts it there.
+    @Request() req: { student?: { studentId?: string } },
     @Body() dto: EvaluateSpeakingDto,
   ): Promise<SpeakingEvaluationResponseDto> {
     this.logger.log(
@@ -54,7 +56,10 @@ export class SpeakingController {
         `transcript length: ${dto.transcript.length} chars`,
     );
 
+    // The student comes from the token, never from the body: a caller able to
+    // name the student would spend someone else's allowance.
     return this.evaluationService.evaluateTranscript(
+      req.student?.studentId,
       dto.teilNumber,
       dto.transcript,
     );
