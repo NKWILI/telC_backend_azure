@@ -129,9 +129,9 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 12: The exam module gates on tier
 
-- [ ] `/api/modelltests` requires Pro or Premium
-- [ ] Per-skill practice stays open to Start
-- [ ] Commit the green increment
+- [x] `/api/modelltests` requires Pro or Premium
+- [x] Per-skill practice stays open to Start
+- [x] Commit the green increment
 
 ## Slice 5: quotas
 

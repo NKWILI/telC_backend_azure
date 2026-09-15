@@ -16,6 +16,7 @@ const withSubscription = (overrides: Record<string, unknown>) => ({
   trial_started_at: null,
   trial_ends_at: null,
   paid_until: null,
+  tier: 'START',
   ...overrides,
 });
 
@@ -79,6 +80,7 @@ describe('StudentEntitlementService', () => {
         status: 'NONE',
         studentsMayLearn: true,
         graceEndsAt: null,
+        tier: null,
       });
     });
 
@@ -88,6 +90,59 @@ describe('StudentEntitlementService', () => {
       await expect(service.forStudent('student-1')).resolves.toMatchObject({
         status: 'NONE',
         studentsMayLearn: true,
+      });
+    });
+  });
+
+  /**
+   * The tier travels with the entitlement because it is the answer to the
+   * second, narrower question: not "may this student learn" but "what may
+   * this student do". Both are settled from the one LEFT JOIN that already
+   * runs on every learning request.
+   */
+  describe('the tier', () => {
+    it('reports the tier of a governed student', async () => {
+      givenRow(withSubscription({ tier: 'PRO' }));
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        tier: 'PRO',
+      });
+    });
+
+    it('reports no tier for a governed student who carries none', async () => {
+      // Provisioned before tiers existed. They sit in no seat, so they hold
+      // no tier — which is different from holding the cheapest one.
+      givenRow(withSubscription({ tier: null }));
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'TRIAL_PENDING',
+        tier: null,
+      });
+    });
+
+    /**
+     * `students.center_id` is ON DELETE SET NULL and `students.tier` is not,
+     * so a deleted center leaves the tier behind. Reading it without a center
+     * would hand a student Premium for ever on the strength of a row nobody
+     * governs.
+     */
+    it('ignores a tier left behind by a deleted center', async () => {
+      givenRow({ center_id: null, tier: 'PREMIUM' });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'NONE',
+        tier: null,
+      });
+    });
+
+    it('ignores a stale tier when the subscription row is missing too', async () => {
+      // Fails closed on status, and must not leak the tier either.
+      givenRow({ center_id: 'center-1', plan: null, tier: 'PREMIUM' });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'BLOCKED',
+        studentsMayLearn: false,
+        tier: null,
       });
     });
   });

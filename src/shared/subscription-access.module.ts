@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SubscriptionPolicyService } from '../modules/centers/subscription-policy.service';
 import { StudentEntitlementService } from './services/student-entitlement.service';
 import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
+import { StudentTierGuard } from './guards/student-tier.guard';
 
 /**
  * Carries subscription enforcement to the modules that need it: the learning
@@ -21,7 +22,12 @@ import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
     SubscriptionPolicyService,
     StudentEntitlementService,
     StudentSubscriptionGuard,
+    StudentTierGuard,
   ],
-  exports: [StudentSubscriptionGuard, StudentEntitlementService],
+  exports: [
+    StudentSubscriptionGuard,
+    StudentTierGuard,
+    StudentEntitlementService,
+  ],
 })
 export class SubscriptionAccessModule {}

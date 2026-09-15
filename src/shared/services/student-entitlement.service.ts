@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Tier } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import {
   SubscriptionPolicyService,
@@ -19,12 +20,25 @@ export interface StudentEntitlement {
   status: StudentEntitlementStatus;
   studentsMayLearn: boolean;
   graceEndsAt: Date | null;
+  /**
+   * Which tier's seat this student occupies, and therefore what they may do.
+   *
+   * Null whenever no center governs them, even if the row still carries a
+   * value: `students.center_id` is ON DELETE SET NULL while `students.tier` is
+   * not, so a deleted center leaves the tier behind. Reading it without a
+   * center would hand a student Premium for ever on the strength of a row
+   * nobody governs. Also null for a governed student provisioned before tiers
+   * existed — they sit in no seat, which is different from sitting in the
+   * cheapest one.
+   */
+  tier: Tier | null;
 }
 
 const UNGOVERNED: StudentEntitlement = {
   status: 'NONE',
   studentsMayLearn: true,
   graceEndsAt: null,
+  tier: null,
 };
 
 /** One row per student, or none at all if the student is gone. */
@@ -35,6 +49,7 @@ interface EntitlementRow {
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
   paid_until: Date | null;
+  tier: Tier | null;
 }
 
 /**
@@ -73,7 +88,8 @@ export class StudentEntitlementService {
              cs.seats,
              cs.trial_started_at,
              cs.trial_ends_at,
-             cs.paid_until
+             cs.paid_until,
+             s.tier::text AS tier
         FROM students s
         LEFT JOIN center_subscriptions cs ON cs.center_id = s.center_id
        WHERE s.id = ${studentId}
@@ -93,7 +109,14 @@ export class StudentEntitlementService {
     // LEFT JOIN found nothing. Testing both together is what lets the compiler
     // narrow them, rather than needing a cast to assert what the join implies.
     if (row.plan === null || row.seats === null) {
-      return { status: 'BLOCKED', studentsMayLearn: false, graceEndsAt: null };
+      // No tier either. Nothing authorises this access, so nothing about what
+      // the student may do should be reported as settled.
+      return {
+        status: 'BLOCKED',
+        studentsMayLearn: false,
+        graceEndsAt: null,
+        tier: null,
+      };
     }
 
     // No status depends on `seats`, but it is read from the row rather than
@@ -111,6 +134,9 @@ export class StudentEntitlementService {
       status: decision.status,
       studentsMayLearn: decision.studentsMayLearn,
       graceEndsAt: decision.graceEndsAt,
+      // Only ever read alongside a center, which the `center_id` check above
+      // has already established.
+      tier: row.tier,
     };
   }
 }
