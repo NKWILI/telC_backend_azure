@@ -175,11 +175,11 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 17: Bruno
 
-- [ ] Five-field registration, the onboarding block, a mixed quote, a mixed
+- [x] Five-field registration, the onboarding block, a mixed quote, a mixed
       payment
-- [ ] The refusals that must fail: client-supplied price, below ten total,
+- [x] The refusals that must fail: client-supplied price, below ten total,
       wrong tier, incomplete profile, quota exhausted
-- [ ] Commit the green increment
+- [x] Commit the green increment
 
 ### Task 18: Gates and review
 

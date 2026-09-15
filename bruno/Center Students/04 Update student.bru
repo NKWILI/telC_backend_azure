@@ -27,17 +27,60 @@ assert {
 }
 
 docs {
-  Name and phone only. Try each of these one at a time — every one must be
-  400 VALIDATION_ERROR:
+  Edits a student, and moves them between tiers.
 
-      { "email": "attacker@example.com" }
-      { "password": "hunter2" }
-      { "centerId": "other-center" }
-      { "activatedAt": "2026-01-01" }
+  ## Moving tier
 
-  Email is identity here, not a profile field. A center changing a student
-  email would redirect that student password reset to an address the center
-  controls, which is account takeover with extra steps.
+  `{"tier": "PRO"}` is the most common thing a school does after buying: a
+  Start student decides to sit the exam and needs Pro. The alternative was
+  remove-and-re-add, which works but invites mistakes on an account holding
+  the student's whole learning history.
 
-  An empty body `{}` returns 400 rather than performing a no-op write.
+  Allowed only into a tier with a FREE seat:
+
+  - into a tier with room        -> 200, and `tier` in the response is the new
+    one. The seat in the old tier is released by the same write, so that tier
+    has room again immediately.
+  - into a full tier             -> 403 SEAT_LIMIT_REACHED with the tier named
+  - into a tier held at all      -> 403 TIER_NOT_HELD with the tier named
+  - into the tier they ALREADY hold -> 200, even when that tier is exactly
+    full. The student being moved does not count against their own
+    destination, or a client re-sending the value it already has would be
+    refused for no reason a user could understand.
+
+  NO PRO-RATING. The move takes effect immediately for access; the price
+  difference settles at the next renewal rather than being charged today. A
+  school can move a student to Pro on day two and get Pro for most of a month
+  at Start's price. That is accepted: the honest alternative is not "charge
+  correctly", it is "build pro-rating", which is a project of its own.
+
+  ## Concurrency
+
+  Two administrators moving two different students into the LAST free Pro seat
+  must leave exactly one of them in Pro. The check and the write share one
+  Serializable transaction, so one of the two requests fails rather than both
+  succeeding and putting the tier over its quantity.
+
+  ## The allowlist
+
+  All of these -> 400 VALIDATION_ERROR:
+
+  - `{"email": "attacker@example.com"}` — a center must not move an account's
+    address
+  - `{"password": "hunter2"}`
+  - `{"centerId": "other-center"}`
+  - `{"activatedAt": "2026-01-01"}`
+  - `{"tier": "GOLD"}` or `{"tier": "pro"}`
+
+  And `{}` -> 400 NO_STUDENT_FIELDS_SUPPLIED, before a transaction is opened.
+
+  ## Scoping
+
+  Another center's student id -> 404 STUDENT_NOT_FOUND, and the 404 comes
+  BEFORE any seat is inspected. Answering "that tier is full" instead would
+  confirm the id exists.
+
+  A name change never touches seats: `{"firstName": "Awa-Marie"}` succeeds
+  even when every tier is full, because nothing looks at a seat row unless a
+  tier was supplied.
 }

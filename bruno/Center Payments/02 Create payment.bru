@@ -17,7 +17,8 @@ headers {
 
 body:json {
   {
-    "seats": 10
+    "start": 5,
+    "pro": 5
   }
 }
 
@@ -30,62 +31,123 @@ script:post-response {
 assert {
   res.status: eq 201
   res.body.status: eq PENDING
-  res.body.amountXaf: eq 48000
+  res.body.totalSeats: eq 10
+  res.body.amountXaf: eq 72500
+  res.body.lines[0].tier: eq START
+  res.body.lines[1].tier: eq PRO
 }
 
 docs {
-  Records an intent to pay. NO MONEY MOVES, and nothing is granted.
+  Records an intent to pay for a mix of seats. NO MONEY MOVES, and nothing is
+  granted.
 
-  Check `Center Subscription / 01 Get subscription` before and after: `paidUntil`
-  is unchanged and `seats` is unchanged. Only a verified Notch Pay event may
-  move those, and that arrives in Phase 7. `status` stays PENDING because
-  nothing in this phase can advance it.
+  Check `Center Subscription / 01 Get subscription` before and after:
+  `paidUntil` is unchanged and `seatsHeld` is unchanged. Check `center_seats`
+  too — the row count and every `unit_price_xaf` must be untouched. Only a
+  verified Notch Pay event may move those, and that arrives in Phase 7.
+  `status` stays PENDING because nothing in this phase can advance it.
+
+  ## The breakdown is the invoice
+
+  The response carries a line per tier, each with the price that applied at
+  the time. That is what keeps an old invoice truthful after the list price
+  moves: 5 Start at 4,500 plus 5 Pro at 10,000 is 72,500, and it still reads
+  that way next year. `amountXaf` always equals the sum of the lines, and a
+  database CHECK enforces that each line's amount follows from its own two
+  factors.
 
   ## Set the key first
 
   Put any unique value in `{{idempotencyKey}}` in the environment — a uuid is
   the intended shape. Change it whenever you want a genuinely NEW payment.
 
-  ## The three things to try, in this order
+  ## The four things to try, in this order
 
   1. SEND IT TWICE WITHOUT CHANGING ANYTHING.
      Both return 201, and `id` is the SAME both times. A double-clicked button
      is one intent, not two payments. Confirm with `03 Payment history`: one
      row, not two.
 
-  2. SAME KEY, DIFFERENT SEATS. Change the body to `{"seats": 20}` and resend
-     with the same key -> 409 IDEMPOTENCY_KEY_REUSED.
-     Handing back the original would tell you that you had bought 20 seats
-     while the record says 10, and that disagreement would only surface when
-     reconciling against the provider.
+  2. SAME KEY, DIFFERENT MIX. Resend with `{"pro": 10}` and the same key ->
+     409 IDEMPOTENCY_KEY_REUSED.
+     Handing back the original would tell you that you had bought Pro seats
+     while the record says Start, and that disagreement would only surface
+     when reconciling against the provider.
 
-  3. NEW KEY, SAME SEATS -> a genuinely new payment with a new id. The key is
+  3. SAME KEY, SAME TOTAL, DIFFERENT MIX. Resend `{"start": 10}` with the same
+     key -> 409, even though both mixes are ten seats.
+     This is the collision worth checking by hand: the fingerprint covers
+     every tier, not the total. Hashing the total alone would let ten Start
+     pass as five Start plus five Pro at a different price.
+
+  4. NEW KEY, SAME MIX -> a genuinely new payment with a new id. The key is
      what identifies the attempt, not the body.
+
+  ### And the retry that must NOT be refused
+
+  Create a payment, then change that center's stamped Start price by hand
+  (`UPDATE center_seats SET unit_price_xaf = 4000 WHERE ...`), then resend the
+  ORIGINAL body with the ORIGINAL key. It must return the original payment at
+  the original price — not a 409.
+
+  The fingerprint covers what the caller asked for, never the price, because
+  the price is the server's answer to the question rather than part of it. If
+  this ever 409s, a client following the documented contract would answer it
+  with a fresh key and create a SECOND payment for one intent, which is the
+  exact failure the unique index exists to prevent.
 
   ## Without a key
 
   Remove the `Idempotency-Key` header -> 400 IDEMPOTENCY_KEY_REQUIRED.
 
   It is required rather than generated server-side on purpose: a key the
-  server invents makes every retry a fresh payment, which is precisely the
-  failure idempotency exists to prevent. Empty and whitespace-only keys are
-  refused for the same reason.
+  server invents makes every retry a fresh payment. Empty and whitespace-only
+  keys are refused for the same reason.
 
   ## The price is not an input, here either
 
   All of these -> 400:
 
-  - `{"seats": 10, "unitPriceXaf": 1}`
-  - `{"seats": 10, "amountXaf": 1}`
-  - `{"seats": 10, "status": "SUCCEEDED"}`
+  - `{"start": 10, "unitPriceXaf": 1}`
+  - `{"start": 10, "amountXaf": 1}`
+  - `{"start": 10, "status": "SUCCEEDED"}`
+  - `{"start": 10, "lines": []}`
+  - `{"seats": 10}` — the pre-tier shape.
 
-  That last one matters most. Without it a client could ask for a payment that
-  claims to have already succeeded.
+  That `status` one matters most. Without it a client could ask for a payment
+  that claims to have already succeeded.
+
+  ## An empty body costs nothing
+
+  `{}` -> 400 SEAT_MIX_EMPTY, and it does NOT spend a slot of the 20-per-hour
+  rate limit. Send it twenty times, then send a real mix: it must still go
+  through. Every tier field is optional, so an empty body clears validation
+  and reaches the handler — charging for it would let twenty empty submits
+  lock a center out of the one route it has to be able to reach.
+
+  ## THE PROFILE GATE
+
+  A center must have finished its profile before it can be charged. Clear its
+  country, city and manager phone:
+
+      UPDATE centers SET country = NULL, city = NULL WHERE id = '...';
+      UPDATE center_users SET phone = NULL WHERE center_id = '...';
+
+  Then resend -> 403 CENTER_PROFILE_INCOMPLETE with
+  `missing: ["country", "city", "phone"]`.
+
+  Fill them back in via `Center Profile / 02 Patch me` and it goes through.
+  Clear only the phone and the refusal names only `["phone"]` — the list is
+  what a dashboard renders its remaining checklist from, so it must be exact.
+
+  `01 Quote seats` stays open throughout. Looking at a price is not a
+  commitment, and the quote is the page that explains why finishing the
+  profile is worth it.
 
   ## While BLOCKED
 
   This works. It is the point of the whole road-out design: a lapsed center
-  must be able to pay. If this ever returns 403, someone has added
-  CenterSubscriptionGuard to the payments controller —
+  must be able to pay. If this ever returns 403 SUBSCRIPTION_INACTIVE, someone
+  has added CenterSubscriptionGuard to the payments controller —
   `test/center-blocked-surface.spec.ts` should have failed first.
 }

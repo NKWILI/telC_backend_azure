@@ -19,7 +19,8 @@ body:json {
     "firstName": "Awa",
     "lastName": "Mbarga",
     "email": "{{studentEmail}}",
-    "phone": "+237690000000"
+    "phone": "+237690000000",
+    "tier": "START"
   }
 }
 
@@ -45,11 +46,50 @@ docs {
   The account has no password yet. The center creates it; only the student sets
   the credential. Confirm the response carries no password field at all.
 
+  ## The tier is required
+
+  `tier` decides what the student may do, so there is no default. A center
+  holding several tiers has no obvious one, and quietly defaulting to the
+  cheapest would put a student the school meant to give the exam module into a
+  tier without it.
+
+  - omit `tier` entirely  -> 400
+  - `"tier": "GOLD"`      -> 400
+  - `"tier": "start"`     -> 400, the enum is upper case
+  - `"tier": "START"`, `"PRO"` or `"PREMIUM"` -> 201
+
+  A fresh center holds one START seat, so START is the only value it can use
+  until it buys more.
+
+  ## The seat check is PER TIER
+
+  This is the case worth setting up by hand, because a total-based check would
+  pass it wrongly. Give a center one Start seat and five Pro:
+
+      UPDATE center_seats SET quantity = 1 WHERE center_id = '...' AND tier = 'START';
+      INSERT INTO center_seats (id, center_id, tier, quantity, unit_price_xaf)
+      VALUES (gen_random_uuid()::text, '...', 'PRO', 5, 10000);
+
+  - provision one START student -> 201
+  - provision a second START student -> 403 SEAT_LIMIT_REACHED, with
+    `tier: "START"` in the body. Five free Pro seats do not help a Start
+    student, and the refusal has to say which tier is full — "no seats left"
+    is useless to a center holding three.
+  - provision a PRO student -> 201, from the same center, immediately.
+  - provision a PREMIUM student -> 403 TIER_NOT_HELD, with
+    `tier: "PREMIUM"`. A different code from a full tier on purpose: one is
+    fixed by buying the tier, the other by buying more seats, and those ask
+    the center for different actions.
+
+  ## On a fresh trial center
+
+  One START seat, so the second student is 403 SEAT_LIMIT_REACHED. That
+  refusal is the moment to sell, not a bug.
+
   Checks worth doing by hand:
 
   - the same email twice          -> 409 STUDENT_EMAIL_ALREADY_EXISTS.
     Attaching would hand this school a stranger existing account.
-  - a fourth student on a trial   -> 403 SEAT_LIMIT_REACHED (trial is 3 seats)
   - `"password": "hunter2"`       -> 400. A center must never set a password.
   - `"centerId": "other-center"`  -> 400. Ownership comes from the token only.
   - `"activatedAt": "2026-01-01"` -> 400
