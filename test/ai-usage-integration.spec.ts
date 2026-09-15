@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * The quota is a set of rows, so only the rows can prove it.
  *
@@ -10,9 +11,16 @@
  */
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { AiUsageService } from '../src/shared/services/ai-usage.service';
+import { AiQuotaService } from '../src/shared/services/ai-quota.service';
+import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 
 const prisma = new PrismaService();
 const usage = new AiUsageService(prisma);
+const quota = new AiQuotaService(
+  new StudentEntitlementService(prisma, new SubscriptionPolicyService()),
+  usage,
+);
 
 const HOUR_MS = 60 * 60 * 1000;
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR_MS);
@@ -23,6 +31,41 @@ async function wipe() {
   });
   await prisma.student.deleteMany({
     where: { email: { startsWith: 'ai-usage-test-' } },
+  });
+  await prisma.centerSeat.deleteMany({
+    where: { center: { name: { startsWith: 'Ai Usage Test' } } },
+  });
+  await prisma.centerSubscription.deleteMany({
+    where: { center: { name: { startsWith: 'Ai Usage Test' } } },
+  });
+  await prisma.center.deleteMany({
+    where: { name: { startsWith: 'Ai Usage Test' } },
+  });
+}
+
+/** A paying center, so its students carry a real tier. */
+async function makeCenterStudent(tier: 'START' | 'PRO' | 'PREMIUM') {
+  const center = await prisma.center.create({
+    data: {
+      name: `Ai Usage Test ${tier} ${Date.now()}-${Math.random()}`,
+      country: 'Cameroon',
+      city: 'Douala',
+      subscription: {
+        create: {
+          plan: 'PAID',
+          seats: 10,
+          paid_until: new Date(Date.now() + 30 * 24 * HOUR_MS),
+        },
+      },
+    },
+  });
+
+  return prisma.student.create({
+    data: {
+      email: `ai-usage-test-${tier}-${Date.now()}-${Math.random()}@example.com`,
+      center_id: center.id,
+      tier,
+    },
   });
 }
 
@@ -45,14 +88,17 @@ async function usedAt(studentId: string, at: Date) {
   });
 }
 
+// File scope, not describe scope. Two describes each ending the pool left the
+// second one running against a closed pool, which fails as "cannot use a pool
+// after calling end" rather than as anything to do with quotas.
+beforeEach(wipe);
+
+afterAll(async () => {
+  await wipe();
+  await prisma.onModuleDestroy();
+});
+
 describe('ai usage against real Postgres', () => {
-  beforeEach(wipe);
-
-  afterAll(async () => {
-    await wipe();
-    await prisma.onModuleDestroy();
-  });
-
   describe('recording', () => {
     it('writes one row per operation', async () => {
       const student = await makeStudent('one');
@@ -194,5 +240,94 @@ describe('ai usage against real Postgres', () => {
     expect(
       rows.some((r) => /student_id.*operation.*created_at/.test(r.indexdef)),
     ).toBe(true);
+  });
+});
+/**
+ * The allowance, end to end: a real student, a real tier, real rows.
+ *
+ * The unit spec proves the arithmetic against mocks. This proves the tier
+ * actually arrives from the database and that the window really excludes an
+ * old row — the two places a mock would simply agree with whatever it was
+ * told.
+ */
+describe('the AI allowance against real Postgres', () => {
+  it.each([
+    ['START', 2],
+    ['PRO', 5],
+    ['PREMIUM', 20],
+  ] as const)('gives a %s student %i per window', async (tier, allowed) => {
+    const student = await makeCenterStudent(tier);
+
+    await expect(
+      quota.check(student.id, 'SPEAKING_EVALUATION'),
+    ).resolves.toMatchObject({ tier, allowedToday: allowed, allowed: true });
+  });
+
+  it('refuses a Start student who has used two in the window', async () => {
+    const student = await makeCenterStudent('START');
+    await usedAt(student.id, hoursAgo(1));
+    await usedAt(student.id, hoursAgo(5));
+
+    await expect(
+      quota.assertWithinQuota(student.id, 'SPEAKING_EVALUATION'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: 'AI_QUOTA_EXCEEDED',
+        tier: 'START',
+        usedToday: 2,
+        allowedToday: 2,
+      }),
+    });
+  });
+
+  it('lets the same student back in once a row ages out', async () => {
+    // The whole point of a rolling window, and the thing a stored counter
+    // would need a job to do.
+    const student = await makeCenterStudent('START');
+    await usedAt(student.id, hoursAgo(1));
+    await usedAt(student.id, hoursAgo(25));
+
+    await expect(
+      quota.check(student.id, 'SPEAKING_EVALUATION'),
+    ).resolves.toMatchObject({ allowed: true, usedToday: 1, remaining: 1 });
+  });
+
+  it('reports a reset time drawn from the oldest counted row', async () => {
+    const student = await makeCenterStudent('START');
+    const oldest = hoursAgo(20);
+    await usedAt(student.id, hoursAgo(2));
+    await usedAt(student.id, oldest);
+
+    const decision = await quota.check(student.id, 'SPEAKING_EVALUATION');
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.resetsAt?.getTime()).toBeCloseTo(
+      oldest.getTime() + 24 * HOUR_MS,
+      -3,
+    );
+  });
+
+  it('gives a student no center governs the Start allowance', async () => {
+    const student = await makeStudent('independent');
+
+    await expect(
+      quota.check(student.id, 'SPEAKING_EVALUATION'),
+    ).resolves.toMatchObject({ tier: null, allowedToday: 2 });
+  });
+
+  it('ignores a tier left behind when the center is gone', async () => {
+    // students.tier survives a center delete while center_id is set to null.
+    // Reading the tier without a center would leave a student on Premium's
+    // twenty for ever on the strength of a row nobody governs.
+    const student = await makeCenterStudent('PREMIUM');
+    await prisma.student.update({
+      where: { id: student.id },
+      data: { center_id: null },
+    });
+
+    const decision = await quota.check(student.id, 'SPEAKING_EVALUATION');
+
+    expect(decision.tier).toBeNull();
+    expect(decision.allowedToday).toBe(2);
   });
 });

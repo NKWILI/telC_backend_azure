@@ -4,6 +4,7 @@ import { StudentEntitlementService } from './services/student-entitlement.servic
 import { StudentSubscriptionGuard } from './guards/student-subscription.guard';
 import { StudentTierGuard } from './guards/student-tier.guard';
 import { AiUsageService } from './services/ai-usage.service';
+import { AiQuotaService } from './services/ai-quota.service';
 
 /**
  * Carries subscription enforcement to the modules that need it: the learning
@@ -25,12 +26,14 @@ import { AiUsageService } from './services/ai-usage.service';
     StudentSubscriptionGuard,
     StudentTierGuard,
     AiUsageService,
+    AiQuotaService,
   ],
   exports: [
     StudentSubscriptionGuard,
     StudentTierGuard,
     StudentEntitlementService,
     AiUsageService,
+    AiQuotaService,
   ],
 })
 export class SubscriptionAccessModule {}

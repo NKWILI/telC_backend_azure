@@ -144,14 +144,18 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 14: Enforce the rolling allowance
 
-- [ ] One authority answering "may this student run one more speaking session"
-- [ ] A tier is only read alongside a center, so a student whose center was
-      deleted keeps no quota — the stale tier survives the delete by design
-- [ ] Start 2, Pro 5, Premium 20, over a rolling 24 hours
-- [ ] No timezone anywhere
-- [ ] Refusal carries tier, usedToday, allowedToday, resetsAt
-- [ ] `resetsAt` is the oldest counted row plus 24 hours
-- [ ] Commit the green increment
+- [x] One authority answering "may this student run one more speaking session"
+- [x] A tier is only read alongside a center, so a student whose center was
+      deleted keeps no *tier* — the stale tier survives the delete by design.
+      Amended on the product owner's call: they keep the Start allowance
+      rather than nothing, because refusing outright would break every
+      independent student who uses speaking today, and leaving them unmetered
+      would let a center release its students to hand them unlimited AI
+- [x] Start 2, Pro 5, Premium 20, over a rolling 24 hours
+- [x] No timezone anywhere
+- [x] Refusal carries tier, usedToday, allowedToday, resetsAt
+- [x] `resetsAt` is the oldest counted row plus 24 hours
+- [x] Commit the green increment
 
 ### Task 15: Apply it to speaking
 
