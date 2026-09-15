@@ -51,29 +51,43 @@ async function wipe() {
   });
   await prisma.student.updateMany({ data: { center_id: null } });
   await prisma.centerDeviceSession.deleteMany({});
+  await prisma.centerSeat.deleteMany({});
   await prisma.centerSubscription.deleteMany({});
   await prisma.centerUser.deleteMany({});
   await prisma.center.deleteMany({});
 }
 
-async function makeCenter(name: string, seats = 3) {
+/**
+ * A center holding `seats` Start seats.
+ *
+ * The seat row is what provisioning checks now, not `subscription.seats` — a
+ * seat belongs to a tier, so the limit has to as well. Both are set here so
+ * the fixture stays coherent until `subscription.seats` is dropped.
+ */
+async function makeCenter(
+  name: string,
+  seats = 3,
+  tier: 'START' | 'PRO' = 'START',
+) {
   return prisma.center.create({
     data: {
       name,
       country: 'Cameroon',
       city: 'Douala',
       subscription: { create: { plan: 'TRIAL', seats } },
+      seats: { create: { tier, quantity: seats, unit_price_xaf: 0 } },
     },
   });
 }
 
 const identity = (centerId: string) => ({ centerId }) as never;
 
-const input = (n: number) => ({
+const input = (n: number, tier: 'START' | 'PRO' | 'PREMIUM' = 'START') => ({
   firstName: 'Awa',
   lastName: `Number${n}`,
   email: `student-${n}-${Date.now()}@activation.test`,
   phone: '+237690000000',
+  tier,
 });
 
 describe('student provisioning and activation against real Postgres', () => {
@@ -113,6 +127,87 @@ describe('student provisioning and activation against real Postgres', () => {
     await expect(
       provisioning.provision(identity(center.id), input(3)),
     ).rejects.toThrow('SEAT_LIMIT_REACHED');
+  });
+
+  /**
+   * A seat belongs to a tier, and only the database can prove the counting is
+   * really scoped: a mock returns whatever count it was told to.
+   */
+  describe('the seat limit is per tier', () => {
+    it('refuses a full tier while another tier sits empty', async () => {
+      const center = await prisma.center.create({
+        data: {
+          name: 'Mixed Center',
+          country: 'Cameroon',
+          city: 'Douala',
+          subscription: { create: { plan: 'TRIAL', seats: 10 } },
+          seats: {
+            create: [
+              { tier: 'START', quantity: 1, unit_price_xaf: 4500 },
+              { tier: 'PRO', quantity: 5, unit_price_xaf: 10000 },
+            ],
+          },
+        },
+      });
+
+      await provisioning.provision(identity(center.id), input(1, 'START'));
+
+      // Start is full at one. Five free Pro seats do not help a Start student.
+      await expect(
+        provisioning.provision(identity(center.id), input(2, 'START')),
+      ).rejects.toThrow('SEAT_LIMIT_REACHED');
+
+      // And the same center takes a Pro student without complaint.
+      await expect(
+        provisioning.provision(identity(center.id), input(3, 'PRO')),
+      ).resolves.toBeDefined();
+    });
+
+    it('refuses a tier the center holds no seats in', async () => {
+      const center = await makeCenter('Start Only Center', 2);
+
+      await expect(
+        provisioning.provision(identity(center.id), input(1, 'PREMIUM')),
+      ).rejects.toThrow('TIER_NOT_HELD');
+
+      expect(
+        await prisma.student.count({ where: { center_id: center.id } }),
+      ).toBe(0);
+    });
+
+    it('stamps the tier on the student row', async () => {
+      const center = await makeCenter('Tier Stamp Center', 2);
+
+      const student = await provisioning.provision(
+        identity(center.id),
+        input(1, 'START'),
+      );
+
+      const row = await prisma.student.findUniqueOrThrow({
+        where: { id: student.id },
+        select: { tier: true, center_id: true },
+      });
+      expect(row.tier).toBe('START');
+      expect(row.center_id).toBe(center.id);
+    });
+
+    it('never lets two concurrent provisions exceed one tier last seat', async () => {
+      // The Serializable transaction, re-proven per tier. Both read the same
+      // free seat; exactly one may win.
+      const center = await makeCenter('Tier Race Center', 1);
+
+      const results = await Promise.allSettled([
+        provisioning.provision(identity(center.id), input(1, 'START')),
+        provisioning.provision(identity(center.id), input(2, 'START')),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(
+        await prisma.student.count({
+          where: { center_id: center.id, tier: 'START' },
+        }),
+      ).toBe(1);
+    });
   });
 
   it('starts the trial exactly once, on the first activation', async () => {

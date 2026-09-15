@@ -14,6 +14,7 @@ describe('StudentProvisioningService', () => {
     lastName: 'Mbarga',
     email: 'awa@example.com',
     phone: '+237690000000',
+    tier: 'START' as const,
   };
 
   let prisma: any;
@@ -33,7 +34,11 @@ describe('StudentProvisioningService', () => {
         })),
       },
       centerSubscription: {
-        findUnique: jest.fn().mockResolvedValue({ seats: 3 }),
+        findUnique: jest.fn().mockResolvedValue({ seats: 1 }),
+      },
+      centerSeat: {
+        // One Start seat is what a fresh trialling center holds.
+        findUnique: jest.fn().mockResolvedValue({ tier: 'START', quantity: 3 }),
       },
     };
     prisma = {
@@ -105,8 +110,10 @@ describe('StudentProvisioningService', () => {
     expect(prisma.$transaction.mock.calls[0][1]).toEqual(
       expect.objectContaining({ isolationLevel: 'Serializable' }),
     );
+    // Per tier, not per center. A Start student cannot sit in a Pro seat, so
+    // counting the whole center would let a full tier borrow from a free one.
     expect(tx.student.count).toHaveBeenCalledWith({
-      where: { center_id: 'center-1' },
+      where: { center_id: 'center-1', tier: 'START' },
     });
   });
 
@@ -123,7 +130,7 @@ describe('StudentProvisioningService', () => {
     // Dropping to a smaller plan leaves a center over the limit. Existing
     // students keep working; only new provisioning stops.
     tx.student.count.mockResolvedValue(9);
-    tx.centerSubscription.findUnique.mockResolvedValue({ seats: 5 });
+    tx.centerSeat.findUnique.mockResolvedValue({ tier: 'START', quantity: 5 });
 
     await expect(service.provision(identity, input)).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -134,6 +141,90 @@ describe('StudentProvisioningService', () => {
     tx.student.count.mockResolvedValue(2);
 
     await expect(service.provision(identity, input)).resolves.toBeDefined();
+  });
+
+  /**
+   * A seat belongs to a tier, so the seat check has to as well.
+   *
+   * Counting the center as a whole would let a center with its Start seats
+   * full and a spare Pro seat add another Start student — who would then be
+   * entitled to Start's allowance while occupying a seat nobody paid for at
+   * that tier.
+   */
+  describe('the seat check is per tier', () => {
+    it('writes the tier the center assigned', async () => {
+      await service.provision(identity, { ...input, tier: 'PRO' });
+
+      expect(tx.student.create.mock.calls[0][0].data.tier).toBe('PRO');
+    });
+
+    it('checks the seats of the requested tier, not another', async () => {
+      await service.provision(identity, { ...input, tier: 'PREMIUM' });
+
+      expect(tx.centerSeat.findUnique).toHaveBeenCalledWith({
+        where: {
+          center_id_tier: { center_id: 'center-1', tier: 'PREMIUM' },
+        },
+        select: { quantity: true },
+      });
+      expect(tx.student.count).toHaveBeenCalledWith({
+        where: { center_id: 'center-1', tier: 'PREMIUM' },
+      });
+    });
+
+    it('refuses a full tier even when another tier has room', async () => {
+      // Three Start seats, three Start students. Pro seats being free is
+      // irrelevant: this student is being put in Start.
+      tx.centerSeat.findUnique.mockResolvedValue({ quantity: 3 });
+      tx.student.count.mockResolvedValue(3);
+
+      await expect(service.provision(identity, input)).rejects.toThrow(
+        'SEAT_LIMIT_REACHED',
+      );
+      expect(tx.student.create).not.toHaveBeenCalled();
+    });
+
+    it('names the tier that is full, because a center holds several', () => {
+      // "No seats left" is useless to a center holding three tiers.
+      tx.centerSeat.findUnique.mockResolvedValue({ quantity: 3 });
+      tx.student.count.mockResolvedValue(3);
+
+      return expect(
+        service.provision(identity, { ...input, tier: 'PRO' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ tier: 'PRO' }),
+      });
+    });
+
+    it('refuses a tier the center holds no seats in', async () => {
+      // No row at all, which is different from a full one: the center has
+      // never bought this tier, so the answer is to buy it, not to wait.
+      tx.centerSeat.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.provision(identity, { ...input, tier: 'PREMIUM' }),
+      ).rejects.toThrow('TIER_NOT_HELD');
+      expect(tx.student.create).not.toHaveBeenCalled();
+    });
+
+    it('names the tier it does not hold', () => {
+      tx.centerSeat.findUnique.mockResolvedValue(null);
+
+      return expect(
+        service.provision(identity, { ...input, tier: 'PREMIUM' }),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ tier: 'PREMIUM' }),
+      });
+    });
+
+    it('does not count students of other tiers against this one', async () => {
+      // The count is scoped in the query, so a center with many Pro students
+      // can still fill its one free Start seat.
+      tx.centerSeat.findUnique.mockResolvedValue({ quantity: 1 });
+      tx.student.count.mockResolvedValue(0);
+
+      await expect(service.provision(identity, input)).resolves.toBeDefined();
+    });
   });
 
   it('refuses an email that already belongs to someone', async () => {

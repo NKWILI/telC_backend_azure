@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { EmailService } from '../auth/email.service';
@@ -24,6 +24,14 @@ export interface ProvisionStudentInput {
   lastName: string;
   email: string;
   phone?: string;
+  /**
+   * Which tier's seat this student takes, chosen by the center.
+   *
+   * Required rather than defaulted. A center holding several tiers has no
+   * obvious default, and guessing the cheapest would quietly put a student the
+   * school meant to give the exam module into a tier without it.
+   */
+  tier: Tier;
 }
 
 export interface ProvisionedStudent {
@@ -53,6 +61,9 @@ export class StudentProvisioningService {
    * The seat check and the insert share one Serializable transaction. Counting
    * outside it would let two administrators both read the second-to-last seat
    * and both insert, putting the center over its limit with no way to notice.
+   *
+   * The check is per tier, because a seat belongs to a tier: a Start student
+   * cannot sit in a Pro seat.
    */
   async provision(
     identity: SignedCenterIdentity,
@@ -78,11 +89,41 @@ export class StudentProvisioningService {
           throw new NotFoundException('CENTER_SUBSCRIPTION_NOT_FOUND');
         }
 
-        const seatsUsed = await tx.student.count({
-          where: { center_id: identity.centerId },
+        // The seats of the requested tier, and nothing else. A missing row is
+        // not an empty one: a center that has never bought Premium is told to
+        // buy it, while a center whose Premium seats are full is told to wait
+        // or buy more. Those ask for different actions, so they get different
+        // codes.
+        const seat = await tx.centerSeat.findUnique({
+          where: {
+            center_id_tier: {
+              center_id: identity.centerId,
+              tier: input.tier,
+            },
+          },
+          select: { quantity: true },
         });
-        if (seatsUsed >= subscription.seats) {
-          throw new ForbiddenException('SEAT_LIMIT_REACHED');
+        if (!seat) {
+          throw new ForbiddenException({
+            message: 'TIER_NOT_HELD',
+            tier: input.tier,
+          });
+        }
+
+        // Counted within the tier. Counting the whole center would let a
+        // center with its Start seats full and a spare Pro seat add another
+        // Start student, entitled to Start's allowance in a seat nobody bought
+        // at that tier.
+        const seatsUsed = await tx.student.count({
+          where: { center_id: identity.centerId, tier: input.tier },
+        });
+        if (seatsUsed >= seat.quantity) {
+          // Named, because "no seats left" is useless to a center holding
+          // three tiers and short in only one of them.
+          throw new ForbiddenException({
+            message: 'SEAT_LIMIT_REACHED',
+            tier: input.tier,
+          });
         }
 
         // Refuse rather than attach. Attaching would hand this center control
@@ -103,6 +144,7 @@ export class StudentProvisioningService {
             last_name: input.lastName.trim(),
             email,
             phone: input.phone?.trim() || null,
+            tier: input.tier,
             // The center vouched for the address, so reset stays available
             // without a second confirmation step the student never asked for.
             email_verified: true,

@@ -42,6 +42,7 @@ describe('CenterStudentsController contract', () => {
     lastName: ' Mbarga ',
     email: ' Awa@Example.COM ',
     phone: ' +237690000000 ',
+    tier: 'START',
   };
 
   let app: INestApplication<App>;
@@ -142,6 +143,51 @@ describe('CenterStudentsController contract', () => {
       lastName: 'Mbarga',
       email: 'awa@example.com',
       phone: '+237690000000',
+      tier: 'START',
+    });
+  });
+
+  /**
+   * The tier decides what the student may do, so it is not a field to guess
+   * at. A center holding several tiers has no obvious default, and defaulting
+   * to the cheapest would quietly put a student the school meant to give the
+   * exam module into a tier without it.
+   */
+  describe('the tier is required and must be a real tier', () => {
+    it('refuses a body with no tier', async () => {
+      const withoutTier = { ...validBody };
+      delete (withoutTier as Partial<typeof validBody>).tier;
+
+      await http()
+        .post('/api/centers/me/students')
+        .send(withoutTier)
+        .expect(400);
+
+      expect(provisioning.provision).not.toHaveBeenCalled();
+    });
+
+    it.each(['GOLD', 'start', '', 1, null])(
+      'refuses %s as a tier',
+      async (tier) => {
+        await http()
+          .post('/api/centers/me/students')
+          .send({ ...validBody, tier })
+          .expect(400);
+
+        expect(provisioning.provision).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['START', 'PRO', 'PREMIUM'])('accepts %s', async (tier) => {
+      await http()
+        .post('/api/centers/me/students')
+        .send({ ...validBody, tier })
+        .expect(201);
+
+      expect(provisioning.provision).toHaveBeenCalledWith(
+        signedIdentity,
+        expect.objectContaining({ tier }),
+      );
     });
   });
 

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -11,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Tier } from '@prisma/client';
 import { NormalizeEmail, Trim } from './center-validation.decorators';
 
 /**
@@ -57,6 +59,15 @@ export class ProvisionStudentDto {
   @MaxLength(30)
   @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
   phone?: string;
+
+  @ApiProperty({
+    enum: Tier,
+    example: Tier.START,
+    description:
+      "Which tier's seat this student takes. Required: a center holding several tiers has no obvious default, and defaulting to the cheapest would quietly put a student into a tier without the exam module. A trialling center holds one START seat, so START is the only value it can use.",
+  })
+  @IsEnum(Tier)
+  tier: Tier;
 }
 
 /** Name and phone only. Email is identity and is not editable here. */
