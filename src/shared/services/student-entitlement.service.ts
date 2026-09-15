@@ -45,7 +45,6 @@ const UNGOVERNED: StudentEntitlement = {
 interface EntitlementRow {
   center_id: string | null;
   plan: CenterSubscriptionRecord['plan'] | null;
-  seats: number | null;
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
   paid_until: Date | null;
@@ -85,7 +84,6 @@ export class StudentEntitlementService {
     const rows = await this.prisma.$queryRaw<EntitlementRow[]>`
       SELECT s.center_id,
              cs.plan::text AS plan,
-             cs.seats,
              cs.trial_started_at,
              cs.trial_ends_at,
              cs.paid_until,
@@ -105,10 +103,12 @@ export class StudentEntitlementService {
     // Every center is created with a subscription row, so its absence is a
     // data fault rather than a state. Fail closed: the student does belong to
     // a center, and no row means nothing authorises the access.
-    // Both columns are NOT NULL in the table, so either being null means the
-    // LEFT JOIN found nothing. Testing both together is what lets the compiler
-    // narrow them, rather than needing a cast to assert what the join implies.
-    if (row.plan === null || row.seats === null) {
+    //
+    // `plan` is NOT NULL in the table, so a null here means the LEFT JOIN
+    // found nothing. It used to be tested alongside `seats` for the same
+    // reason; that column is gone, and one NOT NULL column is all the check
+    // ever needed.
+    if (row.plan === null) {
       // No tier either. Nothing authorises this access, so nothing about what
       // the student may do should be reported as settled.
       return {
@@ -119,12 +119,8 @@ export class StudentEntitlementService {
       };
     }
 
-    // No status depends on `seats`, but it is read from the row rather than
-    // defaulted: it costs nothing on a row already being fetched, and a
-    // fabricated 0 would read as a real seat count to whoever needs one next.
     const decision = this.policy.evaluate({
       plan: row.plan,
-      seats: row.seats,
       trial_started_at: row.trial_started_at,
       trial_ends_at: row.trial_ends_at,
       paid_until: row.paid_until,

@@ -81,9 +81,12 @@ export class StudentProvisioningService {
 
     const student = await this.prisma.$transaction(
       async (tx) => {
+        // Existence only. The seat limit used to come from this row and now
+        // comes from center_seats, so there is nothing to read here beyond
+        // "does this center have a subscription at all".
         const subscription = await tx.centerSubscription.findUnique({
           where: { center_id: identity.centerId },
-          select: { seats: true },
+          select: { id: true },
         });
         if (!subscription) {
           throw new NotFoundException('CENTER_SUBSCRIPTION_NOT_FOUND');

@@ -254,12 +254,10 @@ describe('CentersService registration', () => {
   it('creates the subscription inside the same transaction as the center', async () => {
     await service.register(registration);
 
+    // No seat count on the subscription any more: center_seats is the only
+    // authority, and the trial seat is granted as a row of its own below.
     expect(tx.centerSubscription.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        center_id: 'center-1',
-        plan: 'TRIAL',
-        seats: 1,
-      }),
+      data: { center_id: 'center-1', plan: 'TRIAL' },
     });
   });
 

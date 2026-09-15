@@ -24,7 +24,6 @@ const subscription = (
   overrides: Partial<CenterSubscriptionRecord>,
 ): CenterSubscriptionRecord => ({
   plan: 'TRIAL' as CenterSubscriptionRecord['plan'],
-  seats: 3,
   trial_started_at: null,
   trial_ends_at: null,
   paid_until: null,

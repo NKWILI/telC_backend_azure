@@ -74,7 +74,7 @@ async function makeCenter(
       name,
       country: 'Cameroon',
       city: 'Douala',
-      subscription: { create: { plan: 'TRIAL', seats } },
+      subscription: { create: { plan: 'TRIAL' } },
       seats: { create: { tier, quantity: seats, unit_price_xaf: 0 } },
     },
   });
@@ -140,7 +140,7 @@ describe('student provisioning and activation against real Postgres', () => {
           name: 'Mixed Center',
           country: 'Cameroon',
           city: 'Douala',
-          subscription: { create: { plan: 'TRIAL', seats: 10 } },
+          subscription: { create: { plan: 'TRIAL' } },
           seats: {
             create: [
               { tier: 'START', quantity: 1, unit_price_xaf: 4500 },
@@ -223,7 +223,7 @@ describe('student provisioning and activation against real Postgres', () => {
           name,
           country: 'Cameroon',
           city: 'Douala',
-          subscription: { create: { plan: 'TRIAL', seats: 10 } },
+          subscription: { create: { plan: 'TRIAL' } },
           seats: {
             create: [
               { tier: 'START', quantity: start, unit_price_xaf: 4500 },

@@ -136,17 +136,6 @@ model Center {
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
-  /// The contracted price per seat per month, in whole XAF. Standard is 4,800;
-  /// a consumed partnership code copies its contracted price here (Phase 2),
-  /// which is what makes the terms a snapshot rather than a lookup — editing a
-  /// code later cannot silently change an existing agreement.
-  ///
-  /// Integer, not decimal: XAF has no minor units, so there is nothing for a
-  /// fractional part to mean and nothing for a rounding error to hide in.
-  unit_price_xaf Int @default(4800)
-  /// The fewest seats a paid plan may buy. The real floor is
-  /// max(min_seats, students already provisioned), enforced in pricing.
-  min_seats      Int @default(10)
 
   users        CenterUser[]
   payments     Payment[]
@@ -168,9 +157,6 @@ model CenterSubscription {
   id         String     @id @default(uuid())
   center_id  String     @unique
   plan       CenterPlan @default(TRIAL)
-  /// 3 while on trial, 10 or more once paid. Always the authority for the seat
-  /// limit, so there is no status-dependent branch in the seat logic.
-  seats      Int        @default(3)
 
   /// Set by the first student activation (Phase 4), not at registration.
   trial_started_at DateTime?

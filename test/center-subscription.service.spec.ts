@@ -11,7 +11,6 @@ describe('CenterSubscriptionService', () => {
 
   const row = (over: Record<string, unknown> = {}) => ({
     plan: 'TRIAL',
-    seats: 3,
     trial_started_at: null,
     trial_ends_at: null,
     paid_until: null,
@@ -69,7 +68,7 @@ describe('CenterSubscriptionService', () => {
       expect(result).toEqual({
         status: 'TRIAL_PENDING',
         plan: 'TRIAL',
-        seats: 3,
+        seatsHeld: 0,
         trialStartedAt: null,
         trialEndsAt: null,
         paidUntil: null,
@@ -104,6 +103,118 @@ describe('CenterSubscriptionService', () => {
     });
   });
 
+  /**
+   * The seat limit now comes from the seat rows, because that is where seats
+   * live. `CenterSubscription.seats` held a second, rival number: two places
+   * each claiming to know a center's seat count, and nobody reading the code
+   * able to say which was true. A stale number that still looks authoritative
+   * is worse than no number, because it eventually reaches an invoice.
+   */
+  describe('the seat limit comes from center_seats', () => {
+    it('sums the quantities the center holds', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 7 },
+        { tier: 'PRO', quantity: 3 },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.seatsLimit).toBe(10);
+    });
+
+    it('reports no seats for a center holding none', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.seatsLimit).toBe(0);
+      expect(result.seatsAvailable).toBe(0);
+    });
+
+    it('reads the seat rows of the signed center only', async () => {
+      await service.getUsage(identity);
+
+      expect(prisma.centerSeat.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { center_id: 'center-1' } }),
+      );
+    });
+
+    it('breaks the count down per tier, since a seat belongs to one', async () => {
+      // "Two seats left" is useless to a center holding three tiers and full
+      // in one of them — which is exactly what provisioning now refuses on.
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 2 },
+        { tier: 'PRO', quantity: 5 },
+      ]);
+      prisma.student.groupBy.mockResolvedValue([
+        { tier: 'START', _count: { _all: 2 } },
+        { tier: 'PRO', _count: { _all: 1 } },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.perTier).toEqual([
+        { tier: 'START', seatsHeld: 2, seatsUsed: 2, seatsAvailable: 0 },
+        { tier: 'PRO', seatsHeld: 5, seatsUsed: 1, seatsAvailable: 4 },
+      ]);
+    });
+
+    it('lists tiers cheapest first, so a dashboard does not reshuffle', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'PREMIUM', quantity: 1 },
+        { tier: 'START', quantity: 1 },
+        { tier: 'PRO', quantity: 1 },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.perTier.map((t) => t.tier)).toEqual([
+        'START',
+        'PRO',
+        'PREMIUM',
+      ]);
+    });
+
+    it('omits a tier the center holds no seats in', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 1 },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.perTier).toHaveLength(1);
+    });
+
+    it('counts a tier with students but no seats, rather than hiding it', async () => {
+      // A center that dropped a tier while students still sat in it. Hiding
+      // the row would hide the overage the dashboard needs to show.
+      prisma.centerSeat.findMany.mockResolvedValue([]);
+      prisma.student.groupBy.mockResolvedValue([
+        { tier: 'PRO', _count: { _all: 3 } },
+      ]);
+
+      const result = await service.getUsage(identity);
+
+      expect(result.perTier).toEqual([
+        { tier: 'PRO', seatsHeld: 0, seatsUsed: 3, seatsAvailable: 0 },
+      ]);
+    });
+  });
+
+  describe('the subscription view no longer carries a rival seat count', () => {
+    it('reports seats held, drawn from the seat rows', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 4 },
+      ]);
+
+      const view = await service.getSubscription(identity);
+
+      expect(view.seatsHeld).toBe(4);
+      // The old column is gone, not renamed in place.
+      expect(view).not.toHaveProperty('seats');
+    });
+  });
+
   describe('getUsage', () => {
     it('counts only students belonging to the signed center', async () => {
       await service.getUsage(identity);
@@ -114,24 +225,33 @@ describe('CenterSubscriptionService', () => {
     });
 
     it('reports used, limit and available together', async () => {
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 3 },
+      ]);
       prisma.student.count.mockResolvedValue(2);
+      prisma.student.groupBy.mockResolvedValue([
+        { tier: 'START', _count: { _all: 2 } },
+      ]);
 
       await expect(service.getUsage(identity)).resolves.toEqual({
         seatsUsed: 2,
         seatsLimit: 3,
         seatsAvailable: 1,
+        perTier: [
+          { tier: 'START', seatsHeld: 3, seatsUsed: 2, seatsAvailable: 1 },
+        ],
         status: 'TRIAL_PENDING',
       });
     });
 
-    it('takes the limit from the column, with no status-dependent branch', async () => {
+    it('takes the limit from the seat rows, with no status-dependent branch', async () => {
       prisma.centerSubscription.findUnique.mockResolvedValue(
-        row({
-          plan: 'PAID',
-          seats: 25,
-          paid_until: new Date(Date.now() + DAY),
-        }),
+        row({ plan: 'PAID', paid_until: new Date(Date.now() + DAY) }),
       );
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 20 },
+        { tier: 'PRO', quantity: 5 },
+      ]);
       prisma.student.count.mockResolvedValue(10);
 
       const result = await service.getUsage(identity);
@@ -144,7 +264,9 @@ describe('CenterSubscriptionService', () => {
     it('reports zero available rather than a negative when over the limit', async () => {
       // A center that drops from ten seats to five keeps its students; being
       // over the limit blocks new provisioning, it does not evict anyone.
-      prisma.centerSubscription.findUnique.mockResolvedValue(row({ seats: 5 }));
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 5 },
+      ]);
       prisma.student.count.mockResolvedValue(10);
 
       const result = await service.getUsage(identity);
@@ -156,12 +278,11 @@ describe('CenterSubscriptionService', () => {
 
     it('keeps reporting the seat limit while blocked', async () => {
       prisma.centerSubscription.findUnique.mockResolvedValue(
-        row({
-          plan: 'PAID',
-          seats: 10,
-          paid_until: new Date(Date.now() - 30 * DAY),
-        }),
+        row({ plan: 'PAID', paid_until: new Date(Date.now() - 30 * DAY) }),
       );
+      prisma.centerSeat.findMany.mockResolvedValue([
+        { tier: 'START', quantity: 10 },
+      ]);
       prisma.student.count.mockResolvedValue(4);
 
       const result = await service.getUsage(identity);

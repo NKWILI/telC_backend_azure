@@ -167,9 +167,11 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 ### Task 16: Drop the superseded columns
 
-- [ ] `Center.unit_price_xaf` and `CenterSubscription.seats` removed
-- [ ] Nothing reads them by this point
-- [ ] Commit the green increment
+- [x] `Center.unit_price_xaf` and `CenterSubscription.seats` removed — plus
+      `Center.min_seats`, equally dead and equally the kind of stale number
+      the plan warns about
+- [x] Nothing reads them by this point
+- [x] Commit the green increment
 
 ### Task 17: Bruno
 

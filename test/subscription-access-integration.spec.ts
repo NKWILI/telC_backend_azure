@@ -56,7 +56,7 @@ async function makeCenter(subscription: Record<string, unknown>) {
       name: `Access Test ${Date.now()}-${Math.random()}`,
       country: 'Cameroon',
       city: 'Douala',
-      subscription: { create: { plan: 'TRIAL', seats: 3, ...subscription } },
+      subscription: { create: { plan: 'TRIAL', ...subscription } },
     },
   });
 }

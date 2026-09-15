@@ -177,11 +177,7 @@ export class CentersService {
         // exactly one subscription, so nothing downstream needs a
         // missing-row branch. A failed registration leaves neither behind.
         await tx.centerSubscription.create({
-          data: {
-            center_id: center.id,
-            plan: 'TRIAL',
-            seats: TRIAL_SEATS,
-          },
+          data: { center_id: center.id, plan: 'TRIAL' },
         });
 
         // Fourth insert, same transaction: the trial seat itself. A trial is

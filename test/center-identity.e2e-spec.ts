@@ -286,12 +286,10 @@ describe('center identity end to end', () => {
     // to handle a center that has none.
     expect(db.subscriptionsList()).toHaveLength(1);
     expect(db.subscriptionsList()[0]).toEqual(
-      expect.objectContaining({
-        plan: 'TRIAL',
-        seats: 1,
-        trial_started_at: null,
-      }),
+      expect.objectContaining({ plan: 'TRIAL', trial_started_at: null }),
     );
+    // The seat count is no longer on the subscription — center_seats is the
+    // only authority, and the trial seat row is asserted next.
 
     // And the trial seat itself, granted in the same transaction. A trial is
     // an ordinary Start seat priced at zero rather than a flag on the

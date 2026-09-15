@@ -46,13 +46,20 @@ async function wipe() {
   await prisma.center.deleteMany({});
 }
 
-async function makeCenter(name: string) {
+/**
+ * A center as registration leaves one: a trial subscription and the single
+ * zero-priced Start seat that is now the seat limit.
+ */
+async function makeCenter(name: string, trialSeats = 3) {
   return prisma.center.create({
     data: {
       name,
       country: 'Cameroon',
       city: 'Douala',
-      subscription: { create: { plan: 'TRIAL', seats: 3 } },
+      subscription: { create: { plan: 'TRIAL' } },
+      seats: {
+        create: { tier: 'START', quantity: trialSeats, unit_price_xaf: 0 },
+      },
     },
     include: { subscription: true },
   });
@@ -72,7 +79,7 @@ describe('center subscriptions against real Postgres', () => {
 
     await expect(
       prisma.centerSubscription.create({
-        data: { center_id: center.id, plan: 'TRIAL', seats: 3 },
+        data: { center_id: center.id, plan: 'TRIAL' },
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
   });
@@ -92,7 +99,9 @@ describe('center subscriptions against real Postgres', () => {
     expect(rows).toHaveLength(1);
     // The trial clock starts at first student activation, not registration.
     expect(rows[0].trial_started_at).toBeNull();
-    expect(rows[0].seats).toBe(1);
+    // The seat count is no longer on this row. It is the seat row registration
+    // grants, asserted in its own test below.
+    expect(rows[0]).not.toHaveProperty('seats');
 
     const orphans = await prisma.center.count({
       where: { subscription: { is: null } },
@@ -172,8 +181,8 @@ describe('center subscriptions against real Postgres', () => {
 
     expect(usageA.seatsUsed).toBe(4);
     expect(usageB.seatsUsed).toBe(1);
-    // Center A is over its 3-seat trial limit. That reports zero available and
-    // blocks future provisioning; it does not evict the fourth student.
+    // Center A is over the three seats it holds. That reports zero available
+    // and blocks future provisioning; it does not evict the fourth student.
     expect(usageA.seatsAvailable).toBe(0);
     expect(usageB.seatsAvailable).toBe(2);
   });
@@ -184,9 +193,18 @@ describe('center subscriptions against real Postgres', () => {
       where: { center_id: center.id },
       data: {
         plan: 'PAID',
-        seats: 10,
         paid_until: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       },
+    });
+    // Seats held now live on their own rows, so a paid center says so there.
+    // Updated rather than created: the center already holds its trial Start
+    // row, and center_seats is unique per (center, tier) — buying more seats
+    // in a tier raises the quantity, it does not add a second row.
+    await prisma.centerSeat.update({
+      where: {
+        center_id_tier: { center_id: center.id, tier: 'START' },
+      },
+      data: { quantity: 10, unit_price_xaf: 4500 },
     });
 
     const view = await subscriptions.getSubscription({
@@ -195,7 +213,7 @@ describe('center subscriptions against real Postgres', () => {
 
     expect(view.status).toBe('ACTIVE');
     expect(view.studentsMayLearn).toBe(true);
-    expect(view.seats).toBe(10);
+    expect(view.seatsHeld).toBe(10);
     expect(view.graceEndsAt).not.toBeNull();
   });
 

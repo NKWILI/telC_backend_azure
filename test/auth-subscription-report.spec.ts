@@ -8,12 +8,14 @@ const TRIAL: StudentEntitlement = {
   status: 'TRIAL',
   studentsMayLearn: true,
   graceEndsAt: null,
+  tier: 'START',
 };
 
 const BLOCKED: StudentEntitlement = {
   status: 'BLOCKED',
   studentsMayLearn: false,
   graceEndsAt: null,
+  tier: null,
 };
 
 describe('login and refresh report the subscription', () => {

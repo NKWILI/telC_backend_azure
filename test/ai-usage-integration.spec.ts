@@ -53,7 +53,6 @@ async function makeCenterStudent(tier: 'START' | 'PRO' | 'PREMIUM') {
       subscription: {
         create: {
           plan: 'PAID',
-          seats: 10,
           paid_until: new Date(Date.now() + 30 * 24 * HOUR_MS),
         },
       },

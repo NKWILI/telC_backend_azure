@@ -57,7 +57,7 @@ async function makeCenter(over: Record<string, unknown> = {}) {
       name: `Payments Test ${Date.now()}-${Math.random()}`,
       country: 'Cameroon',
       city: 'Douala',
-      subscription: { create: { plan: 'TRIAL', seats: 3 } },
+      subscription: { create: { plan: 'TRIAL' } },
       ...over,
     },
   });
@@ -84,7 +84,7 @@ async function makeDraftCenter(managerPhone: string | null = null) {
   const center = await prisma.center.create({
     data: {
       name: `Payments Test Draft ${Date.now()}-${Math.random()}`,
-      subscription: { create: { plan: 'TRIAL', seats: 1 } },
+      subscription: { create: { plan: 'TRIAL' } },
     },
   });
 
@@ -258,8 +258,9 @@ describe('payments against real Postgres', () => {
         where: { center_id: center.id },
       });
       expect(after.paid_until).toBeNull();
-      expect(after.seats).toBe(before.seats);
-      // No seat row either. Holding seats is what a successful payment buys.
+      expect(after.plan).toBe(before.plan);
+      // No seat row either. Holding seats is what a successful payment buys,
+      // and it is now the only place a seat count lives.
       expect(
         await prisma.centerSeat.count({ where: { center_id: center.id } }),
       ).toBe(0);
@@ -456,7 +457,7 @@ describe('payments against real Postgres', () => {
           name: `Payments Test Draft No Phone ${Date.now()}`,
           country: 'Cameroon',
           city: 'Douala',
-          subscription: { create: { plan: 'TRIAL', seats: 1 } },
+          subscription: { create: { plan: 'TRIAL' } },
         },
       });
       await prisma.centerUser.create({
