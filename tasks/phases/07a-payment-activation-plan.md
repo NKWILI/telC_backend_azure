@@ -112,11 +112,11 @@ T2 provider_reference migration
 - [x] Task 5: Verified webhook
 
 ### Checkpoint B
-- [ ] The full fake flow works: create, checkout, signed webhook, access active
-- [ ] Forged, duplicated and reordered events cannot grant access
+- [x] The full fake flow works: create, checkout, signed webhook, access active
+- [x] Forged, duplicated and reordered events cannot grant access
 
 ### Slice 4: handover
-- [ ] Task 6: Bruno, handover document, superseded plan marked
+- [x] Task 6: Bruno, handover document, superseded plan marked
 
 ### Checkpoint C
 - [ ] All gates green

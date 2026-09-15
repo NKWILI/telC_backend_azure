@@ -119,18 +119,23 @@ test.
 **Scope:** Medium
 
 ### Checkpoint B
-- [ ] Full fake flow: create, checkout, signed webhook, access active
-- [ ] Forged, duplicated and reordered events cannot grant access
+- [x] Full fake flow: create, checkout, signed webhook, access active
+- [x] Forged, duplicated and reordered events cannot grant access
+
+Evidence: `test/payment-flow-integration.spec.ts` runs create, checkout,
+signed webhook and student access against Postgres, plus forged, tampered,
+duplicated and reordered events. Mutation-checked: checkout storing a
+reference the provider did not issue fails three of its tests.
 
 ## Slice 4: handover
 
 ### Task 6: Bruno, handover document, superseded plan marked
 
 **Acceptance criteria:**
-- [ ] Bruno requests for checkout and a signed fake webhook
-- [ ] `tasks/phases/07-notchpay-handover.md`: what exists, the one function,
+- [x] Bruno requests for checkout and a signed fake webhook
+- [x] `tasks/phases/07-notchpay-handover.md`: what exists, the one function,
       the port to implement, env vars, security checklist, what not to touch
-- [ ] `06-subscription-payments-plan.md` marked superseded where it describes
+- [x] `06-subscription-payments-plan.md` marked superseded where it describes
       dropped columns
 
 **Verification:** paths and fields checked against code; gates green; commit.
