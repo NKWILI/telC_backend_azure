@@ -18,6 +18,7 @@ import { PricingService } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
+import { PaymentActivationService } from './payment-activation.service';
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
@@ -43,6 +44,7 @@ import { CentersService } from './centers.service';
     PricingService,
     CenterSeatsService,
     PaymentsService,
+    PaymentActivationService,
     StudentProvisioningService,
     StudentActivationService,
     CenterStudentsService,

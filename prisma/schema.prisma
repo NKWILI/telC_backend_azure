@@ -239,6 +239,19 @@ model Payment {
 
   status PaymentStatus @default(PENDING)
 
+  /// The payment provider's own id for this transaction, stored when a
+  /// checkout starts. A webhook finds its payment by this, and it is unique so
+  /// one provider transaction can never be applied to two payments. Null until
+  /// a checkout exists; Postgres allows any number of nulls under a unique
+  /// index.
+  provider_reference String?   @unique
+  /// When activation granted access. Set once, by the same statement that
+  /// moves the status, so the two can never disagree.
+  succeeded_at       DateTime?
+  /// When the provider reported the payment failed. A later success still
+  /// activates — the provider is the authority on whether money moved.
+  failed_at          DateTime?
+
   /// Supplied by the client and claimed atomically by the unique index below.
   /// The index is the concurrency control: two simultaneous requests race to
   /// insert, one wins, and the loser is answered from the row that won.
