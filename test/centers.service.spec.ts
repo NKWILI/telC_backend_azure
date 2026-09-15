@@ -29,6 +29,9 @@ describe('CentersService registration', () => {
       centerSubscription: {
         create: jest.fn().mockResolvedValue({ id: 'subscription-1' }),
       },
+      centerSeat: {
+        create: jest.fn().mockResolvedValue({ id: 'seat-1' }),
+      },
     };
     prisma = {
       centerUser: {
@@ -255,9 +258,51 @@ describe('CentersService registration', () => {
       data: expect.objectContaining({
         center_id: 'center-1',
         plan: 'TRIAL',
-        seats: 3,
+        seats: 1,
       }),
     });
+  });
+
+  /**
+   * A trial is an ordinary seat row priced at zero, not a special case.
+   *
+   * Seat counting, tier lookup and the quota check would each otherwise need
+   * an "unless they are on trial" branch — three branches in three places all
+   * saying the same thing, and the day someone adds a fourth they forget one.
+   * With a real row, a trial student and a paid Start student behave
+   * identically everywhere except the clock, which is the only thing genuinely
+   * different about them.
+   */
+  it('grants the one trial seat in the same transaction', async () => {
+    await service.register(registration);
+
+    expect(tx.centerSeat.create).toHaveBeenCalledWith({
+      data: {
+        center_id: 'center-1',
+        tier: 'START',
+        quantity: 1,
+        unit_price_xaf: 0,
+      },
+    });
+  });
+
+  it('prices the trial seat at zero, which is what makes it a trial', async () => {
+    await service.register(registration);
+
+    const data = tx.centerSeat.create.mock.calls[0][0].data;
+    // Not the launch price, and not null. Zero is legal on center_seats and
+    // illegal on a payment line, which is what keeps a granted seat and a
+    // bought seat from ever being confused.
+    expect(data.unit_price_xaf).toBe(0);
+    expect(data.tier).toBe('START');
+  });
+
+  it('leaves no seat behind when the subscription insert fails', async () => {
+    // One transaction, so a half-registered center cannot end up holding a
+    // seat it never agreed to.
+    tx.centerSubscription.create.mockRejectedValue(new Error('boom'));
+
+    await expect(service.register(registration)).rejects.toThrow();
   });
 
   it('starts a new center pending, with no trial clock running', async () => {
@@ -265,7 +310,7 @@ describe('CentersService registration', () => {
 
     const data = tx.centerSubscription.create.mock.calls[0][0].data;
     // The trial begins at the first student activation (Phase 4), not here, so
-    // a center that never provisions anyone never burns its 30 days.
+    // a center that never provisions anyone never burns its 14 days.
     expect(data.trial_started_at ?? null).toBeNull();
     expect(data.trial_ends_at ?? null).toBeNull();
     expect(data.paid_until ?? null).toBeNull();

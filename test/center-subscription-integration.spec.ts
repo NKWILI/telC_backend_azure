@@ -92,12 +92,58 @@ describe('center subscriptions against real Postgres', () => {
     expect(rows).toHaveLength(1);
     // The trial clock starts at first student activation, not registration.
     expect(rows[0].trial_started_at).toBeNull();
-    expect(rows[0].seats).toBe(3);
+    expect(rows[0].seats).toBe(1);
 
     const orphans = await prisma.center.count({
       where: { subscription: { is: null } },
     });
     expect(orphans).toBe(0);
+  });
+
+  /**
+   * The trial seat, in the database rather than in a mock's call log.
+   *
+   * A trial is an ordinary seat row priced at zero. `center_seats` allows zero
+   * and `payment_lines` forbids it, so the schema itself keeps a granted seat
+   * and a bought seat distinguishable.
+   */
+  it('gives a registered center its one trial seat, priced at zero', async () => {
+    await centers.register({
+      centerName: 'Registration Test Seat',
+      managerFirstName: 'Alain',
+      managerLastName: 'Ngeukeu',
+      email: 'seat-integration@integration.test',
+      password: 'integration-password',
+    });
+
+    const seats = await prisma.centerSeat.findMany({});
+
+    expect(seats).toHaveLength(1);
+    expect(seats[0]).toMatchObject({
+      tier: 'START',
+      quantity: 1,
+      unit_price_xaf: 0,
+    });
+  });
+
+  it('leaves no seat behind when registration fails', async () => {
+    // Same transaction as the center, so a duplicate address cannot leave a
+    // seat row pointing at a center that was rolled back.
+    const registration = {
+      centerName: 'Registration Test Rollback',
+      managerFirstName: 'Alain',
+      managerLastName: 'Ngeukeu',
+      email: 'rollback-integration@integration.test',
+      password: 'integration-password',
+    };
+    await centers.register(registration);
+    const after = await prisma.centerSeat.count({});
+
+    // A second registration on the same address is answered without creating
+    // anything, which is how existence stays unconfirmed.
+    await centers.register(registration);
+
+    expect(await prisma.centerSeat.count({})).toBe(after);
   });
 
   it('counts seats per center, never across them', async () => {

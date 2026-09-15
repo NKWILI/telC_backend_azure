@@ -41,6 +41,7 @@ class FakeDb {
   users = new Map<string, any>();
   sessions = new Map<string, any>();
   subscriptions = new Map<string, any>();
+  seats = new Map<string, any>();
   private seq = 0;
 
   id(prefix: string) {
@@ -53,6 +54,10 @@ class FakeDb {
   sessionsList() {
     return [...this.sessions.values()];
   }
+  seatsList() {
+    return [...this.seats.values()];
+  }
+
   subscriptionsList() {
     return [...this.subscriptions.values()];
   }
@@ -136,6 +141,15 @@ function buildPrisma(db: FakeDb) {
         Promise.resolve(
           db.subscriptionsList().find((x) => matches(x, where)) ?? null,
         ),
+    },
+    centerSeat: {
+      create: ({ data }: any) => {
+        const row = { id: db.id('seat'), ...data };
+        db.seats.set(row.id, row);
+        return Promise.resolve(row);
+      },
+      findMany: ({ where }: any) =>
+        Promise.resolve(db.seatsList().filter((x) => matches(x, where))),
     },
     centerDeviceSession: {
       create: ({ data }: any) => {
@@ -274,10 +288,21 @@ describe('center identity end to end', () => {
     expect(db.subscriptionsList()[0]).toEqual(
       expect.objectContaining({
         plan: 'TRIAL',
-        seats: 3,
+        seats: 1,
         trial_started_at: null,
       }),
     );
+
+    // And the trial seat itself, granted in the same transaction. A trial is
+    // an ordinary Start seat priced at zero rather than a flag on the
+    // subscription, so nothing downstream needs a trial branch.
+    expect(db.seatsList()).toEqual([
+      expect.objectContaining({
+        tier: 'START',
+        quantity: 1,
+        unit_price_xaf: 0,
+      }),
+    ]);
 
     // 2. Login is refused until the address is verified.
     await http()

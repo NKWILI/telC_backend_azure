@@ -8,7 +8,26 @@ import { TokenCryptoService } from '../auth/token-crypto.service';
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 /** Seats a center starts with. The trial clock itself starts at the first
  *  student activation, not here. */
-const TRIAL_SEATS = 3;
+/**
+ * One seat, granted at registration.
+ *
+ * Dropped from three on the founder's call: three seats let a school run a
+ * small class for free and postpone the decision, while one is enough to see
+ * what the product does. A second student is refused with SEAT_LIMIT_REACHED,
+ * which is the moment to sell.
+ *
+ * It is also comfortably below the ten-seat paid minimum, so converting never
+ * trips the student floor.
+ */
+const TRIAL_SEATS = 1;
+
+/**
+ * What a trial seat is, in data: an ordinary Start seat priced at zero.
+ *
+ * Not a special case, deliberately — see the seat row created in `register`.
+ */
+const TRIAL_SEAT_TIER = 'START' as const;
+const TRIAL_SEAT_PRICE_XAF = 0;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 const REGISTRATION_RESPONSE = { message: 'verification email sent' } as const;
 
@@ -162,6 +181,23 @@ export class CentersService {
             center_id: center.id,
             plan: 'TRIAL',
             seats: TRIAL_SEATS,
+          },
+        });
+
+        // Fourth insert, same transaction: the trial seat itself. A trial is
+        // an ordinary seat row priced at zero rather than a flag, so seat
+        // counting, tier lookup and the quota check need no "unless they are
+        // on trial" branch. A trial student and a paid Start student then
+        // differ only in the clock.
+        //
+        // Zero is legal here and illegal on a payment line, which is what
+        // keeps a granted seat and a bought seat from being confused.
+        await tx.centerSeat.create({
+          data: {
+            center_id: center.id,
+            tier: TRIAL_SEAT_TIER,
+            quantity: TRIAL_SEATS,
+            unit_price_xaf: TRIAL_SEAT_PRICE_XAF,
           },
         });
 
