@@ -13,11 +13,14 @@
 # decision than restoring the gate.
 name: Test
 
+# `dev` as well as `main`. Everything is validated on dev before it reaches
+# main, so a gate that only watches main runs after the decision it was meant
+# to inform.
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -61,6 +64,34 @@ jobs:
 
       - name: Build
         run: npx nest build
+
+      # ts-jest transpiles WITHOUT type-checking, so no type error in test/**
+      # can fail a test, and `nest build` compiles src/ only. That blind spot
+      # hid three real defects during Phase 6b, each time with a green suite:
+      # a service constructed with 3 of its 4 dependencies, a required
+      # `provision` argument never passed, and seven fixtures left carrying a
+      # dropped column.
+      #
+      # A ratchet rather than a hard zero, because the 19 errors below predate
+      # this gate and live in auth, writing and guest-token specs — fixing
+      # them belongs to whoever owns those areas, not to a commit that happens
+      # to add the gate. What this catches is a NEW one, which is the failure
+      # mode that actually bit.
+      #
+      # Lower BASELINE whenever the real count drops. It must never be raised.
+      - name: Type-check (no new errors)
+        run: |
+          BASELINE=19
+          COUNT=$(npx tsc --noEmit 2>&1 | grep -c "error TS" || true)
+          echo "tsc --noEmit reported $COUNT error(s); baseline is $BASELINE"
+          if [ "$COUNT" -gt "$BASELINE" ]; then
+            echo "::error::$COUNT type errors, above the baseline of $BASELINE."
+            npx tsc --noEmit 2>&1 | grep "error TS" || true
+            exit 1
+          fi
+          if [ "$COUNT" -lt "$BASELINE" ]; then
+            echo "::notice::Down to $COUNT. Lower BASELINE in this workflow to $COUNT."
+          fi
 
       - name: Unit tests
         run: npx jest --ci
