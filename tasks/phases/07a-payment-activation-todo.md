@@ -105,13 +105,13 @@ for scoping, guards and refusals.
 ### Task 5: Verified webhook
 
 **Acceptance criteria:**
-- [ ] `POST /api/webhooks/payments` verifies the signature over the raw body
-- [ ] A bad or missing signature is refused and changes nothing
-- [ ] A verified success activates; a verified failure marks failed
-- [ ] A duplicate event is acknowledged and changes nothing
-- [ ] An unknown reference answers 404 so the provider retries
+- [x] `POST /api/webhooks/payments` verifies the signature over the raw body
+- [x] A bad or missing signature is refused and changes nothing
+- [x] A verified success activates; a verified failure marks failed
+- [x] A duplicate event is acknowledged and changes nothing
+- [x] An unknown reference answers 404 so the provider retries
 
-**Verification:** e2e-style spec against the real app wiring with `rawBody`.
+**Verification:** controller spec on the real HTTP stack with `rawBody` and the real fake provider; mutation-checked. Activation's exactly-once is proven separately against Postgres.
 
 **Files:** `payment-webhooks.controller.ts`, `main.ts` / `bootstrap-config.ts`,
 test.

@@ -19,6 +19,8 @@ import { PricingService } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
+import { PaymentWebhooksController } from './payment-webhooks.controller';
+import { PaymentWebhookService } from './payment-webhook.service';
 import { PaymentActivationService } from './payment-activation.service';
 import { PaymentCheckoutService } from './payment-checkout.service';
 import {
@@ -40,6 +42,7 @@ import { CentersService } from './centers.service';
     CenterStudentsController,
     StudentActivationController,
     PaymentsController,
+    PaymentWebhooksController,
   ],
   providers: [
     CentersService,
@@ -52,6 +55,7 @@ import { CentersService } from './centers.service';
     PaymentsService,
     PaymentActivationService,
     PaymentCheckoutService,
+    PaymentWebhookService,
     // Chosen once at boot, failing closed: anything short of an explicit,
     // non-production, properly secreted configuration is the disabled
     // provider. See selectPaymentProvider.

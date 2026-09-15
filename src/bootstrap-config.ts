@@ -1,7 +1,20 @@
+import type { NestApplicationOptions } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AuthExceptionFilter } from './shared/filters/auth-exception.filter';
 import { createGlobalValidationPipe } from './shared/pipes/global-validation.pipe';
+
+/**
+ * Options the application must be created with.
+ *
+ * `rawBody: true` keeps the exact bytes of each request alongside the parsed
+ * body. Payment webhooks are verified by a signature over those bytes, and
+ * re-serialising parsed JSON does not reproduce them — without this every
+ * genuine webhook would fail verification. It is a create-time option, so it
+ * cannot be applied in `configureSecurity`; main.ts must pass this constant,
+ * and bootstrap-config.spec checks that it does.
+ */
+export const APP_CREATE_OPTIONS: NestApplicationOptions = { rawBody: true };
 
 /** Used when ALLOWED_ORIGINS is unset. Never a wildcard — see `configureSecurity`. */
 const DEVELOPMENT_ORIGINS = ['http://localhost:3000', 'http://localhost:5173'];

@@ -3,10 +3,15 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { configureSecurity } from './bootstrap-config';
+import { APP_CREATE_OPTIONS, configureSecurity } from './bootstrap-config';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // APP_CREATE_OPTIONS keeps each request's raw bytes, which payment webhook
+  // signatures are computed over. See bootstrap-config.
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule,
+    APP_CREATE_OPTIONS,
+  );
   // Trust proxy, helmet, the validation pipe, the auth filter and CORS. In
   // `bootstrap-config` so they can be tested without starting a server —
   // `void bootstrap()` below is why importing this file to check them cannot

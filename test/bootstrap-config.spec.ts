@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { ValidationPipe } from '@nestjs/common';
-import { configureSecurity } from '../src/bootstrap-config';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { APP_CREATE_OPTIONS, configureSecurity } from '../src/bootstrap-config';
 import { AuthExceptionFilter } from '../src/shared/filters/auth-exception.filter';
 
 /**
@@ -125,6 +127,31 @@ describe('the application security configuration', () => {
       };
       expect(origin).not.toContain('*');
       expect(origin.every((o) => o.startsWith('http://localhost'))).toBe(true);
+    });
+  });
+
+  /**
+   * Payment webhooks are verified by a signature over the exact bytes that
+   * arrived. Nest discards those bytes unless the app is created with
+   * `rawBody: true`, and a create option cannot be set after the fact — so it
+   * lives in a constant main.ts must use, and both halves are pinned here.
+   */
+  describe('the raw request body', () => {
+    it('is kept, so webhook signatures can be verified', () => {
+      expect(APP_CREATE_OPTIONS).toMatchObject({ rawBody: true });
+    });
+
+    it('is what main.ts actually creates the app with', () => {
+      // Read as text rather than imported: importing main.ts would start a
+      // server. Crude, and the only way to see the call without running it.
+      const main = readFileSync(
+        join(__dirname, '..', 'src', 'main.ts'),
+        'utf8',
+      );
+
+      expect(main).toMatch(
+        /NestFactory\.create<[^>]+>\(\s*AppModule,\s*APP_CREATE_OPTIONS/,
+      );
     });
   });
 });

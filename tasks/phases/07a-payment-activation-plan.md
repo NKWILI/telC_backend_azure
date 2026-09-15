@@ -109,7 +109,7 @@ T2 provider_reference migration
 ### Slice 3: the provider seam
 - [x] Task 4a: Provider port, fake provider, selection
 - [x] Task 4b: Start a checkout
-- [ ] Task 5: Verified webhook
+- [x] Task 5: Verified webhook
 
 ### Checkpoint B
 - [ ] The full fake flow works: create, checkout, signed webhook, access active
