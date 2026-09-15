@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   INestApplication,
@@ -204,6 +205,23 @@ describe('PaymentsController', () => {
 
         expect(rateLimit.checkPaymentCreateLimit).toHaveBeenCalledTimes(1);
       });
+    });
+
+    it('surfaces an unfinished profile as 403, with the missing list', async () => {
+      // The list is what makes the refusal actionable: the client renders the
+      // remaining checklist from it rather than keeping its own copy of the
+      // rules, so a fourth required field needs no frontend change.
+      payments.create.mockRejectedValue(
+        new ForbiddenException({
+          message: 'CENTER_PROFILE_INCOMPLETE',
+          missing: ['city', 'phone'],
+        }),
+      );
+
+      const response = await pay({ start: 10 }, 'key-1').expect(403);
+
+      expect(response.body.error).toBe('CENTER_PROFILE_INCOMPLETE');
+      expect(response.body.missing).toEqual(['city', 'phone']);
     });
 
     describe('the client cannot influence the price', () => {

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,8 +10,17 @@ import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-pay
 import { PrismaService } from '../../shared/services/prisma.service';
 import { PricingService, type SeatMix } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
+import { deriveOnboardingState } from './center-onboarding';
 
-type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
+/**
+ * The manager is carried as well as the center, because profile completeness
+ * asks about the signed-in manager's phone — the same manager the dashboard
+ * asks about, so both surfaces answer alike.
+ */
+type SignedCenterIdentity = Pick<
+  CenterAccessTokenPayload,
+  'centerId' | 'centerUserId'
+>;
 
 export interface PaymentLineView {
   tier: Tier;
@@ -73,6 +83,13 @@ export class PaymentsService {
     const wanted = this.pricing.requireMix(mix);
     const requestHash = this.fingerprint(identity.centerId, wanted);
 
+    // Before anything is priced or written. A center can run a trial on an
+    // email address alone, but taking money needs a country for currency and
+    // tax, a city for support, and a phone to chase an unpaid invoice — so the
+    // gate sits here rather than at provisioning. Quoting stays open, because
+    // looking at a price is not a commitment.
+    await this.assertProfileComplete(identity);
+
     try {
       // Priced and written in one transaction. Reading the stamped prices and
       // the student counts outside it would decide both against a snapshot:
@@ -120,6 +137,45 @@ export class PaymentsService {
         idempotencyKey,
         requestHash,
       );
+    }
+  }
+
+  /**
+   * Refuses a center that has not finished its profile, naming every field it
+   * still owes.
+   *
+   * The `missing` list is what makes the refusal actionable: a client renders
+   * the remaining checklist from it rather than holding a second copy of the
+   * rules, so a fourth required field changes nothing on the frontend.
+   */
+  private async assertProfileComplete(
+    identity: SignedCenterIdentity,
+  ): Promise<void> {
+    const manager = await this.prisma.centerUser.findFirst({
+      // Scoped by center as well as id, so a manager id from another center
+      // cannot be used to answer this question.
+      where: { id: identity.centerUserId, center_id: identity.centerId },
+      select: {
+        phone: true,
+        center: { select: { country: true, city: true } },
+      },
+    });
+
+    if (!manager) {
+      throw new NotFoundException('CENTER_NOT_FOUND');
+    }
+
+    const onboarding = deriveOnboardingState({
+      country: manager.center.country,
+      city: manager.center.city,
+      phone: manager.phone,
+    });
+
+    if (!onboarding.complete) {
+      throw new ForbiddenException({
+        message: 'CENTER_PROFILE_INCOMPLETE',
+        missing: onboarding.missing,
+      });
     }
   }
 

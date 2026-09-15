@@ -20,7 +20,7 @@ import { PaymentsService } from '../src/modules/centers/payments.service';
 import { PricingService } from '../src/modules/centers/pricing.service';
 import { CenterSeatsService } from '../src/modules/centers/center-seats.service';
 
-const identity = { centerId: 'center-1' } as never;
+const identity = { centerId: 'center-1', centerUserId: 'owner-1' } as never;
 
 /** What the driver adapter really produces, fields and all. */
 const adapterViolation = (...fields: string[]) =>
@@ -120,6 +120,14 @@ describe('recognising a replay', () => {
     prisma = {
       center: {
         findUnique: jest.fn().mockResolvedValue({ _count: { students: 0 } }),
+      },
+      // A center that has finished its profile, so the gate is not what this
+      // file is testing.
+      centerUser: {
+        findFirst: jest.fn().mockResolvedValue({
+          phone: '+237690000000',
+          center: { country: 'Cameroon', city: 'Douala' },
+        }),
       },
       centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
       student: { groupBy: jest.fn().mockResolvedValue([]) },

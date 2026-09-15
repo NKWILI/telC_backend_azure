@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * Idempotency is a claim about a unique index, and a mock has no unique index.
  *
@@ -23,9 +24,17 @@ const payments = new PaymentsService(
   new CenterSeatsService(prisma),
 );
 
-const identity = (centerId: string) => ({ centerId }) as never;
+/**
+ * The signed identity now carries the manager too, because the profile gate
+ * asks about the signed-in manager's phone.
+ */
+const identity = (centerId: string, centerUserId = `${centerId}-owner`) =>
+  ({ centerId, centerUserId }) as never;
 
 async function wipe() {
+  await prisma.centerUser.deleteMany({
+    where: { email: { startsWith: 'payments-test-' } },
+  });
   // Students first. `center_id` is ON DELETE SET NULL, so deleting the center
   // would leave them behind carrying a tier and no center — harmless here, but
   // they would pile up in the branch across runs.
@@ -37,8 +46,13 @@ async function wipe() {
   });
 }
 
+/**
+ * A center whose profile is complete: country, city and a manager with a
+ * phone. That is what it takes to be charged, and the default here because
+ * most tests are about pricing rather than about onboarding.
+ */
 async function makeCenter(over: Record<string, unknown> = {}) {
-  return prisma.center.create({
+  const center = await prisma.center.create({
     data: {
       name: `Payments Test ${Date.now()}-${Math.random()}`,
       country: 'Cameroon',
@@ -47,6 +61,48 @@ async function makeCenter(over: Record<string, unknown> = {}) {
       ...over,
     },
   });
+
+  await prisma.centerUser.create({
+    data: {
+      id: `${center.id}-owner`,
+      center_id: center.id,
+      role: 'OWNER',
+      first_name: 'Alain',
+      last_name: 'Ngeukeu',
+      email: `payments-test-owner-${center.id}@example.com`,
+      password_hash: 'x',
+      email_verified: true,
+      phone: '+237690000000',
+    },
+  });
+
+  return center;
+}
+
+/** A center that registered and stopped: no country, city or manager phone. */
+async function makeDraftCenter(managerPhone: string | null = null) {
+  const center = await prisma.center.create({
+    data: {
+      name: `Payments Test Draft ${Date.now()}-${Math.random()}`,
+      subscription: { create: { plan: 'TRIAL', seats: 1 } },
+    },
+  });
+
+  await prisma.centerUser.create({
+    data: {
+      id: `${center.id}-owner`,
+      center_id: center.id,
+      role: 'OWNER',
+      first_name: 'Alain',
+      last_name: 'Ngeukeu',
+      email: `payments-test-draft-${center.id}@example.com`,
+      password_hash: 'x',
+      email_verified: true,
+      phone: managerPhone,
+    },
+  });
+
+  return center;
 }
 
 /** A seat row is what stamps a price, and therefore what grandfathers it. */
@@ -332,6 +388,9 @@ describe('payments against real Postgres', () => {
       // never rechecks the row. Without the existence read this is a
       // foreign-key error at insert, which reaches the center as a 500.
       const center = await makeCenter();
+      // The manager goes first: center_users has no cascade, so a center
+      // cannot be deleted while one exists.
+      await prisma.centerUser.deleteMany({ where: { center_id: center.id } });
       await prisma.center.delete({ where: { id: center.id } });
 
       await expect(
@@ -352,6 +411,89 @@ describe('payments against real Postgres', () => {
       expect(
         await prisma.payment.count({ where: { center_id: center.id } }),
       ).toBe(0);
+    });
+  });
+
+  /**
+   * The gate sits at payment, not at provisioning.
+   *
+   * None of country, city or the manager's phone is needed to run a trial — a
+   * center can try the product on the strength of an email address. All three
+   * are needed to take money: the phone is how an unpaid invoice gets chased,
+   * and country decides currency and tax.
+   */
+  describe('a center must finish its profile before it can pay', () => {
+    it('refuses a draft center, naming every field it still owes', async () => {
+      const center = await makeDraftCenter();
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          message: 'CENTER_PROFILE_INCOMPLETE',
+          missing: ['country', 'city', 'phone'],
+        }),
+      });
+    });
+
+    it('records nothing when it refuses', async () => {
+      const center = await makeDraftCenter();
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toThrow('CENTER_PROFILE_INCOMPLETE');
+
+      expect(
+        await prisma.payment.count({ where: { center_id: center.id } }),
+      ).toBe(0);
+    });
+
+    it('still refuses when only the manager phone is missing', async () => {
+      // Two of three is not complete. The phone is the one that matters most
+      // for chasing money, so it cannot be the one that gets waived.
+      const center = await prisma.center.create({
+        data: {
+          name: `Payments Test Draft No Phone ${Date.now()}`,
+          country: 'Cameroon',
+          city: 'Douala',
+          subscription: { create: { plan: 'TRIAL', seats: 1 } },
+        },
+      });
+      await prisma.centerUser.create({
+        data: {
+          id: `${center.id}-owner`,
+          center_id: center.id,
+          role: 'OWNER',
+          first_name: 'Alain',
+          last_name: 'Ngeukeu',
+          email: `payments-test-nophone-${center.id}@example.com`,
+          password_hash: 'x',
+          email_verified: true,
+          phone: null,
+        },
+      });
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({ missing: ['phone'] }),
+      });
+    });
+
+    it('treats whitespace as unanswered', async () => {
+      const center = await makeDraftCenter('   ');
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).rejects.toThrow('CENTER_PROFILE_INCOMPLETE');
+    });
+
+    it('accepts a center that has finished its profile', async () => {
+      const center = await makeCenter();
+
+      await expect(
+        payments.create(identity(center.id), { START: 10 }, 'key-1'),
+      ).resolves.toMatchObject({ status: 'PENDING' });
     });
   });
 

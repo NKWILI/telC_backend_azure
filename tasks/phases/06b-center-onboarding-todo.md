@@ -89,42 +89,43 @@ pricing paths. The breakdown was wrong about this, not the implementation.
 
 - [x] A mixed quote prices correctly and cannot be influenced by the client
 - [x] One payment covering three tiers is idempotent against real Postgres
-- [ ] Human review before trials or students are touched
+- [x] Human review before trials or students are touched — reviewed twice;
+      eight findings fixed in a7ea29b, three regressions in 994a122
 
 ## Slice 3: trials and students on tiers
 
 ### Task 8: The trial becomes one Start seat for 14 days
 
-- [ ] A fresh center holds `center_seats(START, 1, 0)` from registration
-- [ ] `TRIAL_DURATION_DAYS` is 14
-- [ ] Trial and paid Start students behave identically except for the clock
-- [ ] Commit the green increment
+- [x] A fresh center holds `center_seats(START, 1, 0)` from registration
+- [x] `TRIAL_DURATION_DAYS` is 14
+- [x] Trial and paid Start students behave identically except for the clock
+- [x] Commit the green increment
 
 ### Task 9: Provisioning assigns a tier
 
-- [ ] `POST /api/centers/me/students` takes `tier`
-- [ ] Seat check is per tier
-- [ ] A center with every Start seat taken is refused a Start student even with
+- [x] `POST /api/centers/me/students` takes `tier`
+- [x] Seat check is per tier
+- [x] A center with every Start seat taken is refused a Start student even with
       Pro seats free, and the refusal names the tier
-- [ ] A tier the center holds no seats in is refused
-- [ ] Commit the green increment
+- [x] A tier the center holds no seats in is refused
+- [x] Commit the green increment
 
 ### Task 10: A student can move tier
 
-- [ ] `PATCH /api/centers/me/students/:id` accepts `tier`
-- [ ] Allowed only into a tier with a free seat
-- [ ] No pro-rating; access changes immediately, price settles at renewal
-- [ ] Commit the green increment
+- [x] `PATCH /api/centers/me/students/:id` accepts `tier`
+- [x] Allowed only into a tier with a free seat
+- [x] No pro-rating; access changes immediately, price settles at renewal
+- [x] Commit the green increment
 
 ## Slice 4: the two gates
 
 ### Task 11: Profile completeness gates payment
 
-- [ ] `POST /api/payments` refuses an incomplete profile with
+- [x] `POST /api/payments` refuses an incomplete profile with
       `CENTER_PROFILE_INCOMPLETE` and the `missing` list
-- [ ] Quoting stays open
-- [ ] `center-blocked-surface.spec.ts` extended
-- [ ] Commit the green increment
+- [x] Quoting stays open
+- [x] `center-blocked-surface.spec.ts` extended
+- [x] Commit the green increment
 
 ### Task 12: The exam module gates on tier
 
