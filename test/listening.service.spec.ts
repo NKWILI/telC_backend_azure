@@ -35,10 +35,19 @@ const exercise = {
 };
 
 describe('ListeningService', () => {
-  const prisma = {
+  const prisma: any = {
     modelltest: { findUnique: jest.fn() },
     listeningExercise: { findMany: jest.fn(), findFirst: jest.fn() },
-    listeningAttempt: { findMany: jest.fn(), create: jest.fn() },
+    listeningAttempt: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+    },
+    student: {
+      findUnique: jest.fn(() => Promise.resolve({ id: 'student-1' })),
+    },
+    studentActivity: { create: jest.fn() },
+    $transaction: jest.fn((work: any) => work(prisma)),
   };
   let service: ListeningService;
 
@@ -48,6 +57,8 @@ describe('ListeningService', () => {
     prisma.modelltest.findUnique.mockResolvedValue({ id: 'mt-1' });
     prisma.listeningAttempt.findMany.mockResolvedValue([]);
     prisma.listeningAttempt.create.mockResolvedValue({});
+    prisma.listeningAttempt.findUnique.mockResolvedValue(null);
+    prisma.studentActivity.create.mockResolvedValue({});
   });
 
   it('retrieves Modelltest 1 Teile 1, 2, and 3 from the database', async () => {
@@ -165,7 +176,11 @@ describe('ListeningService', () => {
       content_revision: exercise.content_revision,
       answers: { q41: '-', q42: '-' },
     });
-    expect(result).toEqual({ score: 50, answerKey: { q41: '-', q42: '+' } });
+    expect(result).toEqual({
+      attemptId: expect.any(String),
+      score: 50,
+      answerKey: { q41: '-', q42: '+' },
+    });
     expect(prisma.listeningAttempt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         score: 50,
@@ -212,5 +227,56 @@ describe('ListeningService', () => {
     await expect(
       service.submit('s', { ...base, answers: { q41: 'a' } }),
     ).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  describe('activity (D26)', () => {
+    const ID = '6f1c1f5e-2b1a-4b8e-9a51-0c0de0c0de00';
+    const submit = (over: Record<string, unknown> = {}) =>
+      service.submit('student-1', {
+        type: '2',
+        modelltestNumber: 1,
+        timed: false,
+        content_revision: exercise.content_revision,
+        answers: { q41: '-', q42: '+' },
+        ...over,
+      });
+
+    beforeEach(() => {
+      prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
+    });
+
+    it('records the attempt as Hören activity in the same transaction', async () => {
+      await submit({ durationSeconds: 300 });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const attemptId =
+        prisma.listeningAttempt.create.mock.calls[0][0].data.attempt_id;
+      expect(prisma.studentActivity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          student_id: 'student-1',
+          skill: 'HOEREN',
+          teil: 2,
+          score: 100,
+          max_score: 100,
+          duration_seconds: 300,
+          modelltest_id: 'mt-1',
+          attempt_id: attemptId,
+        }),
+      });
+    });
+
+    it('stores a named attempt once, answering the repeat from the first', async () => {
+      prisma.listeningAttempt.findUnique.mockResolvedValue({
+        student_id: 'student-1',
+        score: 50,
+      });
+
+      const result = await submit({ attemptId: ID });
+
+      expect(result.attemptId).toBe(ID);
+      expect(result.score).toBe(50);
+      expect(prisma.listeningAttempt.create).not.toHaveBeenCalled();
+      expect(prisma.studentActivity.create).not.toHaveBeenCalled();
+    });
   });
 });

@@ -31,9 +31,19 @@ describe('speaking evaluation and the AI quota', () => {
   let quota: { assertWithinQuota: jest.Mock };
   let usage: { recordDelivered: jest.Mock };
   let rateLimit: { checkAiEvaluationLimit: jest.Mock };
+  let prisma: any;
   let service: EvaluationService;
 
   beforeEach(() => {
+    prisma = {
+      speakingAttempt: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+      },
+      student: { findUnique: jest.fn().mockResolvedValue({ id: 'student-1' }) },
+      studentActivity: { create: jest.fn().mockResolvedValue({}) },
+      $transaction: jest.fn((work: any) => work(prisma)),
+    };
     gemini = {
       generateTextResponse: jest
         .fn()
@@ -50,6 +60,7 @@ describe('speaking evaluation and the AI quota', () => {
       quota as never,
       usage as never,
       rateLimit as never,
+      prisma as never,
     );
   });
 
@@ -167,6 +178,75 @@ describe('speaking evaluation and the AI quota', () => {
       await evaluate();
 
       expect(order).toEqual(['limit', 'check', 'call', 'record']);
+    });
+  });
+
+  describe('keeping the result (D26)', () => {
+    const ID = '6f1c1f5e-2b1a-4b8e-9a51-0c0de0c0de00';
+
+    it('stores the evaluation and records Sprechen activity together', async () => {
+      await service.evaluateTranscript('student-1', 2, 'Ich heiße Awa...', {
+        durationSeconds: 120,
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const stored = prisma.speakingAttempt.create.mock.calls[0][0].data;
+      expect(stored).toMatchObject({
+        student_id: 'student-1',
+        teil_number: 2,
+        score: 4,
+        duration_seconds: 120,
+      });
+      expect(prisma.studentActivity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          skill: 'SPRECHEN',
+          teil: 2,
+          score: 4,
+          attempt_id: stored.attempt_id,
+        }),
+      });
+    });
+
+    it('answers a repeated attempt from storage, spending nothing', async () => {
+      const earlier = { scores: { overall: 70 }, evaluationText: 'Früher.' };
+      prisma.speakingAttempt.findUnique.mockResolvedValue({
+        student_id: 'student-1',
+        evaluation: earlier,
+      });
+
+      const result = await service.evaluateTranscript(
+        'student-1',
+        1,
+        'Ich...',
+        {
+          attemptId: ID,
+        },
+      );
+
+      expect(result).toEqual(earlier);
+      expect(quota.assertWithinQuota).not.toHaveBeenCalled();
+      expect(gemini.generateTextResponse).not.toHaveBeenCalled();
+      expect(prisma.speakingAttempt.create).not.toHaveBeenCalled();
+    });
+
+    it("refuses an attempt id that is another student's", async () => {
+      prisma.speakingAttempt.findUnique.mockResolvedValue({
+        student_id: 'student-2',
+        evaluation: {},
+      });
+
+      await expect(
+        service.evaluateTranscript('student-1', 1, 'Ich...', { attemptId: ID }),
+      ).rejects.toThrow('ATTEMPT_ID_TAKEN');
+      expect(gemini.generateTextResponse).not.toHaveBeenCalled();
+    });
+
+    it('still returns the evaluation when it cannot be stored', async () => {
+      prisma.$transaction.mockRejectedValue(new Error('db down'));
+
+      await expect(evaluate()).resolves.toMatchObject({
+        scores: expect.objectContaining({ overall: 4 }),
+      });
     });
   });
 

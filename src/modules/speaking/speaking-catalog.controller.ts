@@ -27,9 +27,13 @@ export class SpeakingCatalogController {
    */
   @Get('teils')
   getTeils(
+    @Request() req: { student?: AccessTokenPayload },
     @Query('modelltest') modelltest?: string,
   ): Promise<TeilListItemDto[]> {
-    return this.speakingService.getTeils(this.parseModelltest(modelltest));
+    return this.speakingService.getTeils(
+      this.parseModelltest(modelltest),
+      req.student?.studentId,
+    );
   }
 
   /**

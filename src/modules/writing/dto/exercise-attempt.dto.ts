@@ -41,13 +41,13 @@ export class ExerciseAttemptDto {
     minimum: 0,
     maximum: 100,
   })
-  score?: number;
+  score?: number | null;
 
   @ApiPropertyOptional({ description: 'AI feedback in German' })
   feedback?: string;
 
   @ApiPropertyOptional({ description: 'Time spent writing in seconds' })
-  durationSeconds?: number;
+  durationSeconds?: number | null;
 
   @ApiPropertyOptional({ description: "The student's original submitted text" })
   originalText?: string;
@@ -75,4 +75,41 @@ export class ExerciseAttemptDto {
     type: [InlineCorrectionDto],
   })
   corrections?: InlineCorrectionDto[];
+
+  // ── Shared by every module's history (D29). Added, never replacing the
+  // fields above, which the app already reads.
+
+  @ApiPropertyOptional({
+    description: 'Same as `id`; the name every module shares',
+  })
+  attemptId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['hoeren', 'lesen', 'sprachbausteine', 'schreiben', 'sprechen'],
+  })
+  skill?: string;
+
+  @ApiPropertyOptional({ example: 2 })
+  teil?: number;
+
+  @ApiPropertyOptional({
+    example: 100,
+    description: 'The scale `score` is on. 100 for every module today.',
+  })
+  maxScore?: number;
+
+  @ApiPropertyOptional({
+    enum: ['completed', 'pending'],
+    description: '`pending` while a Writing attempt waits for its correction',
+  })
+  status?: 'completed' | 'pending';
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'ISO 8601, null while pending',
+  })
+  completedAt?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, format: 'uuid' })
+  modelltestId?: string | null;
 }

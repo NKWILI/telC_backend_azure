@@ -1,13 +1,20 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../shared/services/prisma.service';
 import type { SessionHistoryItemDto, TeilListItemDto } from '../dto';
+import {
+  historyFields,
+  teilStats,
+} from '../../student-activity/student-history';
 
 @Injectable()
 export class SpeakingService {
   private readonly logger = new Logger(SpeakingService.name);
   constructor(private readonly prisma: PrismaService) {}
 
-  async getTeils(modelltestNumber = 1): Promise<TeilListItemDto[]> {
+  async getTeils(
+    modelltestNumber = 1,
+    studentId?: string,
+  ): Promise<TeilListItemDto[]> {
     const modelltest = await this.prisma.modelltest.findUnique({
       where: { number: modelltestNumber },
       select: { id: true },
@@ -31,7 +38,16 @@ export class SpeakingService {
         exam_image_url: true,
       },
     });
+    const stats = studentId
+      ? await teilStats(
+          this.prisma,
+          studentId,
+          'SPRECHEN',
+          exercises.map((exercise) => exercise.part),
+        )
+      : {};
     return exercises.map((exercise) => ({
+      ...stats[exercise.part],
       id: exercise.part,
       part: exercise.part,
       title: exercise.title,
@@ -52,37 +68,47 @@ export class SpeakingService {
     teilNumber?: number,
     limit = 50,
   ): Promise<SessionHistoryItemDto[]> {
+    // Read from the evaluations `evaluate` keeps (phase 11). The old source,
+    // exam_sessions, was written only by the live Gemini flow, which stopped
+    // in March 2026 and never stored a score.
     try {
-      const rows = await this.prisma.examSession.findMany({
+      const rows = await this.prisma.speakingAttempt.findMany({
         where: {
           student_id: studentId,
-          status: { in: ['completed', 'interrupted'] },
-          completed_at: { not: null },
           ...(teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3
             ? { teil_number: teilNumber }
             : {}),
         },
-        include: {
-          teil_evaluations: {
-            select: {
-              overall_score: true,
-              strengths: true,
-              areas_for_improvement: true,
-            },
-          },
-        },
-        orderBy: { completed_at: 'desc' },
+        orderBy: { created_at: 'desc' },
         take: limit,
+        select: {
+          attempt_id: true,
+          teil_number: true,
+          score: true,
+          evaluation: true,
+          duration_seconds: true,
+          created_at: true,
+        },
       });
       return rows.map((row) => {
-        const evaluation = row.teil_evaluations[0];
+        const evaluation = (row.evaluation ?? {}) as {
+          strengths?: string;
+          areas_for_improvement?: string;
+        };
         return {
-          sessionId: row.session_id,
+          ...historyFields('SPRECHEN', {
+            attemptId: row.attempt_id,
+            teil: row.teil_number,
+            score: row.score,
+            completedAt: row.created_at,
+            durationSeconds: row.duration_seconds,
+          }),
+          sessionId: row.attempt_id,
           teilNumber: row.teil_number,
-          completedAt: (row.completed_at as Date)?.toISOString() ?? '',
-          overallScore: evaluation?.overall_score ?? null,
-          strengths: evaluation?.strengths ?? null,
-          areasForImprovement: evaluation?.areas_for_improvement ?? null,
+          completedAt: row.created_at.toISOString(),
+          overallScore: row.score,
+          strengths: evaluation.strengths ?? null,
+          areasForImprovement: evaluation.areas_for_improvement ?? null,
         };
       });
     } catch (err) {

@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SubmitListeningResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The stored attempt: the id the app sent, or a new one when it sent none.',
+  })
+  attemptId: string;
+
   @ApiProperty({ description: 'Server-computed percentage score', example: 80 })
   score: number;
 

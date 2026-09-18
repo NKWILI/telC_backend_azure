@@ -34,15 +34,20 @@ describe('Listening API scoring and answer security (e2e)', () => {
       },
     ],
   };
-  const prisma = {
+  const prisma: any = {
     listeningExercise: { findFirst: jest.fn() },
-    listeningAttempt: { create: jest.fn() },
+    listeningAttempt: { create: jest.fn(), findUnique: jest.fn() },
+    student: { findUnique: jest.fn() },
+    studentActivity: { create: jest.fn() },
+    $transaction: jest.fn((work: any) => work(prisma)),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma.listeningExercise.findFirst.mockResolvedValue(exercise);
     prisma.listeningAttempt.create.mockResolvedValue({});
+    prisma.student.findUnique.mockResolvedValue({ id: 'student-1' });
+    prisma.studentActivity.create.mockResolvedValue({});
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ListeningController],
@@ -98,6 +103,7 @@ describe('Listening API scoring and answer security (e2e)', () => {
       .expect(201);
 
     expect(response.body).toEqual({
+      attemptId: expect.any(String),
       score: 50,
       answerKey: { q41: '+', q42: '-' },
     });

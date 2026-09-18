@@ -11,4 +11,10 @@ export interface ExerciseTypeDto {
   progress?: number;
   part?: number;
   durationMinutes?: number;
+  /** Shared by every module (D29), from the student's recorded activity. */
+  attempts?: number;
+  bestScore?: number | null;
+  lastScore?: number | null;
+  lastAttemptAt?: string | null;
+  maxScore?: number;
 }

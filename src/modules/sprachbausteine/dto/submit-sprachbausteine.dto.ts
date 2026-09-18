@@ -8,6 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ClientAttemptId } from '../../student-activity/attempt-id.decorator';
 
 export class SubmitSprachbausteineDto {
   @ApiProperty({ example: 1 })
@@ -45,9 +46,19 @@ export class SubmitSprachbausteineDto {
   @IsInt()
   @Min(0)
   durationSeconds?: number;
+
+  @ClientAttemptId()
+  attemptId?: string;
 }
 
 export class SubmitSprachbausteineResponseDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The stored attempt: the id the app sent, or a new one when it sent none.',
+  })
+  attemptId!: string;
+
   @ApiProperty()
   score!: number;
 }

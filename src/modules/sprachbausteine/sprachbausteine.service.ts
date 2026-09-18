@@ -12,6 +12,9 @@ import type {
   SubmitSprachbausteineResponseDto,
 } from './dto';
 import type { SubmitSprachbausteineDto } from './dto/submit-sprachbausteine.dto';
+import { recordActivity } from '../student-activity/student-activity.writer';
+import { submitOnce } from '../student-activity/submit-once';
+import { historyFields, teilStats } from '../student-activity/student-history';
 import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
 import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
@@ -163,21 +166,45 @@ export class SprachbausteineService {
       ? Math.round((correct / Object.keys(answers).length) * 100)
       : 0;
 
-    await this.prisma.sprachbausteineAttempt.create({
-      data: {
-        student_id: studentId,
-        teil_id: dto.teil_id,
-        modelltest_id: modelltest.id,
-        status: 'completed',
-        score: score,
-        answers: dto.answers,
-        content_revision: dto.contentRevision,
-        duration_seconds: dto.durationSeconds ?? null,
-        completed_at: new Date(),
-      },
-    });
+    const completedAt = new Date();
+    const { attemptId, earlier } = await submitOnce(
+      studentId,
+      dto.attemptId,
+      (id) =>
+        this.prisma.sprachbausteineAttempt.findUnique({
+          where: { attempt_id: id },
+          select: { student_id: true, score: true },
+        }),
+      (id) =>
+        this.prisma.$transaction(async (tx) => {
+          await tx.sprachbausteineAttempt.create({
+            data: {
+              attempt_id: id,
+              student_id: studentId,
+              teil_id: dto.teil_id,
+              modelltest_id: modelltest.id,
+              status: 'completed',
+              score: score,
+              answers: dto.answers,
+              content_revision: dto.contentRevision,
+              duration_seconds: dto.durationSeconds ?? null,
+              completed_at: completedAt,
+            },
+          });
+          await recordActivity(tx, {
+            studentId,
+            skill: 'SPRACHBAUSTEINE',
+            teil: Number(dto.teil_id),
+            score,
+            durationSeconds: dto.durationSeconds,
+            modelltestId: modelltest.id,
+            attemptId: id,
+            completedAt,
+          });
+        }),
+    );
 
-    return { score };
+    return { attemptId, score: earlier?.score ?? score };
   }
 
   private async getAnswerKey(
@@ -265,8 +292,17 @@ export class SprachbausteineService {
   }
 
   async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
-    const progress = await this.getProgressByTeil(studentId);
+    const [progress, stats] = await Promise.all([
+      this.getProgressByTeil(studentId),
+      teilStats(
+        this.prisma,
+        studentId,
+        'SPRACHBAUSTEINE',
+        TEIL_IDS.map(Number),
+      ),
+    ]);
     return TEIL_IDS.map((id) => ({
+      ...stats[Number(id)],
       ...TEIL_CATALOG[id],
       progress: progress[id] ?? 0,
     }));
@@ -315,6 +351,8 @@ export class SprachbausteineService {
         take: limit,
         select: {
           attempt_id: true,
+          teil_id: true,
+          modelltest_id: true,
           created_at: true,
           completed_at: true,
           score: true,
@@ -323,7 +361,17 @@ export class SprachbausteineService {
         },
       });
 
-      return rows.map((row) => this.mapRowToAttemptDto(row));
+      return rows.map((row) => ({
+        ...historyFields('SPRACHBAUSTEINE', {
+          attemptId: row.attempt_id,
+          teil: Number(row.teil_id),
+          score: row.score,
+          completedAt: row.completed_at ?? row.created_at,
+          durationSeconds: row.duration_seconds,
+          modelltestId: row.modelltest_id,
+        }),
+        ...this.mapRowToAttemptDto(row),
+      }));
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
