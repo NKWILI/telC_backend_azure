@@ -77,7 +77,11 @@ export class SpeakingController {
       req.student?.studentId,
       dto.teilNumber,
       dto.transcript,
-      { attemptId: dto.attemptId, durationSeconds: dto.durationSeconds },
+      {
+        attemptId: dto.attemptId,
+        durationSeconds: dto.durationSeconds,
+        modelltestNumber: dto.modelltestNumber,
+      },
     );
   }
 }

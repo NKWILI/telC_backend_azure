@@ -1314,7 +1314,9 @@ questions.
 (`completed`/`pending`), `completedAt`, `durationSeconds`, `modelltestId`,
 next to the fields it already had (none removed). Every `/teils` item carries
 `attempts`, `bestScore`, `lastScore`, `lastAttemptAt`, `maxScore`, read from
-`StudentActivity`. Lesen gained `GET /api/reading/sessions` and
+`StudentActivity` — scoped to the Modelltest for Hören and Sprechen, whose
+Teil list is per Modelltest. `evaluate` takes an optional `modelltestNumber`
+(default 1, like every route). Lesen gained `GET /api/reading/sessions` and
 `GET /api/reading/teils`. Speaking `/sessions` now reads the kept evaluations
 (the old `exam_sessions` source was never scored). Every submit, and
 `evaluate`, accepts an optional `attemptId` (UUID from the app): a repeat is

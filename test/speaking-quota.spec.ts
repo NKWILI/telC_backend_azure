@@ -36,6 +36,7 @@ describe('speaking evaluation and the AI quota', () => {
 
   beforeEach(() => {
     prisma = {
+      modelltest: { findUnique: jest.fn().mockResolvedValue({ id: 'mt-1' }) },
       speakingAttempt: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({}),
@@ -194,6 +195,7 @@ describe('speaking evaluation and the AI quota', () => {
       expect(stored).toMatchObject({
         student_id: 'student-1',
         teil_number: 2,
+        modelltest_id: 'mt-1',
         score: 4,
         duration_seconds: 120,
       });
@@ -238,6 +240,31 @@ describe('speaking evaluation and the AI quota', () => {
       await expect(
         service.evaluateTranscript('student-1', 1, 'Ich...', { attemptId: ID }),
       ).rejects.toThrow('ATTEMPT_ID_TAKEN');
+      expect(gemini.generateTextResponse).not.toHaveBeenCalled();
+    });
+
+    it('stores a fractional score as whole points instead of losing it', async () => {
+      gemini.generateTextResponse.mockResolvedValue(
+        JSON.stringify({ ...A_RESULT, overall_score: 76.5 }),
+      );
+
+      await evaluate();
+
+      expect(prisma.speakingAttempt.create.mock.calls[0][0].data.score).toBe(
+        77,
+      );
+      expect(prisma.studentActivity.create).toHaveBeenCalled();
+    });
+
+    it('refuses an unknown Modelltest before anything costs money', async () => {
+      prisma.modelltest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.evaluateTranscript('student-1', 1, 'Ich...', {
+          modelltestNumber: 9,
+        }),
+      ).rejects.toThrow('Modelltest 9 not found');
+      expect(quota.assertWithinQuota).not.toHaveBeenCalled();
       expect(gemini.generateTextResponse).not.toHaveBeenCalled();
     });
 

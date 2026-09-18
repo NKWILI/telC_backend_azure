@@ -47,6 +47,7 @@ describe('ListeningService', () => {
       findUnique: jest.fn(() => Promise.resolve({ id: 'student-1' })),
     },
     studentActivity: { create: jest.fn() },
+    $queryRaw: jest.fn(() => Promise.resolve([])),
     $transaction: jest.fn((work: any) => work(prisma)),
   };
   let service: ListeningService;
@@ -227,6 +228,33 @@ describe('ListeningService', () => {
     await expect(
       service.submit('s', { ...base, answers: { q41: 'a' } }),
     ).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  it("scopes each Teil's numbers to the Modelltest being listed", async () => {
+    prisma.listeningExercise.findMany.mockResolvedValue([
+      {
+        part: 1,
+        title: 'Teil 1',
+        subtitle: null,
+        instruction: 'I',
+        image_url: null,
+        duration_minutes: 10,
+      },
+    ]);
+    prisma.$queryRaw.mockResolvedValueOnce([
+      {
+        teil: 1,
+        attempts: 2,
+        best_score: 90,
+        last_score: 80,
+        last_at: new Date('2026-09-18T10:00:00Z'),
+      },
+    ]);
+
+    const [teil1] = await service.getTeils('student-1', 2);
+
+    expect(teil1).toMatchObject({ attempts: 2, bestScore: 90 });
+    expect(JSON.stringify(prisma.$queryRaw.mock.calls[0])).toContain('mt-1');
   });
 
   describe('activity (D26)', () => {

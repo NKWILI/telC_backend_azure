@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { GeminiService } from './gemini.service';
 import { AiQuotaService } from '../../../shared/services/ai-quota.service';
@@ -12,6 +17,12 @@ import {
   CorrectionDto,
   ScoresDto,
 } from '../dto/evaluation-response.dto';
+
+interface SpeakingAttemptInput {
+  attemptId?: string;
+  durationSeconds?: number;
+  modelltestNumber?: number;
+}
 
 interface StoredSpeakingAttempt {
   student_id: string;
@@ -59,7 +70,7 @@ export class EvaluationService {
     studentId: string | undefined,
     teilNumber: number,
     transcript: string,
-    attempt: { attemptId?: string; durationSeconds?: number } = {},
+    attempt: SpeakingAttemptInput = {},
   ): Promise<SpeakingEvaluationResponseDto> {
     // A repeat of an attempt already evaluated is answered from what was
     // stored: before the quota and the model, so a retry from the offline
@@ -70,6 +81,20 @@ export class EvaluationService {
         throw new ConflictException('ATTEMPT_ID_TAKEN');
       }
       if (earlier) return this.fromStored(earlier);
+    }
+
+    // Before the quota and the model: an unknown Modelltest is the caller's
+    // mistake, and must not cost the student a session.
+    const modelltest = studentId
+      ? await this.prisma.modelltest.findUnique({
+          where: { number: attempt.modelltestNumber ?? 1 },
+          select: { id: true },
+        })
+      : null;
+    if (studentId && !modelltest) {
+      throw new NotFoundException(
+        `Modelltest ${attempt.modelltestNumber ?? 1} not found`,
+      );
     }
 
     // A token naming nobody has nobody to charge, which is the same choice
@@ -107,7 +132,7 @@ export class EvaluationService {
         teilNumber,
         transcript,
         evaluation,
-        attempt,
+        { ...attempt, modelltestId: modelltest!.id },
       );
       // Lost a race with another copy of the same attempt: answer as it was.
       if (earlier) return this.fromStored(earlier);
@@ -128,9 +153,10 @@ export class EvaluationService {
     teilNumber: number,
     transcript: string,
     evaluation: SpeakingEvaluationResponseDto,
-    attempt: { attemptId?: string; durationSeconds?: number },
+    attempt: SpeakingAttemptInput & { modelltestId: string },
   ): Promise<StoredSpeakingAttempt | null> {
-    const score = evaluation.scores.overall;
+    // The model may answer 76.5; the column holds whole points.
+    const score = Math.round(evaluation.scores.overall);
     try {
       const { earlier } = await submitOnce(
         studentId,
@@ -144,6 +170,7 @@ export class EvaluationService {
                 attempt_id: id,
                 student_id: studentId,
                 teil_number: teilNumber,
+                modelltest_id: attempt.modelltestId,
                 transcript,
                 score,
                 evaluation: evaluation as unknown as Prisma.InputJsonValue,
@@ -157,6 +184,7 @@ export class EvaluationService {
               teil: teilNumber,
               score,
               durationSeconds: attempt.durationSeconds,
+              modelltestId: attempt.modelltestId,
               attemptId: id,
               completedAt,
             });

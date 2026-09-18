@@ -44,6 +44,7 @@ export class SpeakingService {
           studentId,
           'SPRECHEN',
           exercises.map((exercise) => exercise.part),
+          modelltest.id,
         )
       : {};
     return exercises.map((exercise) => ({
@@ -84,6 +85,7 @@ export class SpeakingService {
         select: {
           attempt_id: true,
           teil_number: true,
+          modelltest_id: true,
           score: true,
           evaluation: true,
           duration_seconds: true,
@@ -102,6 +104,7 @@ export class SpeakingService {
             score: row.score,
             completedAt: row.created_at,
             durationSeconds: row.duration_seconds,
+            modelltestId: row.modelltest_id,
           }),
           sessionId: row.attempt_id,
           teilNumber: row.teil_number,

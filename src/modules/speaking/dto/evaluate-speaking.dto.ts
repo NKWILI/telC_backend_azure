@@ -25,6 +25,17 @@ export class EvaluateSpeakingDto {
   @MinLength(10)
   transcript: string;
 
+  @ApiPropertyOptional({
+    example: 1,
+    default: 1,
+    description:
+      'The Modelltest whose Teil was spoken. Defaults to 1, like every other route.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  modelltestNumber?: number;
+
   @ClientAttemptId()
   attemptId?: string;
 

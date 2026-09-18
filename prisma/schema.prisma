@@ -1128,6 +1128,8 @@ model SpeakingAttempt {
   attempt_id       String   @id @default(uuid())
   student_id       String
   teil_number      Int
+  /// Null only for rows stored before the column existed.
+  modelltest_id    String?  @db.Uuid
   transcript       String
   score            Int
   /// The evaluation as returned to the student: sub-scores, text, corrections.

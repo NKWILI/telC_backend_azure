@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { historyFields, teilStats } from './student-history';
 
 describe('historyFields', () => {
@@ -42,23 +42,17 @@ describe('historyFields', () => {
 });
 
 describe('teilStats', () => {
+  const row = {
+    teil: 1,
+    attempts: 3,
+    best_score: 90,
+    last_score: 60,
+    last_at: new Date('2026-09-18T10:00:00Z'),
+  };
+
   it('gives each Teil its count, best and latest score, and zeros where none', async () => {
-    const prisma: any = {
-      studentActivity: {
-        groupBy: jest
-          .fn()
-          .mockResolvedValue([
-            { teil: 1, _count: { _all: 3 }, _max: { score: 90 } },
-          ]),
-        findMany: jest.fn().mockResolvedValue([
-          {
-            teil: 1,
-            score: 60,
-            created_at: new Date('2026-09-18T10:00:00Z'),
-          },
-        ]),
-      },
-    };
+    const prisma: any = { $queryRaw: jest.fn().mockResolvedValue([row]) };
+
     const stats = await teilStats(prisma, 's-1', 'HOEREN', [1, 2]);
 
     expect(stats[1]).toEqual({
@@ -75,18 +69,21 @@ describe('teilStats', () => {
       lastAttemptAt: null,
       maxScore: 100,
     });
-    expect(prisma.studentActivity.groupBy.mock.calls[0][0].where).toEqual({
-      student_id: 's-1',
-      skill: 'HOEREN',
-    });
+  });
+
+  it('ignores a Teil the route does not list', async () => {
+    const prisma: any = {
+      $queryRaw: jest.fn().mockResolvedValue([{ ...row, teil: 9 }]),
+    };
+
+    const stats = await teilStats(prisma, 's-1', 'HOEREN', [1]);
+
+    expect(Object.keys(stats)).toEqual(['1']);
   });
 
   it('gives zeros rather than failing when the table cannot be read', async () => {
     const prisma: any = {
-      studentActivity: {
-        groupBy: jest.fn().mockRejectedValue(new Error('down')),
-        findMany: jest.fn().mockResolvedValue([]),
-      },
+      $queryRaw: jest.fn().mockRejectedValue(new Error('down')),
     };
 
     const stats = await teilStats(prisma, 's-1', 'LESEN', [1]);

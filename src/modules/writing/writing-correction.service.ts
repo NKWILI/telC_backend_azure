@@ -78,7 +78,9 @@ export class WritingCorrectionService {
       );
     }
 
-    const score = parsed?.score ?? STUB_SCORE;
+    // The model may answer 78.5; the column holds whole points, and a
+    // fraction would fail the update and lose the whole correction.
+    const score = Math.round(parsed?.score ?? STUB_SCORE);
     const feedback = parsed?.feedback ?? STUB_FEEDBACK;
     const correctedText = parsed?.correctedText ?? STUB_CORRECTED_TEXT;
     const pointsAddressed = parsed?.pointsAddressed;

@@ -6,7 +6,7 @@ describe('SpeakingService', () => {
     modelltest: { findUnique: jest.fn() },
     speakingExercise: { findMany: jest.fn() },
     speakingAttempt: { findMany: jest.fn() },
-    studentActivity: { groupBy: jest.fn(), findMany: jest.fn() },
+    $queryRaw: jest.fn(),
   };
   let service: SpeakingService;
 
@@ -59,6 +59,7 @@ describe('SpeakingService', () => {
       {
         attempt_id: 'attempt-1',
         teil_number: 1,
+        modelltest_id: 'mt-1',
         score: 78,
         evaluation: { strengths: 'Gut', areas_for_improvement: 'Grammatik' },
         duration_seconds: 150,
@@ -79,16 +80,19 @@ describe('SpeakingService', () => {
       maxScore: 100,
       status: 'completed',
       durationSeconds: 150,
-      modelltestId: null,
+      modelltestId: 'mt-1',
     });
   });
 
-  it("adds the student's numbers per Teil", async () => {
-    prisma.studentActivity.groupBy.mockResolvedValue([
-      { teil: 1, _count: { _all: 2 }, _max: { score: 80 } },
-    ]);
-    prisma.studentActivity.findMany.mockResolvedValue([
-      { teil: 1, score: 70, created_at: new Date('2026-09-02T10:00:00Z') },
+  it("adds the student's numbers per Teil, for this Modelltest only", async () => {
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        teil: 1,
+        attempts: 2,
+        best_score: 80,
+        last_score: 70,
+        last_at: new Date('2026-09-02T10:00:00Z'),
+      },
     ]);
 
     const [teil1] = await service.getTeils(1, 'student-1');
@@ -99,5 +103,7 @@ describe('SpeakingService', () => {
       bestScore: 80,
       lastScore: 70,
     });
+    // The Modelltest id is one of the query's bound values.
+    expect(JSON.stringify(prisma.$queryRaw.mock.calls[0])).toContain('mt-1');
   });
 });

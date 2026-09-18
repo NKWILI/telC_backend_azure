@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { recordActivity } from '../src/modules/student-activity/student-activity.writer';
 import { submitOnce } from '../src/modules/student-activity/submit-once';
+import { teilStats } from '../src/modules/student-activity/student-history';
 
 const prisma = new PrismaService();
 const MODELLTEST = '00000000-0000-4000-8000-000000000011';
@@ -226,5 +227,57 @@ describe('student activity against real Postgres', () => {
       attempt_id: real,
       score: 81,
     });
+  });
+
+  it('computes per-Teil numbers in SQL, scoped to one Modelltest when asked', async () => {
+    const student = await makeStudent();
+    const other = '00000000-0000-4000-8000-000000000022';
+    const at = (day: number) => new Date(`2026-09-${day}T10:00:00Z`);
+    const rows: [number, number, string, Date][] = [
+      [1, 60, MODELLTEST, at(10)],
+      [1, 90, MODELLTEST, at(11)],
+      [1, 70, MODELLTEST, at(12)], // latest in this Modelltest
+      [1, 100, other, at(13)], // another Modelltest, and latest overall
+    ];
+    for (const [teil, score, modelltestId, completedAt] of rows) {
+      await prisma.$transaction((tx) =>
+        recordActivity(tx, {
+          studentId: student.id,
+          skill: 'HOEREN',
+          teil,
+          score,
+          modelltestId,
+          attemptId: randomUUID(),
+          completedAt,
+        }),
+      );
+    }
+
+    const scoped = await teilStats(
+      prisma,
+      student.id,
+      'HOEREN',
+      [1, 2],
+      MODELLTEST,
+    );
+    expect(scoped[1]).toEqual({
+      attempts: 3,
+      bestScore: 90,
+      lastScore: 70,
+      lastAttemptAt: at(12).toISOString(),
+      maxScore: 100,
+    });
+    expect(scoped[2].attempts).toBe(0);
+
+    const all = await teilStats(prisma, student.id, 'HOEREN', [1]);
+    expect(all[1]).toMatchObject({
+      attempts: 4,
+      bestScore: 100,
+      lastScore: 100,
+    });
+
+    // Another skill's rows never count.
+    const lesen = await teilStats(prisma, student.id, 'LESEN', [1]);
+    expect(lesen[1].attempts).toBe(0);
   });
 });

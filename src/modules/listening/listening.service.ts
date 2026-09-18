@@ -46,6 +46,7 @@ export class ListeningService {
       studentId,
       'HOEREN',
       exercises.map((exercise) => exercise.part),
+      modelltest.id,
     );
     return exercises.map((exercise) => ({
       ...stats[exercise.part],

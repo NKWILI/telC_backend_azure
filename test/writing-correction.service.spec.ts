@@ -134,6 +134,18 @@ describe('WritingCorrectionService', () => {
       });
     });
 
+    it('stores a fractional model score as whole points', async () => {
+      mockModelService.generateTextResponse.mockResolvedValue(
+        validModelJson.replace('"score": 82', '"score": 81.6'),
+      );
+
+      await service.runCorrection(jobData);
+
+      expect(
+        mockPrismaService.writingAttempt.update.mock.calls[0][0].data.score,
+      ).toBe(82);
+    });
+
     it('records nothing for the stub score of a failed model', async () => {
       await service.runCorrection(jobData);
 

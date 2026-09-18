@@ -202,18 +202,15 @@ describe('LesenService answer security', () => {
 describe('LesenService history (D29)', () => {
   const prisma: any = {
     lesenAttempt: { findMany: jest.fn() },
-    studentActivity: {
-      groupBy: jest
-        .fn()
-        .mockResolvedValue([
-          { teil: 3, _count: { _all: 1 }, _max: { score: 67 } },
-        ]),
-      findMany: jest
-        .fn()
-        .mockResolvedValue([
-          { teil: 3, score: 67, created_at: new Date('2026-09-18T09:00:00Z') },
-        ]),
-    },
+    $queryRaw: jest.fn().mockResolvedValue([
+      {
+        teil: 3,
+        attempts: 1,
+        best_score: 67,
+        last_score: 67,
+        last_at: new Date('2026-09-18T09:00:00Z'),
+      },
+    ]),
   };
   const service = new LesenService(prisma);
 
