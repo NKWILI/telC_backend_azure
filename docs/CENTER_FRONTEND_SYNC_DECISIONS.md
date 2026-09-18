@@ -869,7 +869,14 @@ Rules:
 ## D20. Removing the per-student activation keys, in three steps
 
 **Decided:** 2026-09-17
-**Status:** decided; **the production check has not been run yet**
+**Status:** decided; **production checked 2026-09-18 — nothing to migrate**
+
+> **Production result (2026-09-18, read-only transaction):** 0 pending keys,
+> 0 activated students, 0 centers using keys, 0 students in any center,
+> 0 centers in total, 13 students in total. Step 2 is therefore empty: the old
+> path can be removed with nothing to migrate, and the trial cannot double-book
+> a seat through it in production. All 13 students are independent, so the D34
+> migration marks every one of them as grandfathered on release.
 
 Activation codes (D1) replace the per-student key. The old flow creates a
 student **with no password**, and the student sets one while redeeming the key
@@ -1368,6 +1375,31 @@ exists exactly for two students sitting in the same room.
 
 ---
 
+## D34. Students already using the app keep access; new accounts need a code
+
+**Decided:** 2026-09-18
+**Status:** decided, built in phase 9
+
+D9 says an account alone gives no access. Applied literally, every student who
+registered in the Flutter app on their own before schools existed would be
+locked out on release day. So:
+
+- **Accounts that exist without a school when this ships keep their access.**
+  A migration marks exactly those rows (`grandfathered_access`), at the moment
+  it runs. On production that moment is the release: no date to configure, and
+  no account created later can fall under it.
+- **Every account created after that needs a code** (D9, D17).
+- **Students a school released or deactivated are refused**, even if they
+  predate the rule. The mark is only honoured with no tier, and a tier means a
+  school once governed them.
+- **Guest tokens are unchanged** until B16 (guest mode) is decided.
+
+A refused student gets `ACTIVATION_REQUIRED` (D19) with the reason: `NO_CODE`,
+`CODE_DEACTIVATED`, `CODE_EXPIRED` or `CENTER_UNPAID`. This replaces
+`SUBSCRIPTION_INACTIVE` on student learning routes; center routes keep it.
+
+---
+
 # Question register
 
 Every open question for syncing the backend with the center dashboard and the
@@ -1392,7 +1424,7 @@ here.
 - [x] **T11** Redeeming a code → **`POST /api/auth/redeem-code`, redeemed once, then checked on every request**, see D17.
 - [x] **T12** Manager code routes → **list, seat summary, activate, deactivate; no manual create or delete**, see D18.
 - [x] **T20** Access ended → **one error `ACTIVATION_REQUIRED` (403) carrying a `reason`**, see D19.
-- [x] **T21** Per-student keys → **removed in three steps, after checking production**, see D20. *(the production check itself is still to run)*
+- [x] **T21** Per-student keys → **removed in three steps**, see D20. Production checked 2026-09-18: nothing uses them.
 - [x] **T22** Student devices → **2 active devices; a 3rd login revokes the least recently used**, see D21.
 
 ### Settings, support, dashboard data

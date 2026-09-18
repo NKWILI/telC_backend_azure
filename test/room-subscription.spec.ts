@@ -132,8 +132,11 @@ describe('speaking rooms and the subscription', () => {
         .set('Authorization', 'Bearer valid-token')
         .expect(403);
 
+      // One error for every missing-access case (D19); the reason says it is
+      // the school's subscription, not the student's code.
       expect(response.body).toMatchObject({
-        message: 'SUBSCRIPTION_INACTIVE',
+        message: 'ACTIVATION_REQUIRED',
+        reason: 'CENTER_UNPAID',
         subscriptionStatus: 'BLOCKED',
       });
     });

@@ -293,12 +293,21 @@ describe('CenterStudentsService', () => {
   });
 
   describe('remove', () => {
+    beforeEach(() => {
+      tx.student.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      tx.activationCode = {
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      };
+      tx.activationCodeEvent = { create: jest.fn().mockResolvedValue({}) };
+    });
+
     it('unlinks rather than deleting, so the account survives', async () => {
       await service.remove(identity, 'student-1');
 
       // Deleting would destroy a person's learning history because an
       // administrator tidied a roster.
-      expect(prisma.student.updateMany).toHaveBeenCalledWith({
+      expect(tx.student.updateMany).toHaveBeenCalledWith({
         where: { id: 'student-1', center_id: 'center-1' },
         data: { center_id: null },
       });
@@ -311,11 +320,44 @@ describe('CenterStudentsService', () => {
     });
 
     it('refuses to touch another center student', async () => {
-      prisma.student.updateMany.mockResolvedValue({ count: 0 });
+      tx.student.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(service.remove(identity, 'other-1')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+      expect(tx.activationCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    // Review finding 1: removal used to unlink the student and leave their
+    // code connected — so they could never redeem at another school, and this
+    // school kept counting the seat as used.
+    it('releases the code the student held here, and records it', async () => {
+      tx.activationCode.findMany.mockResolvedValue([{ id: 'code-1' }]);
+
+      await service.remove(identity, 'student-1');
+
+      expect(tx.activationCode.findMany).toHaveBeenCalledWith({
+        where: {
+          student_id: 'student-1',
+          center_id: 'center-1',
+          status: 'CONNECTED',
+        },
+        select: { id: true },
+      });
+      expect(tx.activationCode.updateMany).toHaveBeenCalledWith({
+        where: { id: 'code-1', status: 'CONNECTED' },
+        data: { status: 'DEACTIVATED' },
+      });
+      expect(tx.activationCodeEvent.create).toHaveBeenCalledWith({
+        data: {
+          code_id: 'code-1',
+          center_id: 'center-1',
+          center_user_id: 'owner-1',
+          from_status: 'CONNECTED',
+          to_status: 'DEACTIVATED',
+          student_id: 'student-1',
+        },
+      });
     });
   });
 

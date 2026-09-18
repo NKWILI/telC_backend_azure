@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterSubscriptionController } from '../src/modules/centers/center-subscription.controller';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
+import { CenterTrialService } from '../src/modules/centers/center-trial.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
@@ -36,6 +37,8 @@ describe('POST /api/centers/me/subscription/quote', () => {
     const module = await Test.createTestingModule({
       controllers: [CenterSubscriptionController],
       providers: [
+        // Not under test here; the controller only needs it to be resolvable.
+        { provide: CenterTrialService, useValue: { start: jest.fn() } },
         { provide: CenterSubscriptionService, useValue: subscriptions },
       ],
     })

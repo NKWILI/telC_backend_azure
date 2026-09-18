@@ -7,9 +7,13 @@ import {
 } from '../../shared/services/student-entitlement.service';
 import { AuthService } from '../auth/auth.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
+import { TRIAL_DURATION_DAYS } from './center-trial.service';
 
-/** Matches the trial length in the product rules. */
-export const TRIAL_DURATION_DAYS = 14;
+/**
+ * One trial length for both ways a trial can start. This path goes away with
+ * the per-student keys (D20); until then it must not disagree with the button.
+ */
+export { TRIAL_DURATION_DAYS };
 /** Matches the student registration policy, so activation is not a weaker door. */
 export const MIN_STUDENT_PASSWORD_LENGTH = 8;
 /** Matches `AuthService.register`, so activated and registered accounts hash alike. */

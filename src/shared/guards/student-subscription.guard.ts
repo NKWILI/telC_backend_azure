@@ -60,12 +60,15 @@ export class StudentSubscriptionGuard implements CanActivate {
     }
 
     if (!entitlement.studentsMayLearn) {
-      // The status travels with the refusal on purpose. A client that only
-      // knows "forbidden" can do nothing but show an error, whereas one that
-      // knows the center stopped paying can offer the student a way to carry
-      // on themselves.
+      // One error for every way access can be missing (D19), so the app
+      // catches it anywhere and sends the student to the activation screen.
+      // The reason picks the sentence — "your school ended your access" is
+      // not "enter your code" — and it falls back to asking for a code for a
+      // reason an older app does not know. The status still travels with it,
+      // so a client can tell "payment late" from "blocked".
       throw new ForbiddenException({
-        message: 'SUBSCRIPTION_INACTIVE',
+        message: 'ACTIVATION_REQUIRED',
+        reason: entitlement.accessRefusal ?? 'NO_CODE',
         subscriptionStatus: entitlement.status,
       });
     }
