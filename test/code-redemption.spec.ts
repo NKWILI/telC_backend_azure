@@ -228,10 +228,21 @@ describe('CodeRedemptionService.redeem', () => {
     // code; that refusal must reach the student as the same answer.
     it('a second connected code the database refuses, answered the same way', async () => {
       prisma.activationCode.updateMany.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('duplicate', {
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
           code: 'P2002',
           clientVersion: 'test',
-          meta: { target: 'activation_codes_one_connected_per_student' },
+          // The shape a real P2002 has with the driver adapter: no \`target\`,
+          // the column under driverAdapterError (see prisma-errors.spec.ts).
+          meta: {
+            modelName: 'ActivationCode',
+            driverAdapterError: {
+              cause: {
+                originalMessage:
+                  'duplicate key value violates unique constraint "activation_codes_one_connected_per_student"',
+                constraint: { fields: ['student_id'] },
+              },
+            },
+          },
         }),
       );
 

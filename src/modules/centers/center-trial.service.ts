@@ -3,9 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Tier } from '@prisma/client';
+import { Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
+import { isUniqueViolationOn } from '../../shared/prisma-errors';
 import { generateActivationCode } from './activation-code-format';
 import {
   toActivationCodeView,
@@ -78,7 +79,10 @@ export class CenterTrialService {
       try {
         return await this.claimTrial(identity.centerId);
       } catch (error) {
-        if (!this.isCodeCollision(error) || attempt >= CODE_DRAW_ATTEMPTS) {
+        if (
+          !isUniqueViolationOn(error, 'code') ||
+          attempt >= CODE_DRAW_ATTEMPTS
+        ) {
           throw error;
         }
         // The transaction rolled back with the collision, trial claim
@@ -128,22 +132,5 @@ export class CenterTrialService {
 
       return { trialEndsAt: endsAt, code: toActivationCodeView(code) };
     });
-  }
-
-  /** A unique-index hit on the code column, and only that. */
-  private isCodeCollision(error: unknown): boolean {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-      return false;
-    }
-
-    if (error.code !== 'P2002') {
-      return false;
-    }
-
-    const target = (error.meta as { target?: unknown } | undefined)?.target;
-
-    return Array.isArray(target)
-      ? target.includes('code')
-      : typeof target === 'string' && target.includes('code');
   }
 }

@@ -138,11 +138,25 @@ describe('CenterTrialService.start', () => {
     prisma.$transaction.mockImplementation(async (work: any) => {
       attempts += 1;
       if (attempts === 1) {
-        throw new Prisma.PrismaClientKnownRequestError('duplicate', {
-          code: 'P2002',
-          clientVersion: 'test',
-          meta: { target: ['code'] },
-        });
+        throw new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed',
+          {
+            code: 'P2002',
+            clientVersion: 'test',
+            // The shape a real P2002 has with the driver adapter: no \`target\`,
+            // the column under driverAdapterError (see prisma-errors.spec.ts).
+            meta: {
+              modelName: 'ActivationCode',
+              driverAdapterError: {
+                cause: {
+                  originalMessage:
+                    'duplicate key value violates unique constraint "activation_codes_code_key"',
+                  constraint: { fields: ['code'] },
+                },
+              },
+            },
+          },
+        );
       }
       return work(prisma);
     });
