@@ -164,8 +164,9 @@ model Center {
   updated_at DateTime @default(now()) @updatedAt
 
 
-  users        CenterUser[]
-  payments     Payment[]
+  users            CenterUser[]
+  activation_codes ActivationCode[]
+  payments         Payment[]
   seats        CenterSeat[]
   students     Student[]
   subscription CenterSubscription?
@@ -237,6 +238,64 @@ model CenterSeat {
 
   @@unique([center_id, tier])
   @@map("center_seats")
+}
+
+/// Where an activation code stands.
+///
+/// `ACTIVATED` is a code waiting for a student, `CONNECTED` one a student has
+/// redeemed, `DEACTIVATED` one the center has taken back. There is no
+/// `EXPIRED`: expiry is a date compared on read, so a code cannot sit in the
+/// wrong state because no job ran.
+enum ActivationCodeStatus {
+  ACTIVATED
+  CONNECTED
+  DEACTIVATED
+}
+
+/// One seat, as a value a center can hand to a student.
+///
+/// Created only by the backend — a trial starting, or a payment succeeding —
+/// so the number of codes and the number of seats paid for cannot disagree.
+/// There is no route that makes one by hand.
+model ActivationCode {
+  id        String @id @default(uuid())
+  center_id String
+  /// `LQ-XXXX-XXXX`, stored readable rather than hashed: a manager has to see
+  /// it again on the Users page to hand it out. Deactivation, not secrecy, is
+  /// what protects a seat.
+  code      String @unique
+  /// Which plan the seat entitles its student to. A trial seat is START at
+  /// zero price, so the trial needs no tier of its own.
+  tier      Tier
+
+  status ActivationCodeStatus @default(ACTIVATED)
+
+  /// The student who redeemed it, and what they were called at that moment.
+  /// Name and email are copied rather than joined so the center still sees who
+  /// held a seat after the student is gone; the id is the link that matters.
+  student_id    String?
+  linked_name   String?
+  linked_email  String?
+  connected_at  DateTime?
+  /// Where the redemption came from. A center holds the code and can redeem it
+  /// itself, so this is the audit trail that makes that visible afterwards.
+  connected_ip  String?
+
+  /// When the seat stops working, compared on read. Null means it follows the
+  /// center's subscription rather than a date of its own — which is what paid
+  /// codes do until D4 says otherwise.
+  expires_at DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
+
+  /// The Users page lists a center's codes by state; redemption looks one up
+  /// by its value, which the unique index above already covers.
+  @@index([center_id, status])
+  @@index([student_id])
+  @@map("activation_codes")
 }
 
 enum PaymentStatus {
