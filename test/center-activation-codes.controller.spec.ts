@@ -32,6 +32,7 @@ describe('CenterActivationCodesController contract', () => {
       seats: jest.fn().mockResolvedValue({}),
       activate: jest.fn().mockResolvedValue({ id: codeId }),
       deactivate: jest.fn().mockResolvedValue({ id: codeId }),
+      reset: jest.fn().mockResolvedValue({ id: codeId }),
     };
 
     const module = await Test.createTestingModule({
@@ -108,6 +109,24 @@ describe('CenterActivationCodesController contract', () => {
 
     expect(codes.deactivate).not.toHaveBeenCalled();
     expect(codes.activate).not.toHaveBeenCalled();
+  });
+
+  it('resets a code for the signed center only', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/centers/me/activation-codes/${codeId}/reset`)
+      .expect(200);
+
+    expect(codes.reset).toHaveBeenCalledWith(signedIdentity, codeId);
+  });
+
+  it('stops a blocked center from resetting a code', async () => {
+    blocked = true;
+
+    await request(app.getHttpServer())
+      .post(`/api/centers/me/activation-codes/${codeId}/reset`)
+      .expect(403);
+
+    expect(codes.reset).not.toHaveBeenCalled();
   });
 
   it('acts on a code for the signed center only', async () => {

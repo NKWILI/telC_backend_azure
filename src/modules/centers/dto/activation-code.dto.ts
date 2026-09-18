@@ -104,3 +104,34 @@ export class TrialStartedDto {
   })
   code: ActivationCodeDto;
 }
+
+/** What a reset of this code would cost, shown before the manager acts (D39). */
+export class CodeResetAllowanceDto {
+  @ApiProperty({
+    example: true,
+    description:
+      'Whether a reset now counts against the limit: the code has been redeemed since its last reset. A code nobody redeemed resets freely.',
+  })
+  counted: boolean;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Resets of a used code left in this period: 2 per paid billing period, 1 during the trial.',
+  })
+  remaining: number;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    description:
+      'When more resets become available: the next renewal. Null during the trial, where the allowance does not refill.',
+  })
+  availableAt: Date | null;
+}
+
+export class ListedActivationCodeDto extends ActivationCodeDto {
+  @ApiProperty({ type: CodeResetAllowanceDto })
+  reset: CodeResetAllowanceDto;
+}

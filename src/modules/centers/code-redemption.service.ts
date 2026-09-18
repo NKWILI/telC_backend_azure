@@ -159,7 +159,15 @@ export class CodeRedemptionService {
         // The gate. Only a code still waiting moves, so of two students sending
         // the same code at the same moment exactly one wins.
         const claimed = await tx.activationCode.updateMany({
-          where: { id: code.id, status: ActivationCodeStatus.ACTIVATED },
+          // The value as well as the row and status: a manager resetting
+          // this code between the lookup above and this write gives it a new
+          // value, and the student must not end up holding a seat by one that
+          // no longer exists (D39).
+          where: {
+            id: code.id,
+            status: ActivationCodeStatus.ACTIVATED,
+            code: code.code,
+          },
           data: {
             status: ActivationCodeStatus.CONNECTED,
             student_id: student.studentId,
