@@ -27,14 +27,14 @@ import {
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Devices a student may be signed in on at once (D21).
+ * Sessions a student may hold at once (D21, changed to 1 on 2026-09-18).
  *
- * A student is one person, so two — typically a phone and a laptop. Every
- * extra device is mostly an invitation to share one seat with a class. This
- * does not stop sharing by taking turns; the per-student AI quota is what
- * keeps a shared account from multiplying cost.
+ * One, so that sharing an account means signing each other out — the
+ * deterrent. The accepted cost is that a student who moves between the phone
+ * and the web app signs in again each time. The per-student AI quota still
+ * caps whatever sharing remains.
  */
-const MAX_ACTIVE_STUDENT_DEVICES = 2;
+const MAX_ACTIVE_STUDENT_DEVICES = 1;
 const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 
@@ -437,6 +437,11 @@ export class AuthService {
       throw new BadRequestException('MISSING_REQUIRED_FIELDS');
     }
 
+    // Filled inside the transaction, acted on after it: the Valkey mark is
+    // not part of the database write, and must not run if that write rolls
+    // back.
+    let evictedSessionIds: string[] = [];
+
     try {
       const session = await this.prisma.$transaction(async (tx) => {
         const existingSession = await tx.deviceSession.findFirst({
@@ -454,18 +459,21 @@ export class AuthService {
 
         // A new device beyond the limit is let in, never refused: without a
         // "my devices" screen a refusal would leave the student no way
-        // forward. It signs out the device used longest ago — not the one
-        // created first, which is often the laptop used every day.
+        // forward. It signs out the sessions used longest ago — as many as it
+        // takes to get back under the limit, because a student who signed in
+        // under the older, larger limit may still hold several.
         if (!existingSession && activeCount >= MAX_ACTIVE_STUDENT_DEVICES) {
-          const oldestSession = await tx.deviceSession.findFirst({
+          const evicted = await tx.deviceSession.findMany({
             where: { student_id: studentId, revoked_at: null },
             orderBy: [{ last_used_at: 'asc' }, { created_at: 'asc' }],
+            take: activeCount - MAX_ACTIVE_STUDENT_DEVICES + 1,
             select: { id: true },
           });
 
-          if (oldestSession) {
+          if (evicted.length > 0) {
+            evictedSessionIds = evicted.map(({ id }) => id);
             await tx.deviceSession.deleteMany({
-              where: { id: { in: [oldestSession.id] } },
+              where: { id: { in: evictedSessionIds } },
             });
           }
         }
@@ -493,6 +501,19 @@ export class AuthService {
 
         return upsertedSession as unknown as DeviceSession;
       });
+
+      // Production runs without Valkey: the guard then reads the database,
+      // finds the evicted row gone, and the old device is signed out on its
+      // next request. If Valkey is running, the guard trusts it and skips the
+      // database — so the evicted sessions are marked there too, and the rule
+      // holds either way. Best effort: a failed mark is the cache's problem,
+      // not the login's.
+      if (this.valkeyService && evictedSessionIds.length > 0) {
+        const valkey = this.valkeyService;
+        await Promise.all(
+          evictedSessionIds.map((id) => valkey.revokeSession(id)),
+        );
+      }
 
       return session;
     } catch (error) {

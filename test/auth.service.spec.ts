@@ -103,7 +103,7 @@ describe('AuthService', () => {
       const session = { id: 'session-1' };
 
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(1);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
       txMock.deviceSession.upsert.mockResolvedValueOnce(session);
 
       const result = await service.upsertDeviceSession(
@@ -140,17 +140,17 @@ describe('AuthService', () => {
       expect(result).toEqual(session);
     });
 
-    // D21: a student is one person, so two devices — typically a phone and a
-    // laptop. A third login is never refused; it signs out the device used
-    // longest ago, the same rule center managers follow.
-    it('signs out the least recently used device when a third one logs in', async () => {
+    // D21 (changed 2026-09-18): one session per student, so that sharing an
+    // account means signing each other out. A new login is never refused; it
+    // signs out the session that was there.
+    it('signs out the previous session when the student logs in elsewhere', async () => {
       const session = { id: 'session-2' };
 
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(2);
-      txMock.deviceSession.findFirst.mockResolvedValueOnce({
-        id: 'least-recently-used',
-      });
+      txMock.deviceSession.count.mockResolvedValueOnce(1);
+      txMock.deviceSession.findMany.mockResolvedValueOnce([
+        { id: 'least-recently-used' },
+      ]);
       txMock.deviceSession.upsert.mockResolvedValueOnce(session);
 
       const result = await service.upsertDeviceSession(
@@ -159,11 +159,12 @@ describe('AuthService', () => {
         'refresh-hash-2',
       );
 
-      // Last used, not first created: the laptop signed in months ago and
-      // used every day must not be the one that goes.
-      expect(txMock.deviceSession.findFirst).toHaveBeenNthCalledWith(2, {
+      // Last used, not first created — and exactly enough to get back to the
+      // limit.
+      expect(txMock.deviceSession.findMany).toHaveBeenCalledWith({
         where: { student_id: 'student-1', revoked_at: null },
         orderBy: [{ last_used_at: 'asc' }, { created_at: 'asc' }],
+        take: 1,
         select: { id: true },
       });
       expect(txMock.deviceSession.deleteMany).toHaveBeenCalledWith({
@@ -172,14 +173,62 @@ describe('AuthService', () => {
       expect(result).toEqual(session);
     });
 
-    it('lets a second device in without signing anyone out', async () => {
+    it('lets the first session in without signing anyone out', async () => {
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(1);
+      txMock.deviceSession.count.mockResolvedValueOnce(0);
       txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-9' });
 
-      await service.upsertDeviceSession('student-1', 'device-2', 'hash');
+      await service.upsertDeviceSession('student-1', 'device-1', 'hash');
 
       expect(txMock.deviceSession.deleteMany).not.toHaveBeenCalled();
+    });
+
+    // Production runs without Valkey, so the guard reads the database and the
+    // deleted row already signs the old device out on its next request. If
+    // Valkey comes back, the guard trusts it and skips the database — so the
+    // evicted session is marked there too, and the rule holds either way.
+    it('marks the signed-out session revoked in Valkey, when Valkey is there', async () => {
+      const valkey = { revokeSession: jest.fn().mockResolvedValue(true) };
+      const withValkey = new AuthService(
+        prismaMock,
+        tokenServiceMock,
+        tokenCryptoMock,
+        emailServiceMock,
+        { forStudent: jest.fn().mockResolvedValue(undefined) } as never,
+        valkey as never,
+      );
+
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(1);
+      txMock.deviceSession.findMany.mockResolvedValueOnce([
+        { id: 'previous-session' },
+      ]);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-new' });
+
+      await withValkey.upsertDeviceSession('student-1', 'device-2', 'hash');
+
+      expect(valkey.revokeSession).toHaveBeenCalledWith('previous-session');
+    });
+
+    it('signs out every older session when the student still holds several', async () => {
+      // Students who signed in under the older limit may hold up to three.
+      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
+      txMock.deviceSession.count.mockResolvedValueOnce(3);
+      txMock.deviceSession.findMany.mockResolvedValueOnce([
+        { id: 's-1' },
+        { id: 's-2' },
+        { id: 's-3' },
+      ]);
+      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-new' });
+
+      await service.upsertDeviceSession('student-1', 'device-4', 'hash');
+
+      expect(txMock.deviceSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 3 }),
+      );
+      expect(txMock.deviceSession.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['s-1', 's-2', 's-3'] } },
+      });
     });
 
     it('reuses an existing device for the same student without evicting', async () => {
