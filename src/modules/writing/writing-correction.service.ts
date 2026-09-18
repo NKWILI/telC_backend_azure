@@ -10,6 +10,7 @@ import { WritingService } from './writing.service';
 import { MODEL_SERVICE_TOKEN } from './services/model-service.interface';
 import type { ModelService } from './services/model-service.interface';
 import type { WritingExerciseDto } from './dto';
+import { recordActivity } from '../student-activity/student-activity.writer';
 
 export interface CorrectionJobData {
   attemptId: string;
@@ -77,7 +78,9 @@ export class WritingCorrectionService {
       );
     }
 
-    const score = parsed?.score ?? STUB_SCORE;
+    // The model may answer 78.5; the column holds whole points, and a
+    // fraction would fail the update and lose the whole correction.
+    const score = Math.round(parsed?.score ?? STUB_SCORE);
     const feedback = parsed?.feedback ?? STUB_FEEDBACK;
     const correctedText = parsed?.correctedText ?? STUB_CORRECTED_TEXT;
     const pointsAddressed = parsed?.pointsAddressed;
@@ -97,21 +100,48 @@ export class WritingCorrectionService {
       }));
 
     try {
-      await this.prisma.writingAttempt.update({
-        where: { attempt_id: attemptId },
-        data: {
-          status: 'completed',
+      await this.prisma.$transaction(async (tx) => {
+        const attempt = await tx.writingAttempt.update({
+          where: { attempt_id: attemptId },
+          data: {
+            status: 'completed',
+            score,
+            feedback,
+            corrected_text: correctedText,
+            diff,
+            points_addressed: pointsAddressed ?? null,
+            duration_seconds: durationSeconds,
+            completed_at: new Date(completedAt),
+            ...(correctionsForDb.length > 0
+              ? { corrections: correctionsForDb }
+              : {}),
+          },
+          select: { student_id: true, modelltest_id: true },
+        });
+        // Only a real score is progress. The stub's 75 means the model
+        // failed, and the student's history must not count it as a result.
+        if (!parsed) return;
+        // A correction run twice (a queue retry) records the attempt once.
+        const recorded = await tx.studentActivity.findUnique({
+          where: {
+            skill_attempt_id: { skill: 'SCHREIBEN', attempt_id: attemptId },
+          },
+          select: { id: true },
+        });
+        if (recorded) return;
+        await recordActivity(tx, {
+          studentId: attempt.student_id,
+          skill: 'SCHREIBEN',
+          // Schreiben is a single task in telc B1.
+          teil: 1,
           score,
-          feedback,
-          corrected_text: correctedText,
-          diff,
-          points_addressed: pointsAddressed ?? null,
-          duration_seconds: durationSeconds,
-          completed_at: new Date(completedAt),
-          ...(correctionsForDb.length > 0
-            ? { corrections: correctionsForDb }
-            : {}),
-        },
+          // Not `durationSeconds`: that is submit-to-correction time, not
+          // time spent writing, and the app does not send the latter yet.
+          durationSeconds: null,
+          modelltestId: attempt.modelltest_id,
+          attemptId,
+          completedAt: new Date(completedAt),
+        });
       });
 
       const payload: CorrectionReadyPayload = {

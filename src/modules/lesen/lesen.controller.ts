@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 
@@ -13,9 +14,13 @@ import { ApiBody, ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 const DEFAULT_MODELLTEST = 1;
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../../shared/guards/student-subscription.guard';
+import { CurrentStudent } from '../../shared/decorators/current-student.decorator';
+import type { AccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { LesenService } from './lesen.service';
 import { LesenExerciseResponseDto, LesenSubmitResponseDto } from './dto';
 import { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
+import { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
+import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
 @ApiTags('Reading')
 @UseGuards(JwtAuthGuard, StudentSubscriptionGuard)
@@ -58,10 +63,41 @@ export class LesenController {
     return this.lesenService.getExercise(Number(modelltest));
   }
 
+  @Get('sessions')
+  @ApiQuery({
+    name: 'teilNumber',
+    required: false,
+    schema: { type: 'string', enum: ['1', '2', '3'] },
+  })
+  @ApiOkResponse({ type: [ExerciseAttemptDto] })
+  getSessions(
+    @CurrentStudent() student: AccessTokenPayload | null,
+    @Query('teilNumber') teilNumber?: string,
+  ): Promise<ExerciseAttemptDto[]> {
+    if (!student?.studentId || student.isGuest) return Promise.resolve([]);
+    const teil =
+      teilNumber !== undefined ? parseInt(teilNumber, 10) : undefined;
+    return this.lesenService.getSessions(student.studentId, teil);
+  }
+
+  @Get('teils')
+  getTeils(
+    @CurrentStudent() student: AccessTokenPayload | null,
+  ): Promise<ExerciseTypeDto[]> {
+    if (!student?.studentId) return Promise.resolve([]);
+    return this.lesenService.getTeils(student.studentId);
+  }
+
   @Post('submit')
   @ApiBody({ type: LesenSubmitRequestDto })
   @ApiOkResponse({ type: LesenSubmitResponseDto })
-  submit(@Body() dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
-    return this.lesenService.submit(dto);
+  submit(
+    @CurrentStudent() student: AccessTokenPayload | null,
+    @Body() dto: LesenSubmitRequestDto,
+  ): Promise<LesenSubmitResponseDto> {
+    if (!student?.studentId) {
+      throw new UnauthorizedException('INVALID_ACCESS_TOKEN');
+    }
+    return this.lesenService.submit(student, dto);
   }
 }

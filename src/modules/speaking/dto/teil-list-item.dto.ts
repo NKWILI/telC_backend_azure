@@ -1,8 +1,10 @@
+import type { TeilStats } from '../../student-activity/student-history';
+
 /**
  * DTO for one Teil in GET /api/speaking/teils response.
  * Frontend maps to SpeakingExerciseType (id as string, part, durationMinutes, imagePath, etc.).
  */
-export interface TeilListItemDto {
+export interface TeilListItemDto extends Partial<TeilStats> {
   id: number; // 1 | 2 | 3
   part: number;
   title: string;

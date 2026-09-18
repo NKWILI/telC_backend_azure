@@ -8,6 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ClientAttemptId } from '../../student-activity/attempt-id.decorator';
 
 export class SubmitListeningDto {
   @ApiPropertyOptional({ example: 1, default: 1 })
@@ -48,4 +49,13 @@ export class SubmitListeningDto {
   })
   @IsObject({ message: 'answers must be an object' })
   answers: Record<string, string>;
+
+  @ClientAttemptId()
+  attemptId?: string;
+
+  @ApiPropertyOptional({ example: 540, description: 'Time spent, in seconds.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  durationSeconds?: number;
 }

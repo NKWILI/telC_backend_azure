@@ -5,7 +5,8 @@ describe('SpeakingService', () => {
   const prisma = {
     modelltest: { findUnique: jest.fn() },
     speakingExercise: { findMany: jest.fn() },
-    examSession: { findMany: jest.fn() },
+    speakingAttempt: { findMany: jest.fn() },
+    $queryRaw: jest.fn(),
   };
   let service: SpeakingService;
 
@@ -53,24 +54,56 @@ describe('SpeakingService', () => {
     await expect(service.getTeils(99)).rejects.toThrow(NotFoundException);
   });
 
-  it('maps session history without changing examiner behavior', async () => {
-    prisma.examSession.findMany.mockResolvedValue([
+  it('reads history from kept evaluations, in the old fields and the shared ones', async () => {
+    prisma.speakingAttempt.findMany.mockResolvedValue([
       {
-        session_id: 'session-1',
+        attempt_id: 'attempt-1',
         teil_number: 1,
-        completed_at: new Date('2026-01-01T10:00:00Z'),
-        teil_evaluations: [
-          {
-            overall_score: 78,
-            strengths: 'Gut',
-            areas_for_improvement: 'Grammatik',
-          },
-        ],
+        modelltest_id: 'mt-1',
+        score: 78,
+        evaluation: { strengths: 'Gut', areas_for_improvement: 'Grammatik' },
+        duration_seconds: 150,
+        created_at: new Date('2026-09-01T10:00:00Z'),
       },
     ]);
-    expect((await service.getSessions('student-1'))[0]).toMatchObject({
-      sessionId: 'session-1',
+    expect((await service.getSessions('student-1'))[0]).toEqual({
+      sessionId: 'attempt-1',
+      teilNumber: 1,
+      completedAt: '2026-09-01T10:00:00.000Z',
       overallScore: 78,
+      strengths: 'Gut',
+      areasForImprovement: 'Grammatik',
+      attemptId: 'attempt-1',
+      skill: 'sprechen',
+      teil: 1,
+      score: 78,
+      maxScore: 100,
+      status: 'completed',
+      durationSeconds: 150,
+      modelltestId: 'mt-1',
     });
+  });
+
+  it("adds the student's numbers per Teil, for this Modelltest only", async () => {
+    prisma.$queryRaw.mockResolvedValue([
+      {
+        teil: 1,
+        attempts: 2,
+        best_score: 80,
+        last_score: 70,
+        last_at: new Date('2026-09-02T10:00:00Z'),
+      },
+    ]);
+
+    const [teil1] = await service.getTeils(1, 'student-1');
+
+    expect(teil1).toMatchObject({
+      part: 1,
+      attempts: 2,
+      bestScore: 80,
+      lastScore: 70,
+    });
+    // The Modelltest id is one of the query's bound values.
+    expect(JSON.stringify(prisma.$queryRaw.mock.calls[0])).toContain('mt-1');
   });
 });

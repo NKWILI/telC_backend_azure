@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  ConflictException,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -58,6 +59,7 @@ describe('WritingService', () => {
     },
     writingAttempt: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
       create: jest.fn(),
     },
   };
@@ -246,6 +248,64 @@ describe('WritingService', () => {
       ).rejects.toThrow(UnprocessableEntityException);
 
       expect(mockQueue.add).not.toHaveBeenCalled();
+    });
+
+    describe('a named attempt (D29 offline queue)', () => {
+      const ID = '6f1c1f5e-2b1a-4b8e-9a51-0c0de0c0de00';
+      beforeEach(() => {
+        mockPrismaService.writingExercise.findUnique.mockResolvedValue({
+          id: 'uuid-exercise-1',
+          modelltest_id: null,
+        });
+        mockPrismaService.writingAttempt.create.mockResolvedValue({});
+        mockPrismaService.writingAttempt.findUnique.mockResolvedValue(null);
+      });
+
+      it('is stored under the id the app chose', async () => {
+        const result = await service.submit('student-1', {
+          exerciseId: 'uuid-exercise-1',
+          content: 'Text',
+          attemptId: ID,
+        });
+
+        expect(result.attemptId).toBe(ID);
+        expect(
+          mockPrismaService.writingAttempt.create.mock.calls[0][0].data
+            .attempt_id,
+        ).toBe(ID);
+      });
+
+      it('is neither stored nor corrected again when it arrives twice', async () => {
+        mockPrismaService.writingAttempt.findUnique.mockResolvedValue({
+          student_id: 'student-1',
+          status: 'completed',
+        });
+
+        const result = await service.submit('student-1', {
+          exerciseId: 'uuid-exercise-1',
+          content: 'Text',
+          attemptId: ID,
+        });
+
+        expect(result).toMatchObject({ attemptId: ID, status: 'completed' });
+        expect(mockPrismaService.writingAttempt.create).not.toHaveBeenCalled();
+        expect(mockQueue.add).not.toHaveBeenCalled();
+      });
+
+      it("is refused when the id is another student's attempt", async () => {
+        mockPrismaService.writingAttempt.findUnique.mockResolvedValue({
+          student_id: 'student-2',
+          status: 'pending',
+        });
+
+        await expect(
+          service.submit('student-1', {
+            exerciseId: 'uuid-exercise-1',
+            content: 'Text',
+            attemptId: ID,
+          }),
+        ).rejects.toThrow(ConflictException);
+      });
     });
   });
 });

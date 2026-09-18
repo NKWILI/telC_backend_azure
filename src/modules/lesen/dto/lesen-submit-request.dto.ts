@@ -7,6 +7,7 @@ import {
   IsOptional,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ClientAttemptId } from '../../student-activity/attempt-id.decorator';
 
 export class LesenSubmitRequestDto {
   @ApiPropertyOptional({ default: 1 })
@@ -54,9 +55,25 @@ export class LesenSubmitRequestDto {
   })
   @IsObject()
   answers!: Record<string, string>;
+
+  @ClientAttemptId()
+  attemptId?: string;
+
+  @ApiPropertyOptional({ example: 540, description: 'Time spent, in seconds.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  durationSeconds?: number;
 }
 
 export class LesenSubmitResponseDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The stored attempt: the id the app sent, or a new one. Absent for a guest, whose attempts are not kept.',
+  })
+  attemptId?: string;
+
   @ApiProperty()
   score!: number;
 }

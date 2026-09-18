@@ -10,6 +10,9 @@ import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 import type { ListeningExerciseDto } from './dto/listening-exercise.dto';
 import type { SubmitListeningDto } from './dto/submit-listening.dto';
 import type { SubmitListeningResponseDto } from './dto/submit-listening-response.dto';
+import { recordActivity } from '../student-activity/student-activity.writer';
+import { submitOnce } from '../student-activity/submit-once';
+import { historyFields, teilStats } from '../student-activity/student-history';
 
 const TEIL_IDS = ['1', '2', '3'];
 
@@ -38,7 +41,15 @@ export class ListeningService {
       }),
       this.getProgressByExercise(studentId, modelltest.id),
     ]);
+    const stats = await teilStats(
+      this.prisma,
+      studentId,
+      'HOEREN',
+      exercises.map((exercise) => exercise.part),
+      modelltest.id,
+    );
     return exercises.map((exercise) => ({
+      ...stats[exercise.part],
       id: String(exercise.part),
       title: exercise.title,
       subtitle: exercise.subtitle ?? '',
@@ -69,6 +80,8 @@ export class ListeningService {
         take: limit,
         select: {
           attempt_id: true,
+          exercise_id: true,
+          modelltest_id: true,
           created_at: true,
           completed_at: true,
           score: true,
@@ -76,7 +89,17 @@ export class ListeningService {
           duration_seconds: true,
         },
       });
-      return rows.map((row) => this.mapRowToAttemptDto(row));
+      return rows.map((row) => ({
+        ...historyFields('HOEREN', {
+          attemptId: row.attempt_id,
+          teil: Number(row.exercise_id),
+          score: row.score,
+          completedAt: row.completed_at ?? row.created_at,
+          durationSeconds: row.duration_seconds,
+          modelltestId: row.modelltest_id,
+        }),
+        ...this.mapRowToAttemptDto(row),
+      }));
     } catch (err) {
       this.logger.error(`Error in getSessions: ${(err as Error).message}`);
       return [];
@@ -149,20 +172,45 @@ export class ListeningService {
     );
     this.validateAnswers(dto.answers, answerKey);
     const score = this.computeScore(dto.answers, answerKey);
-    await this.prisma.listeningAttempt.create({
-      data: {
-        student_id: studentId,
-        exercise_id: dto.type,
-        listening_exercise_id: exercise.id,
-        status: 'completed',
-        score,
-        timed: dto.timed,
-        content_revision: dto.content_revision,
-        modelltest_id: exercise.modelltest_id,
-        completed_at: new Date(),
-      },
-    });
-    return { score, answerKey };
+    const completedAt = new Date();
+    const { attemptId, earlier } = await submitOnce(
+      studentId,
+      dto.attemptId,
+      (id) =>
+        this.prisma.listeningAttempt.findUnique({
+          where: { attempt_id: id },
+          select: { student_id: true, score: true },
+        }),
+      (id) =>
+        this.prisma.$transaction(async (tx) => {
+          await tx.listeningAttempt.create({
+            data: {
+              attempt_id: id,
+              student_id: studentId,
+              exercise_id: dto.type,
+              listening_exercise_id: exercise.id,
+              status: 'completed',
+              score,
+              timed: dto.timed,
+              content_revision: dto.content_revision,
+              modelltest_id: exercise.modelltest_id,
+              duration_seconds: dto.durationSeconds ?? null,
+              completed_at: completedAt,
+            },
+          });
+          await recordActivity(tx, {
+            studentId,
+            skill: 'HOEREN',
+            teil: part,
+            score,
+            durationSeconds: dto.durationSeconds,
+            modelltestId: exercise.modelltest_id,
+            attemptId: id,
+            completedAt,
+          });
+        }),
+    );
+    return { attemptId, score: earlier?.score ?? score, answerKey };
   }
 
   private async getModelltest(number: number): Promise<{ id: string }> {

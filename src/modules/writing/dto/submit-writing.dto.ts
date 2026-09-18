@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ClientAttemptId } from '../../student-activity/attempt-id.decorator';
 
 export class SubmitWritingDto {
   @ApiProperty({
@@ -20,4 +21,7 @@ export class SubmitWritingDto {
   @IsString()
   @MinLength(1, { message: 'content must not be empty' })
   content: string;
+
+  @ClientAttemptId()
+  attemptId?: string;
 }

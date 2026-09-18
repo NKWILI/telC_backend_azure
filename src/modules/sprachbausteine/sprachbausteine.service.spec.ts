@@ -29,14 +29,23 @@ describe('SprachbausteineService answer security', () => {
     words: [{ id: 'word-a', letter: 'a', content: 'Word', sortOrder: 0 }],
     gaps: [{ gapKey: '31', correctWordId: 'word-a', sortOrder: 0 }],
   };
-  const prisma = {
+  const prisma: any = {
     modelltest: { findUnique: jest.fn() },
     sprachbausteineExercise: { findFirst: jest.fn(), findUnique: jest.fn() },
     sprachbausteineTeil2Exercise: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
     },
-    sprachbausteineAttempt: { create: jest.fn(), findMany: jest.fn() },
+    sprachbausteineAttempt: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    student: {
+      findUnique: jest.fn(() => Promise.resolve({ id: 'student-1' })),
+    },
+    studentActivity: { create: jest.fn() },
+    $transaction: jest.fn((work: any) => work(prisma)),
   };
   let service: SprachbausteineService;
 
@@ -48,6 +57,8 @@ describe('SprachbausteineService answer security', () => {
     prisma.sprachbausteineTeil2Exercise.findFirst.mockResolvedValue(teil2);
     prisma.sprachbausteineAttempt.create.mockResolvedValue({});
     prisma.sprachbausteineAttempt.findMany.mockResolvedValue([]);
+    prisma.sprachbausteineAttempt.findUnique.mockResolvedValue(null);
+    prisma.studentActivity.create.mockResolvedValue({});
   });
 
   it('does not expose correct option or word IDs', async () => {
@@ -66,7 +77,7 @@ describe('SprachbausteineService answer security', () => {
       contentRevision: 'sb-1-v1',
       answers: { '21': '21a' },
     });
-    expect(result).toEqual({ score: 0 });
+    expect(result).toEqual({ attemptId: expect.any(String), score: 0 });
     expect(prisma.sprachbausteineAttempt.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         score: 0,
@@ -84,7 +95,19 @@ describe('SprachbausteineService answer security', () => {
       contentRevision: 'sb-2-v1',
       answers: { '31': 'wa' },
     });
-    expect(result).toEqual({ score: 100 });
+    expect(result).toEqual({ attemptId: expect.any(String), score: 100 });
+    // Recorded as Sprachbausteine activity for Teil 2, in the same transaction.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.studentActivity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        student_id: 'student-1',
+        skill: 'SPRACHBAUSTEINE',
+        teil: 2,
+        score: 100,
+        modelltest_id: 'mt-1',
+        attempt_id: result.attemptId,
+      }),
+    });
   });
 
   it('rejects unknown gap IDs and answer values outside the exercise options', async () => {

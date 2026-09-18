@@ -84,16 +84,16 @@ model Student {
   /// afterwards.
   grandfathered_access Boolean @default(false)
 
-  center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
+  center          Center?           @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
   exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
   oauth_accounts  OAuthAccount[]
+  activities      StudentActivity[]
 
   @@index([center_id])
   @@index([activation_key_hash])
-
   @@index([email])
   @@map("students")
 }
@@ -140,9 +140,9 @@ model Center {
   /// structured columns below. Nothing new writes them; they are dropped in a
   /// migration of their own once production is checked, because a column drop
   /// is not something to ride along with the feature that replaces it.
-  country    String?
-  city       String?
-  logo_url   String?
+  country  String?
+  city     String?
+  logo_url String?
 
   /// Where the school is, as ids rather than prose.
   ///
@@ -170,16 +170,15 @@ model Center {
   postal_code  String?
   street       String?
   house_number String?
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now()) @updatedAt
-
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
 
   users            CenterUser[]
   activation_codes ActivationCode[]
   payments         Payment[]
-  seats        CenterSeat[]
-  students     Student[]
-  subscription CenterSubscription?
+  seats            CenterSeat[]
+  students         Student[]
+  subscription     CenterSubscription?
 
   @@map("centers")
 }
@@ -192,9 +191,9 @@ model Center {
 /// direction is granting access nobody paid for. These timestamps are the
 /// facts; `SubscriptionPolicyService` derives the status from them on read.
 model CenterSubscription {
-  id         String     @id @default(uuid())
-  center_id  String     @unique
-  plan       CenterPlan @default(TRIAL)
+  id        String     @id @default(uuid())
+  center_id String     @unique
+  plan      CenterPlan @default(TRIAL)
 
   /// Set by the first student activation (Phase 4), not at registration.
   trial_started_at DateTime?
@@ -203,8 +202,8 @@ model CenterSubscription {
   /// only to a lapsed paid period — an expired trial blocks immediately.
   paid_until       DateTime?
 
-  created_at DateTime   @default(now())
-  updated_at DateTime   @default(now()) @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
 
   center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
 
@@ -283,13 +282,13 @@ model ActivationCode {
   /// The student who redeemed it, and what they were called at that moment.
   /// Name and email are copied rather than joined so the center still sees who
   /// held a seat after the student is gone; the id is the link that matters.
-  student_id    String?
-  linked_name   String?
-  linked_email  String?
-  connected_at  DateTime?
+  student_id   String?
+  linked_name  String?
+  linked_email String?
+  connected_at DateTime?
   /// Where the redemption came from. A center holds the code and can redeem it
   /// itself, so this is the audit trail that makes that visible afterwards.
-  connected_ip  String?
+  connected_ip String?
 
   /// When the seat stops working, compared on read. Null means it follows the
   /// center's subscription rather than a date of its own — which is what every
@@ -324,22 +323,22 @@ model ActivationCode {
 /// move between students — without it, a school could rotate one paid seat
 /// through a whole class and nothing would show it.
 model ActivationCodeEvent {
-  id              String               @id @default(uuid())
-  code_id         String
-  center_id       String
+  id             String               @id @default(uuid())
+  code_id        String
+  center_id      String
   /// The manager who acted. Null would mean the system acted; nothing does yet.
-  center_user_id  String?
-  from_status     ActivationCodeStatus
-  to_status       ActivationCodeStatus
+  center_user_id String?
+  from_status    ActivationCodeStatus
+  to_status      ActivationCodeStatus
   /// Who held the seat at that moment, so a deactivation still names the
   /// student it cut off after the code has been handed to someone else.
-  student_id      String?
+  student_id     String?
   /// Set on a RESET, and only there: the value the code had before it was
   /// replaced (D39). Filled means "this event is a reset" — the reset limit
   /// counts these rows, never status moves, so a reset cannot be mistaken for
   /// a deactivate-then-activate or missed because the statuses matched.
-  previous_code   String?
-  created_at      DateTime             @default(now())
+  previous_code  String?
+  created_at     DateTime             @default(now())
 
   code ActivationCode @relation(fields: [code_id], references: [id], onDelete: Cascade)
 
@@ -439,16 +438,16 @@ model PaymentLine {
 }
 
 model CenterUser {
-  id           String         @id @default(uuid())
-  center_id    String
-  role         CenterUserRole @default(OWNER)
-  first_name   String
-  last_name    String
-  email        String         @unique
+  id         String         @id @default(uuid())
+  center_id  String
+  role       CenterUserRole @default(OWNER)
+  first_name String
+  last_name  String
+  email      String         @unique
   /// The manager's own number, not the school's public line, and collected
   /// during onboarding rather than at registration. Nullable for that reason.
   /// This is who gets contacted about a late payment or a locked account.
-  phone        String?
+  phone      String?
 
   /// Where the manager is, which is not necessarily where the school is — a
   /// chain's owner may sit in Yaoundé while the school is in Douala. Same
@@ -459,9 +458,9 @@ model CenterUser {
   region_id    String?
   city_id      String?
   city_other   String?
-  created_at   DateTime       @default(now())
-  updated_at   DateTime       @default(now()) @updatedAt
-  last_seen_at DateTime       @default(now())
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now()) @updatedAt
+  last_seen_at DateTime @default(now())
 
   password_hash              String
   email_verified             Boolean   @default(false)
@@ -1064,4 +1063,80 @@ model AiUsage {
   /// equality, created_at second because it is the range.
   @@index([student_id, operation, created_at])
   @@map("ai_usage")
+}
+
+/// The five skills of the telc B1 exam, as a student practises them.
+enum Skill {
+  HOEREN
+  LESEN
+  SPRACHBAUSTEINE
+  SCHREIBEN
+  SPRECHEN
+}
+
+/// One row per completed attempt, the same shape for every skill (D26).
+///
+/// What the dashboard, the app's history and its home screen read. The
+/// detailed attempt stays in its own table; this is the summary, written in
+/// the same transaction so neither can exist without the other.
+///
+/// A Writing attempt lands here when its correction finishes with a real
+/// score, not at submit: until then there is nothing to summarise.
+model StudentActivity {
+  id               String   @id @default(uuid())
+  student_id       String
+  skill            Skill
+  teil             Int
+  score            Int
+  /// Carried rather than assumed, so a skill scored on another scale later
+  /// never needs every reader to know it. 100 for every skill today.
+  max_score        Int
+  duration_seconds Int?
+  /// Null when the attempt belongs to no Modelltest (historic listening rows).
+  modelltest_id    String?  @db.Uuid
+  /// The detailed row, in the table the skill names.
+  attempt_id       String
+  /// When the attempt was completed.
+  created_at       DateTime @default(now())
+
+  student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([skill, attempt_id])
+  @@index([student_id, created_at])
+  @@index([student_id, skill, created_at])
+  @@map("student_activities")
+}
+
+/// A scored Lesen Teil. Lesen stored nothing before phase 11; the old
+/// LesenSession / LesenResult tables belong to a design nothing uses.
+model LesenAttempt {
+  attempt_id       String   @id @default(uuid())
+  student_id       String
+  teil_id          String
+  modelltest_id    String   @db.Uuid
+  score            Int
+  answers          Json
+  duration_seconds Int?
+  created_at       DateTime @default(now())
+
+  @@index([student_id, teil_id])
+  @@map("lesen_attempts")
+}
+
+/// An evaluated speaking transcript. `evaluate` stored nothing before phase 11.
+model SpeakingAttempt {
+  attempt_id       String   @id @default(uuid())
+  student_id       String
+  teil_number      Int
+  /// Null only for rows stored before the column existed.
+  modelltest_id    String?  @db.Uuid
+  transcript       String
+  score            Int
+  /// The evaluation as returned to the student: sub-scores, text, corrections.
+  evaluation       Json
+  duration_seconds Int?
+  created_at       DateTime @default(now())
+
+  @@index([student_id, teil_number])
+  @@map("speaking_attempts")
 }

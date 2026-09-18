@@ -13,8 +13,39 @@ import type {
   LesenSubmitResponseDto,
 } from './dto';
 import type { LesenSubmitRequestDto } from './dto/lesen-submit-request.dto';
+import { recordActivity } from '../student-activity/student-activity.writer';
+import { submitOnce } from '../student-activity/submit-once';
+import { historyFields, teilStats } from '../student-activity/student-history';
+import type { ExerciseAttemptDto } from '../writing/dto/exercise-attempt.dto';
+import type { ExerciseTypeDto } from '../writing/dto/exercise-type.dto';
 
 const LETTERS = ['a', 'b', 'c'];
+
+const TEIL_IDS = ['1', '2', '3'];
+
+const TEIL_CATALOG: Record<string, Omit<ExerciseTypeDto, 'progress'>> = {
+  '1': {
+    id: '1',
+    title: 'Teil 1',
+    subtitle: 'Globalverstehen',
+    prompt: 'Ordnen Sie jedem Text die passende Überschrift zu.',
+    part: 1,
+  },
+  '2': {
+    id: '2',
+    title: 'Teil 2',
+    subtitle: 'Detailverstehen',
+    prompt: 'Wählen Sie für jede Aufgabe die richtige Antwort.',
+    part: 2,
+  },
+  '3': {
+    id: '3',
+    title: 'Teil 3',
+    subtitle: 'Selektives Verstehen',
+    prompt: 'Ordnen Sie jeder Situation die passende Anzeige zu.',
+    part: 3,
+  },
+};
 
 @Injectable()
 export class LesenService {
@@ -180,7 +211,14 @@ export class LesenService {
     };
   }
 
-  async submit(dto: LesenSubmitRequestDto): Promise<LesenSubmitResponseDto> {
+  /**
+   * Scores a Teil and, for a student, stores it (phase 11: Lesen used to score
+   * and forget). A guest is scored and nothing is kept, as before.
+   */
+  async submit(
+    caller: { studentId: string; isGuest?: boolean },
+    dto: LesenSubmitRequestDto,
+  ): Promise<LesenSubmitResponseDto> {
     const modelltest = await this.prisma.modelltest.findUnique({
       where: { number: dto.modelltestNumber ?? 1 },
       select: { id: true },
@@ -196,12 +234,117 @@ export class LesenService {
     const correct = Object.entries(answerKey).filter(
       ([id, answer]) => dto.answers[id] === answer,
     ).length;
-    return {
-      score:
-        answerKey && Object.keys(answerKey).length
-          ? Math.round((correct / Object.keys(answerKey).length) * 100)
-          : 0,
-    };
+    const score =
+      answerKey && Object.keys(answerKey).length
+        ? Math.round((correct / Object.keys(answerKey).length) * 100)
+        : 0;
+
+    if (caller.isGuest) return { score };
+
+    const { studentId } = caller;
+    const completedAt = new Date();
+    const { attemptId, earlier } = await submitOnce(
+      studentId,
+      dto.attemptId,
+      (id) =>
+        this.prisma.lesenAttempt.findUnique({
+          where: { attempt_id: id },
+          select: { student_id: true, score: true },
+        }),
+      (id) =>
+        this.prisma.$transaction(async (tx) => {
+          await tx.lesenAttempt.create({
+            data: {
+              attempt_id: id,
+              student_id: studentId,
+              teil_id: dto.teil_id,
+              modelltest_id: modelltest.id,
+              score,
+              answers: dto.answers,
+              duration_seconds: dto.durationSeconds ?? null,
+              created_at: completedAt,
+            },
+          });
+          await recordActivity(tx, {
+            studentId,
+            skill: 'LESEN',
+            teil: Number(dto.teil_id),
+            score,
+            durationSeconds: dto.durationSeconds,
+            modelltestId: modelltest.id,
+            attemptId: id,
+            completedAt,
+          });
+        }),
+    );
+    return { attemptId, score: earlier?.score ?? score };
+  }
+
+  /**
+   * GET /api/reading/teils — the three Teils with the student's numbers, in
+   * the shape every module's `/teils` has (D29). `progress` is 100 once a
+   * Teil has been completed, as in the other modules.
+   */
+  async getTeils(studentId: string): Promise<ExerciseTypeDto[]> {
+    const stats = await teilStats(
+      this.prisma,
+      studentId,
+      'LESEN',
+      TEIL_IDS.map(Number),
+    );
+    return TEIL_IDS.map((id) => ({
+      ...stats[Number(id)],
+      ...TEIL_CATALOG[id],
+      progress: stats[Number(id)].attempts > 0 ? 100 : 0,
+    }));
+  }
+
+  /** GET /api/reading/sessions — the student's scored Teils, newest first. */
+  async getSessions(
+    studentId: string,
+    teilNumber?: number,
+    limit = 50,
+  ): Promise<ExerciseAttemptDto[]> {
+    try {
+      const teilId =
+        teilNumber !== undefined && TEIL_IDS.includes(String(teilNumber))
+          ? String(teilNumber)
+          : undefined;
+      const rows = await this.prisma.lesenAttempt.findMany({
+        where: {
+          student_id: studentId,
+          ...(teilId ? { teil_id: teilId } : {}),
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        select: {
+          attempt_id: true,
+          teil_id: true,
+          modelltest_id: true,
+          score: true,
+          duration_seconds: true,
+          created_at: true,
+        },
+      });
+      return rows.map((row) => ({
+        ...historyFields('LESEN', {
+          attemptId: row.attempt_id,
+          teil: Number(row.teil_id),
+          score: row.score,
+          completedAt: row.created_at,
+          durationSeconds: row.duration_seconds,
+          modelltestId: row.modelltest_id,
+        }),
+        id: row.attempt_id,
+        date: row.created_at.toISOString(),
+        dateLabel: formatDateLabel(row.created_at),
+        score: row.score,
+        durationSeconds: row.duration_seconds ?? undefined,
+      }));
+    } catch (err) {
+      this.logger.error(`Error in getSessions: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   private async getSubmissionRules(
@@ -310,4 +453,20 @@ export class LesenService {
       }
     }
   }
+}
+
+/** Heute / Gestern / dd.mm.yyyy, as the other modules label a date. */
+function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (day.getTime() === today.getTime()) return 'Heute';
+  if (day.getTime() === yesterday.getTime()) return 'Gestern';
+  return date.toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
