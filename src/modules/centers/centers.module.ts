@@ -31,6 +31,8 @@ import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
 import { CenterTrialService } from './center-trial.service';
+import { CenterActivationCodesController } from './center-activation-codes.controller';
+import { CenterActivationCodesService } from './center-activation-codes.service';
 
 @Module({
   // SubscriptionAccessModule imports nothing, so this cannot close a cycle
@@ -38,6 +40,7 @@ import { CenterTrialService } from './center-trial.service';
   imports: [AuthModule, SubscriptionAccessModule],
   controllers: [
     CenterAuthController,
+    CenterActivationCodesController,
     CenterProfileController,
     CenterSubscriptionController,
     CenterStudentsController,
@@ -51,6 +54,7 @@ import { CenterTrialService } from './center-trial.service';
     CenterProfileService,
     CenterSubscriptionService,
     CenterTrialService,
+    CenterActivationCodesService,
     SubscriptionPolicyService,
     PricingService,
     CenterSeatsService,

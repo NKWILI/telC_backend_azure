@@ -293,9 +293,36 @@ model ActivationCode {
 
   /// The Users page lists a center's codes by state; redemption looks one up
   /// by its value, which the unique index above already covers.
+  events ActivationCodeEvent[]
+
   @@index([center_id, status])
   @@index([student_id])
   @@map("activation_codes")
+}
+
+/// Every change a center makes to one of its codes.
+///
+/// Append-only. It answers "who cut this student off, and when" after the
+/// fact, and it is the count behind any future limit on how often one seat may
+/// move between students — without it, a school could rotate one paid seat
+/// through a whole class and nothing would show it.
+model ActivationCodeEvent {
+  id              String               @id @default(uuid())
+  code_id         String
+  center_id       String
+  /// The manager who acted. Null would mean the system acted; nothing does yet.
+  center_user_id  String?
+  from_status     ActivationCodeStatus
+  to_status       ActivationCodeStatus
+  /// Who held the seat at that moment, so a deactivation still names the
+  /// student it cut off after the code has been handed to someone else.
+  student_id      String?
+  created_at      DateTime             @default(now())
+
+  code ActivationCode @relation(fields: [code_id], references: [id], onDelete: Cascade)
+
+  @@index([code_id, created_at])
+  @@map("activation_code_events")
 }
 
 enum PaymentStatus {

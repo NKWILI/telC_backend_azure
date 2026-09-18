@@ -1,4 +1,47 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsOptional } from 'class-validator';
+
+/**
+ * Filters for the Users page. Each takes one value or `all`, which is what the
+ * page's dropdowns send; absent means the same as `all`.
+ */
+export class ListActivationCodesQueryDto {
+  @ApiPropertyOptional({
+    enum: ['activated', 'connected', 'deactivated', 'all'],
+  })
+  @IsOptional()
+  @IsIn(['activated', 'connected', 'deactivated', 'all'])
+  status?: 'activated' | 'connected' | 'deactivated' | 'all';
+
+  @ApiPropertyOptional({ enum: ['start', 'pro', 'premium', 'all'] })
+  @IsOptional()
+  @IsIn(['start', 'pro', 'premium', 'all'])
+  planId?: 'start' | 'pro' | 'premium' | 'all';
+}
+
+export class SeatsByPlanDto {
+  @ApiProperty({ example: 7 }) start: number;
+  @ApiProperty({ example: 3 }) pro: number;
+  @ApiProperty({ example: 0 }) premium: number;
+}
+
+export class SeatSummaryDto {
+  @ApiProperty({
+    type: SeatsByPlanDto,
+    description: 'Seats held per plan, from the seat rows.',
+  })
+  bought: SeatsByPlanDto;
+
+  @ApiProperty({
+    type: SeatsByPlanDto,
+    description:
+      'Codes a student has redeemed, per plan. Counted from the codes themselves, so it always matches the list.',
+  })
+  used: SeatsByPlanDto;
+
+  @ApiProperty({ example: 10 }) boughtTotal: number;
+  @ApiProperty({ example: 6 }) usedTotal: number;
+}
 
 /** A code as every route returns it. Mirrors `ActivationCodeView`. */
 export class ActivationCodeDto {

@@ -72,13 +72,26 @@ const PAID_STATUSES = new Set<CenterSubscriptionStatus>([
   'GRACE_PERIOD',
 ]);
 
+/**
+ * Whether a center has finalized its account: started a trial, or paid.
+ *
+ * Exported because two places ask it — the dashboard badge and the lock on
+ * paid actions — and a second copy of the rule is the one that would drift.
+ *
+ * Finalization is a door walked through once, not a state that lapses. A trial
+ * that ended or a payment that ran out leaves the account unpaid — but sending
+ * it back through the wizard would ask a center to re-enter what it already
+ * gave, when what it needs to do is pay.
+ */
+export function isAccountFinalized(facts: {
+  trialStartedAt: Date | null;
+  paidUntil: Date | null;
+}): boolean {
+  return facts.trialStartedAt !== null || facts.paidUntil !== null;
+}
+
 export function deriveAccountState(input: AccountStateInput): AccountState {
-  const onboardingCompleted =
-    // Finalization is a door walked through once, not a state that lapses.
-    // A trial that ended or a payment that ran out leaves the account
-    // unpaid — but sending it back through the wizard would ask a center to
-    // re-enter what it already gave, when what it needs to do is pay.
-    input.trialStartedAt !== null || input.paidUntil !== null;
+  const onboardingCompleted = isAccountFinalized(input);
 
   return {
     paymentStatus: resolvePaymentStatus(input.subscriptionStatus),
