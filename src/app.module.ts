@@ -14,6 +14,7 @@ import { NewsletterModule } from './modules/newsletter/newsletter.module';
 import { RateLimitModule } from './shared/rate-limit.module';
 import { CentersModule } from './modules/centers/centers.module';
 import { LocationsModule } from './modules/locations/locations.module';
+import { PlansModule } from './modules/plans/plans.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { LocationsModule } from './modules/locations/locations.module';
     LesenModule,
     NewsletterModule,
     LocationsModule,
+    PlansModule,
   ],
   controllers: [AppController],
   providers: [AppService],
