@@ -26,6 +26,16 @@ import {
 } from '../../shared/services/student-entitlement.service';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Devices a student may be signed in on at once (D21).
+ *
+ * A student is one person, so two — typically a phone and a laptop. Every
+ * extra device is mostly an invitation to share one seat with a class. This
+ * does not stop sharing by taking turns; the per-student AI quota is what
+ * keeps a shared account from multiplying cost.
+ */
+const MAX_ACTIVE_STUDENT_DEVICES = 2;
 const PASSWORD_RESET_TOKEN_TTL_MS = 10 * 60 * 1000;
 const VERIFICATION_RESEND_COOLDOWN_MS = 2 * 60 * 1000;
 
@@ -444,10 +454,14 @@ export class AuthService {
           where: { student_id: studentId, revoked_at: null },
         });
 
-        if (!existingSession && activeCount >= 3) {
+        // A new device beyond the limit is let in, never refused: without a
+        // "my devices" screen a refusal would leave the student no way
+        // forward. It signs out the device used longest ago — not the one
+        // created first, which is often the laptop used every day.
+        if (!existingSession && activeCount >= MAX_ACTIVE_STUDENT_DEVICES) {
           const oldestSession = await tx.deviceSession.findFirst({
             where: { student_id: studentId, revoked_at: null },
-            orderBy: { created_at: 'asc' },
+            orderBy: [{ last_used_at: 'asc' }, { created_at: 'asc' }],
             select: { id: true },
           });
 
