@@ -334,6 +334,11 @@ model ActivationCodeEvent {
   /// Who held the seat at that moment, so a deactivation still names the
   /// student it cut off after the code has been handed to someone else.
   student_id      String?
+  /// Set on a RESET, and only there: the value the code had before it was
+  /// replaced (D39). Filled means "this event is a reset" — the reset limit
+  /// counts these rows, never status moves, so a reset cannot be mistaken for
+  /// a deactivate-then-activate or missed because the statuses matched.
+  previous_code   String?
   created_at      DateTime             @default(now())
 
   code ActivationCode @relation(fields: [code_id], references: [id], onDelete: Cascade)

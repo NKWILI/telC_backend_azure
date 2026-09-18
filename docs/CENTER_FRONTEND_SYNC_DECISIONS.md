@@ -861,7 +861,8 @@ the same day without any scheduled job (D2).
 ## D18. The manager's activation-code routes
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** built (phase 9). `activate` was **removed in phase 9b** and replaced
+by `reset` (D39)
 
 ### Routes
 
@@ -1007,15 +1008,27 @@ so it never rides along with the feature that replaces it.
 
 **Decided:** 2026-09-17 (2 devices); **changed 2026-09-18 to 1**, by the
 backend dev and Herman
-**Status:** built with 2 (`MAX_ACTIVE_STUDENT_DEVICES = 2` in
-`auth.service.ts`); the change to 1 is not built
+**Status:** built (phase 9b, 2026-09-19): `MAX_ACTIVE_STUDENT_DEVICES = 1`.
+A new login removes as many older sessions as needed to get back to one, so a
+student who signed in under the older, larger limit is brought down to one on
+their next login.
 
 A student account keeps **1 active session**. A **new login succeeds** and the
 **previous session is revoked** — no "manage my devices" screen (D8).
 
-The revoked device's **next request** gets `401 SESSION_REVOKED` (the guard
-checks revocation on every request, not only when the 15-minute token
-expires), and the app logs out locally.
+The revoked device's **next request** gets a `401`, and the app logs out
+locally. (The guard reports it as `INVALID_ACCESS_TOKEN`, not
+`SESSION_REVOKED`; the app treats any 401 the same way.)
+
+**The Valkey gap, fixed (phase 9b).** The student guard checks Valkey first and
+reads the database only when Valkey has no answer. Valkey is **not deployed on
+DigitalOcean**, so in production the guard always reads the database, finds the
+evicted session gone, and the sign-out is already immediate. The gap existed
+only with Valkey running: the guard trusted it, skipped the database, and
+eviction marked nothing there — so an evicted device kept working until its
+15-minute token expired. Eviction now also marks the evicted sessions revoked in
+Valkey, after the transaction commits, so the rule holds whether Valkey is
+running or not.
 
 **Why 1:** it makes account sharing painful. Two students on one account keep
 logging each other out, which is the deterrent. The AI quota, counted per
@@ -1611,7 +1624,13 @@ The thresholds (7 days, 40, 45) are the ones the dashboard already uses. The
 ## D39. Resetting an activation code (moving a seat to another student)
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B11)
-**Status:** decided (limit included), not built
+**Status:** reset and limit **built (phase 9b, 2026-09-19)**; the data erase is
+**not built** — it needs `StudentActivity` and the module history (D26, D29)
+and follows phase 11. As built: a reset is counted by the event's
+`previous_code` being filled; a code is "used" when there is a `CONNECTED`
+event since its last reset; redemption also claims by value, so a reset in
+flight cannot hand the seat to someone typing the old value. `activate` is
+removed
 
 ### Why a reset, not "deactivate then activate"
 

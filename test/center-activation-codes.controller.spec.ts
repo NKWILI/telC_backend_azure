@@ -30,8 +30,8 @@ describe('CenterActivationCodesController contract', () => {
     codes = {
       list: jest.fn().mockResolvedValue([]),
       seats: jest.fn().mockResolvedValue({}),
-      activate: jest.fn().mockResolvedValue({ id: codeId }),
       deactivate: jest.fn().mockResolvedValue({ id: codeId }),
+      reset: jest.fn().mockResolvedValue({ id: codeId }),
     };
 
     const module = await Test.createTestingModule({
@@ -102,12 +102,33 @@ describe('CenterActivationCodesController contract', () => {
     await request(app.getHttpServer())
       .post(`/api/centers/me/activation-codes/${codeId}/deactivate`)
       .expect(403);
+    expect(codes.deactivate).not.toHaveBeenCalled();
+  });
+
+  // Reset replaced it (D39): activate put the same value back in the pool,
+  // and the previous student still knew it.
+  it('no longer offers activate', async () => {
     await request(app.getHttpServer())
       .post(`/api/centers/me/activation-codes/${codeId}/activate`)
+      .expect(404);
+  });
+
+  it('resets a code for the signed center only', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/centers/me/activation-codes/${codeId}/reset`)
+      .expect(200);
+
+    expect(codes.reset).toHaveBeenCalledWith(signedIdentity, codeId);
+  });
+
+  it('stops a blocked center from resetting a code', async () => {
+    blocked = true;
+
+    await request(app.getHttpServer())
+      .post(`/api/centers/me/activation-codes/${codeId}/reset`)
       .expect(403);
 
-    expect(codes.deactivate).not.toHaveBeenCalled();
-    expect(codes.activate).not.toHaveBeenCalled();
+    expect(codes.reset).not.toHaveBeenCalled();
   });
 
   it('acts on a code for the signed center only', async () => {

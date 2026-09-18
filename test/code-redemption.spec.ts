@@ -90,7 +90,14 @@ describe('CodeRedemptionService.redeem', () => {
     await service.redeem(student, 'LQ-7K2P-94QX', ip);
 
     const claim = prisma.activationCode.updateMany.mock.calls[0][0];
-    expect(claim.where).toEqual({ id: 'code-1', status: 'ACTIVATED' });
+    // The value too, not only the row and status: a manager resetting this
+    // code between the lookup and this write gives it a new value, and the
+    // student must not end up holding a seat by a value that no longer exists.
+    expect(claim.where).toEqual({
+      id: 'code-1',
+      status: 'ACTIVATED',
+      code: 'LQ-7K2P-94QX',
+    });
     expect(claim.data).toEqual(
       expect.objectContaining({
         status: 'CONNECTED',

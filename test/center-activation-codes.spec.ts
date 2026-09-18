@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/require-await */
 import {
   ConflictException,
   ForbiddenException,
@@ -46,7 +46,12 @@ describe('CenterActivationCodesService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         groupBy: jest.fn().mockResolvedValue([]),
       },
-      activationCodeEvent: { create: jest.fn().mockResolvedValue({}) },
+      activationCodeEvent: {
+        create: jest.fn().mockResolvedValue({}),
+        // The code history the reset limit is counted from. Empty: nothing
+        // has happened to the code yet.
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       student: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
       centerSubscription: {
@@ -87,6 +92,42 @@ describe('CenterActivationCodesService', () => {
 
       expect(prisma.activationCode.findMany.mock.calls[0][0].where).toEqual({
         center_id: 'center-1',
+      });
+    });
+
+    // D39: the confirmation shows how many resets are left, so the list
+    // carries it — worked out from the log, for every listed code at once.
+    it('reports each code reset allowance, read in one query for the whole list', async () => {
+      prisma.activationCode.findMany.mockResolvedValue([
+        codeRow({ id: 'code-1' }),
+        codeRow({ id: 'code-2', code: 'LQ-2222-2222' }),
+      ]);
+      prisma.activationCodeEvent.findMany.mockResolvedValue([
+        {
+          code_id: 'code-2',
+          created_at: new Date('2027-01-05T00:00:00.000Z'),
+          to_status: 'CONNECTED',
+          previous_code: null,
+        },
+      ]);
+
+      const codes = await service.list(identity, {});
+
+      expect(prisma.activationCodeEvent.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.activationCodeEvent.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { code_id: { in: ['code-1', 'code-2'] } },
+        }),
+      );
+      // Never redeemed: a reset is free and does not count.
+      expect(codes[0].reset).toEqual(
+        expect.objectContaining({ counted: false }),
+      );
+      // Redeemed during the trial: a reset counts, and one is left.
+      expect(codes[1].reset).toEqual({
+        counted: true,
+        remaining: 1,
+        availableAt: null,
       });
     });
 
@@ -216,40 +257,124 @@ describe('CenterActivationCodesService', () => {
     });
   });
 
-  describe('activating', () => {
-    it('gives a deactivated code back, emptied, so the seat can go to someone new', async () => {
-      prisma.activationCode.findFirst.mockResolvedValue(
-        codeRow({ status: 'DEACTIVATED', linked_name: 'Amina Nguema' }),
-      );
+  /**
+   * D39: a seat is handed on by giving it a NEW value. Deactivate-then-
+   * activate put the same value back, and the previous student still knew it.
+   */
+  describe('resetting a code', () => {
+    const connectedToAmina = () =>
+      codeRow({
+        status: 'CONNECTED',
+        student_id: 'student-1',
+        linked_name: 'Amina Nguema',
+        linked_email: 'amina@example.com',
+        connected_at: new Date('2027-01-02T00:00:00.000Z'),
+        connected_ip: '41.202.1.1',
+      });
+    const resetWrite = () => prisma.activationCode.updateMany.mock.calls[0][0];
 
-      await service.activate(identity, 'code-1');
-
-      expect(prisma.activationCode.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            id: 'code-1',
-            center_id: 'center-1',
-            status: { in: ['DEACTIVATED'] },
-          },
-          data: {
-            status: 'ACTIVATED',
-            student_id: null,
-            linked_name: null,
-            linked_email: null,
-            connected_at: null,
-            connected_ip: null,
-          },
-        }),
-      );
+    beforeEach(() => {
+      prisma.activationCode.findFirst
+        .mockResolvedValueOnce(connectedToAmina())
+        .mockResolvedValueOnce(codeRow({ code: 'LQ-NEW2-VALU' }));
     });
 
-    it('refuses to activate a code a student is using', async () => {
-      prisma.activationCode.findFirst.mockResolvedValue(
-        codeRow({ status: 'CONNECTED' }),
-      );
+    it('draws a new value on the same row and empties the seat', async () => {
+      const code = await service.reset(identity, 'code-1');
 
-      await expect(service.activate(identity, 'code-1')).rejects.toThrow(
-        new ConflictException('INVALID_CODE_TRANSITION'),
+      const write = resetWrite();
+      // Predicated on the value and status it was read with, so a redemption
+      // or a second reset landing in between is noticed, not overwritten.
+      expect(write.where).toEqual({
+        id: 'code-1',
+        center_id: 'center-1',
+        code: 'LQ-7K2P-94QX',
+        status: 'CONNECTED',
+      });
+      expect(write.data).toEqual({
+        code: expect.stringMatching(/^LQ-[A-Z0-9]{4}-[A-Z0-9]{4}$/),
+        status: 'ACTIVATED',
+        student_id: null,
+        linked_name: null,
+        linked_email: null,
+        connected_at: null,
+        connected_ip: null,
+      });
+      expect(write.data.code).not.toBe('LQ-7K2P-94QX');
+      expect(code.status).toBe('activated');
+    });
+
+    it('cuts the connected student off, keeping their tier', async () => {
+      await service.reset(identity, 'code-1');
+
+      expect(prisma.student.updateMany).toHaveBeenCalledWith({
+        where: { id: 'student-1', center_id: 'center-1' },
+        data: { center_id: null },
+      });
+    });
+
+    it('logs the old value, which is what marks the event as a reset', async () => {
+      await service.reset(identity, 'code-1');
+
+      expect(prisma.activationCodeEvent.create).toHaveBeenCalledWith({
+        data: {
+          code_id: 'code-1',
+          center_id: 'center-1',
+          center_user_id: 'owner-1',
+          from_status: 'CONNECTED',
+          to_status: 'ACTIVATED',
+          student_id: 'student-1',
+          previous_code: 'LQ-7K2P-94QX',
+        },
+      });
+    });
+
+    it('refuses a third reset of a used seat in the period, saying when more come', async () => {
+      const now = Date.now();
+      const at = (daysAgo: number) => new Date(now - daysAgo * 86_400_000);
+      prisma.centerSubscription.findUnique.mockResolvedValue({
+        trial_started_at: null,
+        trial_ends_at: null,
+        paid_until: new Date(now + 10 * 86_400_000),
+      });
+      prisma.activationCodeEvent.findMany.mockResolvedValue([
+        { created_at: at(9), to_status: 'CONNECTED', previous_code: null },
+        { created_at: at(8), to_status: 'ACTIVATED', previous_code: 'LQ-A' },
+        { created_at: at(7), to_status: 'CONNECTED', previous_code: null },
+        { created_at: at(6), to_status: 'ACTIVATED', previous_code: 'LQ-B' },
+        { created_at: at(5), to_status: 'CONNECTED', previous_code: null },
+      ]);
+
+      const error = await service
+        .reset(identity, 'code-1')
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        message: 'CODE_RESET_LIMIT_REACHED',
+        resetsAvailableAt: expect.any(Date),
+      });
+      expect(prisma.activationCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('answers a code that changed underneath it, instead of overwriting', async () => {
+      prisma.activationCode.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.reset(identity, 'code-1')).rejects.toThrow(
+        new ConflictException('CODE_CHANGED'),
+      );
+      expect(prisma.activationCodeEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('is refused to a center that has not finalized its account', async () => {
+      prisma.centerSubscription.findUnique.mockResolvedValue({
+        trial_started_at: null,
+        trial_ends_at: null,
+        paid_until: null,
+      });
+
+      await expect(service.reset(identity, 'code-1')).rejects.toThrow(
+        new ForbiddenException('ACCOUNT_NOT_FINALIZED'),
       );
     });
   });

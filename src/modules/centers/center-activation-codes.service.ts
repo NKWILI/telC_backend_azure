@@ -24,6 +24,15 @@ import {
   type ActivationCodeView,
 } from './activation-code-view';
 import { isAccountFinalized } from './center-account-state';
+import { generateActivationCode } from './activation-code-format';
+import { resetAllowance, type SubscriptionFacts } from './code-reset-allowance';
+import { isUniqueViolationOn } from '../../shared/prisma-errors';
+
+/**
+ * How many times a colliding new value is redrawn. At 30^8 combinations one
+ * clash is already unlikely; three in a row is not chance.
+ */
+const CODE_DRAWS = 3;
 
 type SignedCenterIdentity = Pick<
   CenterAccessTokenPayload,
@@ -39,6 +48,19 @@ export type CodeStatusFilter =
 export interface CodeListFilters {
   status?: CodeStatusFilter;
   planId?: PlanId | 'all';
+}
+
+/**
+ * A code as the Users page lists it: the view, plus what a reset would cost.
+ * Only the list carries it — the confirmation shows it before the manager
+ * acts, and every other route answers with the plain view.
+ */
+export interface ListedActivationCode extends ActivationCodeView {
+  reset: {
+    counted: boolean;
+    remaining: number;
+    availableAt: Date | null;
+  };
 }
 
 export interface SeatSummary {
@@ -85,20 +107,6 @@ const DEACTIVATE: Transition = {
   alsoWrite: {},
 };
 
-const ACTIVATE: Transition = {
-  from: [ActivationCodeStatus.DEACTIVATED],
-  to: ActivationCodeStatus.ACTIVATED,
-  // A reactivated code is a free seat again, so it forgets who held it. The
-  // history is not lost: it lives in the event log.
-  alsoWrite: {
-    student_id: null,
-    linked_name: null,
-    linked_email: null,
-    connected_at: null,
-    connected_ip: null,
-  },
-};
-
 /**
  * The Users page: a center's codes, its seat count, and the two things it may
  * do to a code.
@@ -120,7 +128,7 @@ export class CenterActivationCodesService {
   async list(
     identity: SignedCenterIdentity,
     filters: CodeListFilters,
-  ): Promise<ActivationCodeView[]> {
+  ): Promise<ListedActivationCode[]> {
     const where: Prisma.ActivationCodeWhereInput = {
       center_id: identity.centerId,
     };
@@ -138,7 +146,57 @@ export class CenterActivationCodesService {
       orderBy: { created_at: 'desc' },
     });
 
-    return rows.map(toActivationCodeView);
+    if (rows.length === 0) {
+      return [];
+    }
+
+    // One query for every listed code's history, not one per code: the page
+    // lists a whole school, and the reset allowance of each comes from the
+    // same log.
+    const [history, subscription] = await Promise.all([
+      this.prisma.activationCodeEvent.findMany({
+        where: { code_id: { in: rows.map((row) => row.id) } },
+        select: {
+          code_id: true,
+          created_at: true,
+          to_status: true,
+          previous_code: true,
+        },
+        orderBy: { created_at: 'asc' },
+      }),
+      this.prisma.centerSubscription.findUnique({
+        where: { center_id: identity.centerId },
+        select: {
+          trial_started_at: true,
+          trial_ends_at: true,
+          paid_until: true,
+        },
+      }),
+    ]);
+
+    const facts: SubscriptionFacts = {
+      trial_started_at: subscription?.trial_started_at ?? null,
+      trial_ends_at: subscription?.trial_ends_at ?? null,
+      paid_until: subscription?.paid_until ?? null,
+    };
+
+    return rows.map((row) => {
+      const allowance = resetAllowance(
+        history.filter((event) => event.code_id === row.id),
+        facts,
+      );
+
+      return {
+        ...toActivationCodeView(row),
+        reset: {
+          // Whether resetting this code now would count against the limit:
+          // it has been redeemed since its last reset.
+          counted: allowance.used,
+          remaining: allowance.remaining,
+          availableAt: allowance.resetsAvailableAt,
+        },
+      };
+    });
   }
 
   /**
@@ -192,13 +250,6 @@ export class CenterActivationCodesService {
     codeId: string,
   ): Promise<ActivationCodeView> {
     return this.move(identity, codeId, DEACTIVATE);
-  }
-
-  async activate(
-    identity: SignedCenterIdentity,
-    codeId: string,
-  ): Promise<ActivationCodeView> {
-    return this.move(identity, codeId, ACTIVATE);
   }
 
   /**
@@ -276,6 +327,114 @@ export class CenterActivationCodesService {
   }
 
   /**
+   * Hands a seat to a new student by giving it a NEW value (D39).
+   *
+   * Deactivate-then-activate put the same value back in the pool, and the
+   * previous student still knew it. A reset replaces the value on the same
+   * row — same seat, plan and expiry, so codes still equal paid seats — and
+   * the old value simply stops existing.
+   *
+   * The erase of the previous student's learning data that D39 also asks for
+   * is not here yet: it needs the activity data of phase 11.
+   */
+  async reset(
+    identity: SignedCenterIdentity,
+    codeId: string,
+  ): Promise<ActivationCodeView> {
+    const subscription = await this.requireFinalized(identity);
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.resetOnce(identity, codeId, subscription);
+      } catch (error) {
+        // A freshly drawn value that already exists. The transaction rolled
+        // back with it, so the next draw starts from the same state.
+        if (!isUniqueViolationOn(error, 'code') || attempt >= CODE_DRAWS) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async resetOnce(
+    identity: SignedCenterIdentity,
+    codeId: string,
+    subscription: SubscriptionFacts,
+  ): Promise<ActivationCodeView> {
+    const current = await this.loadOwnedCode(identity, codeId);
+
+    // The limit is counted from the log alone: resets are the events with an
+    // old value filled in, and "used" means a CONNECTED event since the last
+    // one. Nothing is stored that could drift from what happened.
+    const history = await this.prisma.activationCodeEvent.findMany({
+      where: { code_id: codeId },
+      select: { created_at: true, to_status: true, previous_code: true },
+      orderBy: { created_at: 'asc' },
+    });
+    const allowance = resetAllowance(history, subscription);
+
+    if (!allowance.allowed) {
+      throw new ConflictException({
+        message: 'CODE_RESET_LIMIT_REACHED',
+        resetsAvailableAt: allowance.resetsAvailableAt,
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Predicated on the value AND status it was read with. A redemption or a
+      // second reset landing in between changes one of them, and this then
+      // touches nothing rather than overwriting what just happened.
+      const moved = await tx.activationCode.updateMany({
+        where: {
+          id: codeId,
+          center_id: identity.centerId,
+          code: current.code,
+          status: current.status,
+        },
+        data: {
+          code: generateActivationCode(),
+          status: ActivationCodeStatus.ACTIVATED,
+          student_id: null,
+          linked_name: null,
+          linked_email: null,
+          connected_at: null,
+          connected_ip: null,
+        },
+      });
+
+      if (moved.count !== 1) {
+        throw new ConflictException('CODE_CHANGED');
+      }
+
+      // Access ends at once, and only this center's hold on the student is
+      // released; the tier stays, exactly as deactivation leaves it.
+      if (
+        current.status === ActivationCodeStatus.CONNECTED &&
+        current.student_id
+      ) {
+        await tx.student.updateMany({
+          where: { id: current.student_id, center_id: identity.centerId },
+          data: { center_id: null },
+        });
+      }
+
+      await tx.activationCodeEvent.create({
+        data: {
+          code_id: codeId,
+          center_id: identity.centerId,
+          center_user_id: identity.centerUserId,
+          from_status: current.status,
+          to_status: ActivationCodeStatus.ACTIVATED,
+          student_id: current.student_id,
+          previous_code: current.code,
+        },
+      });
+    });
+
+    return toActivationCodeView(await this.loadOwnedCode(identity, codeId));
+  }
+
+  /**
    * A paid action needs a finalized account.
    *
    * The same rule the dashboard badge reads (`isAccountFinalized`), so the
@@ -284,10 +443,12 @@ export class CenterActivationCodesService {
    */
   private async requireFinalized(
     identity: SignedCenterIdentity,
-  ): Promise<void> {
+  ): Promise<SubscriptionFacts> {
     const subscription = await this.prisma.centerSubscription.findUnique({
       where: { center_id: identity.centerId },
-      select: { trial_started_at: true, paid_until: true },
+      // The period a reset is counted in comes from these same dates, so they
+      // are read once here rather than again by the caller.
+      select: { trial_started_at: true, trial_ends_at: true, paid_until: true },
     });
 
     if (
@@ -299,6 +460,12 @@ export class CenterActivationCodesService {
     ) {
       throw new ForbiddenException('ACCOUNT_NOT_FINALIZED');
     }
+
+    return {
+      trial_started_at: subscription.trial_started_at,
+      trial_ends_at: subscription.trial_ends_at ?? null,
+      paid_until: subscription.paid_until,
+    };
   }
 
   /**

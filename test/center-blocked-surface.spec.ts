@@ -27,12 +27,12 @@ const enforced = (handler: unknown) =>
  * test rather than a support ticket.
  */
 describe('what a blocked center can and cannot do', () => {
-  // Access is now granted through activation codes, and handing a seat to a
-  // new student is what reactivating a code does. The old routes that created
+  // Access is granted through activation codes, and handing a seat to a new
+  // student is what resetting a code does (D39). The old routes that created
   // students and minted per-student keys are gone (D20).
   describe('refused: granting new access', () => {
-    it('cannot reactivate a code, which would give a seat to someone new', () => {
-      expect(enforced(CenterActivationCodesController.prototype.activate)).toBe(
+    it('cannot reset a code, which would give a seat to someone new', () => {
+      expect(enforced(CenterActivationCodesController.prototype.reset)).toBe(
         true,
       );
     });

@@ -27,6 +27,7 @@ import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import {
   ActivationCodeDto,
   ListActivationCodesQueryDto,
+  ListedActivationCodeDto,
   SeatSummaryDto,
 } from './dto/activation-code.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
@@ -48,12 +49,12 @@ export class CenterActivationCodesController {
     description:
       'Newest first. Filter by `status` and `planId`, each one value or `all`. Always readable, even before the account is finalized or while it is blocked: seeing what it holds is how a center decides to pay. There is no route to create or delete a code; codes come from a trial or a payment.',
   })
-  @ApiOkResponse({ type: [ActivationCodeDto] })
+  @ApiOkResponse({ type: [ListedActivationCodeDto] })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
   async list(
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
     @Query() query: ListActivationCodesQueryDto,
-  ): Promise<ActivationCodeDto[]> {
+  ): Promise<ListedActivationCodeDto[]> {
     return this.codes.list(centerUser, query);
   }
 
@@ -96,26 +97,29 @@ export class CenterActivationCodesController {
     return this.codes.deactivate(centerUser, id);
   }
 
-  @Post('activation-codes/:id/activate')
+  @Post('activation-codes/:id/reset')
   @HttpCode(HttpStatus.OK)
   @UseGuards(CenterSubscriptionGuard)
   @ApiOperation({
-    summary: 'Give a code back to the pool',
+    summary: 'Hand a seat to a new student: a new value for the same seat',
     description:
-      'From `deactivated` to `activated`, emptied of its previous student, so the seat can go to someone new. A code a student is using answers INVALID_CODE_TRANSITION; deactivate it first. Recorded in the code history.',
+      'Gives the code a NEW value on the same row (same seat, plan and expiry) and sets it `activated`. The old value stops existing: typing it answers CODE_INVALID. A connected student loses access at once. Logged with the old value. A code that has been redeemed since its last reset may be reset 2 times per billing period (1 during the trial); a code nobody redeemed resets freely. Over the limit: CODE_RESET_LIMIT_REACHED with `resetsAvailableAt`. CODE_CHANGED when the code changed while the request was in flight. Learning data of the previous student is not erased yet.',
   })
   @ApiOkResponse({ type: ActivationCodeDto })
   @ApiConflictResponse({
     type: CenterErrorResponseDto,
-    description: 'INVALID_CODE_TRANSITION.',
+    description: 'CODE_RESET_LIMIT_REACHED or CODE_CHANGED.',
   })
-  @ApiForbiddenResponse({ type: CenterErrorResponseDto })
+  @ApiForbiddenResponse({
+    type: CenterErrorResponseDto,
+    description: 'ACCOUNT_NOT_FINALIZED or SUBSCRIPTION_INACTIVE.',
+  })
   @ApiNotFoundResponse({ type: CenterErrorResponseDto })
   @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
-  async activate(
+  async reset(
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ActivationCodeDto> {
-    return this.codes.activate(centerUser, id);
+    return this.codes.reset(centerUser, id);
   }
 }
