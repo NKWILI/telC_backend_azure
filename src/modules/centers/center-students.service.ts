@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Tier } from '@prisma/client';
+import { ActivationCodeStatus, Prisma, type Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
@@ -200,17 +200,55 @@ export class CenterStudentsService {
    * with. It also matches `Student.center_id` already being ON DELETE SET NULL.
    */
   async remove(
-    identity: SignedCenterIdentity,
+    // The manager too, not just the center: releasing a code is recorded
+    // against whoever did it.
+    identity: Pick<CenterAccessTokenPayload, 'centerId' | 'centerUserId'>,
     studentId: string,
   ): Promise<{ removed: true }> {
-    const result = await this.prisma.student.updateMany({
-      where: { id: studentId, center_id: identity.centerId },
-      data: { center_id: null },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.student.updateMany({
+        where: { id: studentId, center_id: identity.centerId },
+        data: { center_id: null },
+      });
 
-    if (result.count !== 1) {
-      throw new NotFoundException('STUDENT_NOT_FOUND');
-    }
+      if (result.count !== 1) {
+        throw new NotFoundException('STUDENT_NOT_FOUND');
+      }
+
+      // The code this student redeemed here is released with them. Left
+      // connected, it would keep counting as a used seat, and — since a
+      // student may hold one connected code — stop them redeeming a code at
+      // any other school. Same transaction, so a roster edit can never leave
+      // the two disagreeing.
+      const held = await tx.activationCode.findMany({
+        where: {
+          student_id: studentId,
+          center_id: identity.centerId,
+          status: ActivationCodeStatus.CONNECTED,
+        },
+        select: { id: true },
+      });
+
+      for (const code of held) {
+        const released = await tx.activationCode.updateMany({
+          where: { id: code.id, status: ActivationCodeStatus.CONNECTED },
+          data: { status: ActivationCodeStatus.DEACTIVATED },
+        });
+
+        if (released.count === 1) {
+          await tx.activationCodeEvent.create({
+            data: {
+              code_id: code.id,
+              center_id: identity.centerId,
+              center_user_id: identity.centerUserId,
+              from_status: ActivationCodeStatus.CONNECTED,
+              to_status: ActivationCodeStatus.DEACTIVATED,
+              student_id: studentId,
+            },
+          });
+        }
+      }
+    });
 
     return { removed: true };
   }

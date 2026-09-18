@@ -301,10 +301,16 @@ model ActivationCode {
 
   center Center @relation(fields: [center_id], references: [id], onDelete: Cascade)
 
-  /// The Users page lists a center's codes by state; redemption looks one up
-  /// by its value, which the unique index above already covers.
   events ActivationCodeEvent[]
 
+  /// The Users page lists a center's codes by state; redemption looks one up
+  /// by its value, which the unique index above already covers.
+  ///
+  /// Also enforced, outside this schema: a student holds at most ONE
+  /// connected code — a partial unique index on (student_id) where
+  /// status = 'CONNECTED', in migration 20260918200000. Prisma cannot express
+  /// a partial index; it is what makes two simultaneous redemptions by one
+  /// student fail instead of both succeeding.
   @@index([center_id, status])
   @@index([student_id])
   @@map("activation_codes")

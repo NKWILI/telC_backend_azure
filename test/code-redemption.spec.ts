@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { CodeRedemptionService } from '../src/modules/centers/code-redemption.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 
@@ -46,7 +47,8 @@ describe('CodeRedemptionService.redeem', () => {
     prisma = {
       activationCode: {
         findUnique: jest.fn().mockResolvedValue(codeRow()),
-        findFirst: jest.fn().mockResolvedValue(null),
+        // The student's connected codes, read inside the transaction.
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       activationCodeEvent: { create: jest.fn().mockResolvedValue({}) },
@@ -56,6 +58,8 @@ describe('CodeRedemptionService.redeem', () => {
           first_name: 'Amina',
           last_name: 'Nguema',
           email: 'amina@example.com',
+          center_id: null,
+          center: null,
         }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -190,14 +194,135 @@ describe('CodeRedemptionService.redeem', () => {
     });
 
     it('a second code for a student who already has a working one', async () => {
-      prisma.activationCode.findFirst.mockResolvedValue(
+      prisma.activationCode.findMany.mockResolvedValue([
         codeRow({ id: 'code-0', status: 'CONNECTED', student_id: 'student-1' }),
-      );
+      ]);
 
       await expect(service.redeem(student, 'LQ-7K2P-94QX', ip)).rejects.toThrow(
         new ConflictException('STUDENT_ALREADY_ACTIVE'),
       );
       expect(prisma.activationCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    // Review finding 2: a student linked by an old per-student key has a
+    // school but no code, so "holds a code" alone missed them, and redeeming
+    // another school's code silently moved them — possibly to a lower tier.
+    it('a student an older key still ties to a school that is paying', async () => {
+      prisma.student.findUnique.mockResolvedValue({
+        id: 'student-1',
+        first_name: 'Amina',
+        last_name: 'Nguema',
+        email: 'amina@example.com',
+        center_id: 'center-9',
+        center: { subscription: activeTrial() },
+      });
+
+      await expect(service.redeem(student, 'LQ-7K2P-94QX', ip)).rejects.toThrow(
+        new ConflictException('STUDENT_ALREADY_ACTIVE'),
+      );
+      expect(prisma.student.update).not.toHaveBeenCalled();
+    });
+
+    // Review finding 3: the check above runs before the write, so two
+    // requests could both pass it. The database refuses the second connected
+    // code; that refusal must reach the student as the same answer.
+    it('a second connected code the database refuses, answered the same way', async () => {
+      prisma.activationCode.updateMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('duplicate', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: 'activation_codes_one_connected_per_student' },
+        }),
+      );
+
+      await expect(service.redeem(student, 'LQ-7K2P-94QX', ip)).rejects.toThrow(
+        new ConflictException('STUDENT_ALREADY_ACTIVE'),
+      );
+    });
+  });
+
+  /**
+   * One connected code per student is now a database rule. A student whose
+   * code no longer works must therefore be able to replace it, or the rule
+   * would lock out exactly the people it was not aimed at.
+   */
+  describe('replacing a code that no longer works', () => {
+    const claimCall = () =>
+      prisma.activationCode.updateMany.mock.calls.find(
+        ([args]: any[]) => args.where.status === 'ACTIVATED',
+      );
+    const releaseCall = () =>
+      prisma.activationCode.updateMany.mock.calls.find(
+        ([args]: any[]) => args.where.status === 'CONNECTED',
+      );
+
+    it('releases a code that has run out, then redeems the new one', async () => {
+      prisma.activationCode.findMany.mockResolvedValue([
+        codeRow({
+          id: 'code-0',
+          status: 'CONNECTED',
+          student_id: 'student-1',
+          expires_at: new Date(Date.now() - DAY_MS),
+        }),
+      ]);
+
+      await service.redeem(student, 'LQ-7K2P-94QX', ip);
+
+      expect(releaseCall()[0]).toEqual({
+        where: { id: 'code-0', status: 'CONNECTED' },
+        data: { status: 'DEACTIVATED' },
+      });
+      expect(claimCall()).toBeDefined();
+    });
+
+    it('releases a code whose school stopped paying', async () => {
+      prisma.activationCode.findMany.mockResolvedValue([
+        codeRow({
+          id: 'code-0',
+          status: 'CONNECTED',
+          student_id: 'student-1',
+          expires_at: null,
+          center: {
+            name: 'Old school',
+            subscription: {
+              plan: 'PAID',
+              trial_started_at: null,
+              trial_ends_at: null,
+              paid_until: new Date(Date.now() - 30 * DAY_MS),
+            },
+          },
+        }),
+      ]);
+
+      await service.redeem(student, 'LQ-7K2P-94QX', ip);
+
+      expect(releaseCall()).toBeDefined();
+      expect(claimCall()).toBeDefined();
+    });
+
+    it('lets a student whose old school lapsed join a new one', async () => {
+      prisma.student.findUnique.mockResolvedValue({
+        id: 'student-1',
+        first_name: 'Amina',
+        last_name: 'Nguema',
+        email: 'amina@example.com',
+        center_id: 'center-9',
+        center: {
+          subscription: {
+            plan: 'PAID',
+            trial_started_at: null,
+            trial_ends_at: null,
+            paid_until: new Date(Date.now() - 30 * DAY_MS),
+          },
+        },
+      });
+
+      await service.redeem(student, 'LQ-7K2P-94QX', ip);
+
+      expect(prisma.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { center_id: 'center-1', tier: 'START' },
+      });
     });
   });
 
