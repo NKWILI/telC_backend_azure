@@ -122,27 +122,4 @@ export class CenterActivationCodesController {
   ): Promise<ActivationCodeDto> {
     return this.codes.reset(centerUser, id);
   }
-
-  @Post('activation-codes/:id/activate')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(CenterSubscriptionGuard)
-  @ApiOperation({
-    summary: 'Give a code back to the pool',
-    description:
-      'From `deactivated` to `activated`, emptied of its previous student, so the seat can go to someone new. A code a student is using answers INVALID_CODE_TRANSITION; deactivate it first. Recorded in the code history.',
-  })
-  @ApiOkResponse({ type: ActivationCodeDto })
-  @ApiConflictResponse({
-    type: CenterErrorResponseDto,
-    description: 'INVALID_CODE_TRANSITION.',
-  })
-  @ApiForbiddenResponse({ type: CenterErrorResponseDto })
-  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
-  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
-  async activate(
-    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
-    @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<ActivationCodeDto> {
-    return this.codes.activate(centerUser, id);
-  }
 }

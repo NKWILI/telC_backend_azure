@@ -257,44 +257,6 @@ describe('CenterActivationCodesService', () => {
     });
   });
 
-  describe('activating', () => {
-    it('gives a deactivated code back, emptied, so the seat can go to someone new', async () => {
-      prisma.activationCode.findFirst.mockResolvedValue(
-        codeRow({ status: 'DEACTIVATED', linked_name: 'Amina Nguema' }),
-      );
-
-      await service.activate(identity, 'code-1');
-
-      expect(prisma.activationCode.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            id: 'code-1',
-            center_id: 'center-1',
-            status: { in: ['DEACTIVATED'] },
-          },
-          data: {
-            status: 'ACTIVATED',
-            student_id: null,
-            linked_name: null,
-            linked_email: null,
-            connected_at: null,
-            connected_ip: null,
-          },
-        }),
-      );
-    });
-
-    it('refuses to activate a code a student is using', async () => {
-      prisma.activationCode.findFirst.mockResolvedValue(
-        codeRow({ status: 'CONNECTED' }),
-      );
-
-      await expect(service.activate(identity, 'code-1')).rejects.toThrow(
-        new ConflictException('INVALID_CODE_TRANSITION'),
-      );
-    });
-  });
-
   /**
    * D39: a seat is handed on by giving it a NEW value. Deactivate-then-
    * activate put the same value back, and the previous student still knew it.

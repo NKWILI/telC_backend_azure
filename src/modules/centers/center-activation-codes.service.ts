@@ -107,20 +107,6 @@ const DEACTIVATE: Transition = {
   alsoWrite: {},
 };
 
-const ACTIVATE: Transition = {
-  from: [ActivationCodeStatus.DEACTIVATED],
-  to: ActivationCodeStatus.ACTIVATED,
-  // A reactivated code is a free seat again, so it forgets who held it. The
-  // history is not lost: it lives in the event log.
-  alsoWrite: {
-    student_id: null,
-    linked_name: null,
-    linked_email: null,
-    connected_at: null,
-    connected_ip: null,
-  },
-};
-
 /**
  * The Users page: a center's codes, its seat count, and the two things it may
  * do to a code.
@@ -264,13 +250,6 @@ export class CenterActivationCodesService {
     codeId: string,
   ): Promise<ActivationCodeView> {
     return this.move(identity, codeId, DEACTIVATE);
-  }
-
-  async activate(
-    identity: SignedCenterIdentity,
-    codeId: string,
-  ): Promise<ActivationCodeView> {
-    return this.move(identity, codeId, ACTIVATE);
   }
 
   /**
