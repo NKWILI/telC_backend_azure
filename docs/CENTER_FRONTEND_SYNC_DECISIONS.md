@@ -182,10 +182,13 @@ first student activation starts the clock.
 ## D4. Subscription model: the School Pack (M3)
 
 **Proposed:** 2026-09-17
-**Status:** ⚠️ **OPEN — proposal, waiting for co-founder review. Do not build on it.**
+**Decided:** 2026-09-18, by the backend dev and Herman — **M3 adopted**.
+**Status:** decided, not built
 
-Nothing that depends on how a center pays over time (renewal, adding seats,
-code expiry, invoices amounts, pro rata) is built until this is decided.
+The model is settled: renewal, adding seats, code expiry, invoice amounts and
+pro rata are built on the rules below. Some amounts inside those rules are
+still open (see "Still open" at the end of this entry); they change numbers,
+not the model.
 
 ### The idea in one sentence
 
@@ -193,7 +196,7 @@ A school buys a **pack of at least 10 seats** that **renews on one date each
 month** (or year). Every seat is an activation code (D1), and all codes of a
 school end on that same date.
 
-### Proposed rules
+### Rules
 
 1. **Trial** — as D3: 14 days from the trial button, 1 code, one per school.
 2. **First purchase** — at least 10 seats in any mix of Start / Pro / Premium.
@@ -228,8 +231,8 @@ school end on that same date.
 | Date | Event | Pays |
 |---|---|---|
 | 1 Jan | Pack of 10, anchor day 1 | 45,000 |
-| 5 Jan | +6 seats, 27 of 31 days left | 23,517 |
-| 29 Jan | +1 seat, 3 days left (436 → minimum charge) | 1,000 |
+| 5 Jan | +6 seats, 27 of 31 days left (23,516 → rounded up) | 23,600 |
+| 29 Jan | +1 seat, 3 days left (435 → minimum charge) | 1,000 |
 | 1 Feb | Renews 17 seats | 76,500 |
 | 1 Mar | Renews, shrinks to 12 | 54,000 |
 | 1 Apr | Tries 8 → refused (min 10), renews 10 | 45,000 |
@@ -237,7 +240,7 @@ school end on that same date.
 | 15 Jun | Pays after being blocked, new anchor 15 | 45,000 |
 | 15 Jul | Switches to annual at renewal | 513,000 |
 
-### Why this model (for the discussion)
+### Why this model
 
 - **Guaranteed floor:** every paying school ≥ 45,000 XAF per month; renewal is
   always the whole school, so the minimum cannot be bypassed.
@@ -250,7 +253,7 @@ school end on that same date.
 ### Alternatives considered
 
 - **M1 — each code has its own expiry (SIM-card style), at least 10 active
-  codes at every payment.** Rejected in the proposal: codes about to expire
+  codes at every payment.** Rejected: codes about to expire
   still count, so a school can pay for ~5.5 seats a month on average (−45%)
   without breaking the rule; the minimum only holds on payment days; expiry
   dates scatter, which means more payments, more fees and more missed
@@ -264,25 +267,95 @@ school end on that same date.
   student would have to pay the whole next month at once, and may not add the
   student at all.
 
-### Questions for the co-founder discussion
+### What it means for activation codes
 
-1. Adopt M3 (one date per school) or keep per-code expiry (M1)?
-2. Is the 10-seat minimum right, given the trial is 1 seat (a jump from free to
-   45,000 XAF/month)?
-3. The minimum charge for small pro rata payments — needs Notch Pay's real fee
-   and minimum amount.
-4. AI cost per speaking session: does 4,500 XAF per Start seat stay profitable
-   at 2 sessions per 24 hours?
-5. The quota contradiction: frontend says Pro 5 / Premium 20 **total**, backend
-   says **per 24 hours**. Which is the product?
-6. Are prices VAT-inclusive? Will German schools pay in EUR?
+"All codes of a school end on the same date" is implemented by **not giving
+paid codes a date of their own**: a paid code keeps `expires_at = null` and
+follows the center's `paid_until` (plus the 7-day grace). One renewal then
+extends every code at once, and no code can be left behind by a missed update.
+Only the trial code carries `expires_at` (the trial end, D3). At the first
+purchase the trial code is deactivated and its student moved to a paid code
+(rule 2), so no paid school keeps a code with a past date.
+
+### Pro rata calculation
+
+Decided 2026-09-18 (the minimum charge figure is Herman's, B2).
+
+```
+amount = seats × monthly price × days left ÷ days in the period
+         rounded UP to the next 100 XAF, never below the minimum charge
+```
+
+- **Days left:** from today (counted) up to the anchor day (not counted).
+  5 Jan → 1 Feb = 27 days. Days are counted in Africa/Douala time (rule 9).
+- **Days in the period:** the real length of the current calendar month
+  (28–31).
+- **Each plan separately:** Start 4,500, Pro 10,000, Premium 20,000 XAF per
+  seat per month; one line per plan, then summed. Rounding is applied to the
+  total.
+- **Annual:** yearly price (12 × monthly × 0.95) × days left ÷ days in the
+  year (365 or 366).
+- **Rounded up to 100 XAF**, so Mobile Money amounts are clean.
+- **Minimum charge:** 1,000 XAF proposed (about one week of one Start seat), so
+  fees do not eat a tiny payment; Herman confirms it from Notch Pay's fees
+  (B2).
+- Integer arithmetic only (multiply before dividing), as the existing pricing
+  service already does.
+
+| When (anchor day 1) | Added | Calculation | Pays |
+|---|---|---|---|
+| 5 Jan | 6 Start | 6 × 4,500 × 27 ÷ 31 = 23,516 | 23,600 |
+| 29 Jan | 1 Start | 1 × 4,500 × 3 ÷ 31 = 435 | 1,000 |
+| 15 Feb | 2 Pro | 2 × 10,000 × 14 ÷ 28 = 10,000 | 10,000 |
+
+### Shrinking at renewal: which codes go
+
+Decided 2026-09-18. When a school renews with fewer seats in a plan (15 → 10
+Start seats, for example):
+
+1. **Unused codes are removed first** (`activated`, then `deactivated`),
+   newest first.
+2. **A connected code is never removed.** If the school wants fewer seats than
+   it has connected students in that plan, the renewal is refused; the manager
+   deactivates or resets (D39) first. This is rule 5 ("never below the number
+   of connected students"), applied per plan.
+
+### Must be part of the payment work
+
+The payment routes exist (phases 6 and 7a) but no real provider is wired, so
+nobody can pay yet. When payment is built, a successful payment must also:
+
+- **create one code per new seat**, `expires_at = null` (codes follow
+  `paid_until`) — today activation sets seat counts and `paid_until` but
+  creates **no codes**, so a paying school would have nothing to hand out;
+- **move the trial student to a paid code** and retire the trial code
+  (rule 2);
+- **store the anchor day** that defines each period (rule 9), which renewal,
+  pro rata and the reset limit (D39) all read.
+
+### Answered with this entry
+
+- **M3 or M1?** → M3.
+- **The quota contradiction** (Pro 5 / Premium 20 "total" on the frontend vs
+  "per 24 hours" in the backend) → already settled by D15 / B4: per rolling 24
+  hours; the landing page wording is what changes.
+
+### Still open (numbers inside the model, not the model)
+
+- **B1** Is the 10-seat minimum right, given the trial is 1 seat (a jump from
+  free to 45,000 XAF/month)?
+- **B2** The minimum charge for small pro rata payments — needs Notch Pay's
+  real fee and minimum amount.
+- **B3** AI cost per speaking session: does 4,500 XAF per Start seat stay
+  profitable at 2 sessions per 24 hours?
+- **B5** Are prices VAT-inclusive? Will German schools pay in EUR?
 
 ---
 
 ## D5. No public codes: activation codes are personal only
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** decided — backend done (no `type` on `ActivationCode`), frontend removal to do
 
 There are **only personal activation codes**: one code, one student, used from
 that student's own account. The shared-computer ("public", school PC, kiosk)
@@ -321,7 +394,7 @@ data later shows real abuse, this is re-opened.
 | **Streak** | A day counts when the student completes at least 1 exercise that day, in the student's time zone |
 | **Daily objective** | 1 exercise a day, or 20 minutes — the exact choice is made at implementation |
 | **Weekly goal** | 120 minutes by default, adjustable by the student |
-| **Readiness** | The same formula the school dashboard shows (B10), so student and school see one number |
+| **Readiness** | The same formula the school dashboard shows (D38), so student and school see one number |
 | **Session of the day** | An exercise in the student's weakest skill |
 | **Attempts below threshold** | Score under 60% (roughly the telc pass mark) |
 
@@ -464,8 +537,7 @@ Codes of the per-student key flow (`ACTIVATION_KEY_*`, `STUDENT_*`,
 | `CODE_INVALID`, `CODE_ALREADY_USED`, `CODE_DEACTIVATED`, `CODE_EXPIRED` | student redeem (D1, T11) |
 | `WRONG_CURRENT_PASSWORD` | change password (T14) |
 | `LOGO_INVALID_TYPE`, `LOGO_TOO_LARGE` | logo upload (T13) |
-| `SEAT_BELOW_PAID_FLOOR`, `NOTHING_TO_PAY` | waits for D4 |
-| `INVALID_REFERRAL_CODE` | waits for B7 |
+| `SEAT_BELOW_PAID_FLOOR`, `NOTHING_TO_PAY` | purchase and renewal (D4) |
 
 ---
 
@@ -931,29 +1003,29 @@ so it never rides along with the feature that replaces it.
 
 ---
 
-## D21. Students may hold 2 active devices
+## D21. Students hold 1 active session
 
-**Decided:** 2026-09-17
-**Status:** decided, not built
+**Decided:** 2026-09-17 (2 devices); **changed 2026-09-18 to 1**, by the
+backend dev and Herman
+**Status:** built with 2 (`MAX_ACTIVE_STUDENT_DEVICES = 2` in
+`auth.service.ts`); the change to 1 is not built
 
-A student account keeps **2 active sessions** (typically a phone and a laptop).
-A **3rd login succeeds** and the **least recently used** session is revoked —
-the same rule center users already follow (D13), so there is one behaviour to
-explain and no "manage my devices" screen to build (D8).
+A student account keeps **1 active session**. A **new login succeeds** and the
+**previous session is revoked** — no "manage my devices" screen (D8).
 
-The revoked device's next request gets `401` and the app logs out locally.
+The revoked device's **next request** gets `401 SESSION_REVOKED` (the guard
+checks revocation on every request, not only when the 15-minute token
+expires), and the app logs out locally.
 
-**Why 2:** a student is one person; two devices cover real use, and every extra
-device is mostly an invitation to share one seat with a class.
+**Why 1:** it makes account sharing painful. Two students on one account keep
+logging each other out, which is the deterrent. The AI quota, counted per
+account (D15), still caps the cost of whatever sharing remains.
 
-**What this does not do:** it does not stop sharing. Two students taking turns
-on one account still works. The real limit is the **AI quota, counted per
-student** (D15), so a shared account does not multiply AI cost — those students
-simply share 2 sessions per 24 hours. This limit is a small measure, not a wall.
+**Accepted cost:** a student who uses the app on both phone and web has to log
+in again each time they switch.
 
-Implementation: mirror `MAX_ACTIVE_CENTER_DEVICES` on `DeviceSession`
-(`student_id` + `device_id` are already unique), ordered by `last_used_at` then
-`created_at`.
+Implementation: set `MAX_ACTIVE_STUDENT_DEVICES` to 1 and update its tests.
+Center users keep their own rule (D13).
 
 ---
 
@@ -1362,7 +1434,7 @@ exists exactly for two students sitting in the same room.
   3. Flutter access and module history (D9, D17, D26, D29);
   4. center dashboard data;
   5. the rest (logo D22, support D24, invoices D27, speaking room D32).
-  Anything that depends on **D4** waits for that decision.
+  Anything that depends on **D4** (decided 2026-09-18: M3) follows its rules.
 - **`main` deploys to production**, so every merge is a release. `dev` is
   blocked on center auth, which is why urgent fixes are cherry-picked onto
   `main`.
@@ -1397,6 +1469,285 @@ locked out on release day. So:
 A refused student gets `ACTIVATION_REQUIRED` (D19) with the reason: `NO_CODE`,
 `CODE_DEACTIVATED`, `CODE_EXPIRED` or `CENTER_UNPAID`. This replaces
 `SUBSCRIPTION_INACTIVE` on student learning routes; center routes keep it.
+
+---
+
+## D35. Payment providers: Stripe on mobile, Notch Pay and Stripe on the web
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B6)
+**Status:** decided, not built
+
+| Where the payment starts | Providers |
+|---|---|
+| Mobile (Flutter app) | **Stripe** |
+| Web | **Notch Pay** (Orange Money, MTN Mobile Money) **and Stripe** (card) |
+
+**Who pays:** both kinds of paying client, on the web or on mobile. The
+provider depends only on where the payment starts, not on who pays.
+
+- **Center** — a school buys a pack of seats (D4); its students get access
+  through codes and never pay.
+- **Independent user** — a learner with no center who pays their own
+  subscription.
+
+**Not yet defined:** the independent user's subscription (B19). Today only
+centers can pay; an account with no center gets access only if it predates
+the code rule (D34).
+
+- The backend already has a provider abstraction (`fake`, `disabled`, Notch
+  Pay pending). Stripe is added as a second real provider beside Notch Pay,
+  not instead of it.
+- A payment records which provider took it, so webhooks, refunds and
+  invoices (D27) are routed to the right one.
+
+---
+
+## D36. No referral codes
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B7)
+**Status:** decided — frontend removal to do
+
+- No referral, discount, referrer reward or agent commission.
+- The "referral code" field is **removed from the payment step** (center
+  dashboard, and any independent-user payment screen).
+- The backend never had it: no field, no table, no `INVALID_REFERRAL_CODE`.
+- Revisit only as a new decision if agents or partners start bringing schools.
+
+---
+
+## D38. Level, skill scores and exam readiness ("progress")
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B10)
+**Status:** decided, not built — waits on D26 and D29
+
+### Prerequisite: the data must reach the server
+
+Today Hören, Lesen, Sprachbausteine and Sprechen attempts live **only on the
+phone**. Nothing below can feed the center dashboard until **D26**
+(`StudentActivity`) and **D29** (remote submit for every module) are built.
+They come first.
+
+### One calculation, in the backend
+
+Every number below is computed **once, in the backend, from
+`StudentActivity`**. The center dashboard and the Flutter app read the same
+result; neither computes it. This replaces the fake values in the dashboard
+(`fake/students.ts`) and the on-device calculation in the app
+(`averageLatestTeilProgress`, `readinessScore: 0`).
+
+### 1. Skill score (0–100), per student and per skill
+
+For each of the five skills (`hoeren`, `lesen`, `sprachbausteine`,
+`schreiben`, `sprechen`):
+
+1. **Teil score** = the average of the student's **3 most recent attempts** on
+   that Teil (fewer if they have fewer), each as `score ÷ max_score × 100`.
+   Three rather than one, so a single lucky or unlucky attempt does not swing
+   the number.
+2. **Skill score** = the average of the skill's Teil scores.
+3. A Teil **never attempted counts 0** in the calculation, but the interface
+   shows **"not practised yet"**, never "0 %". A skill with no attempt at all
+   is returned as `null`.
+
+These are the five skill bars in the app and on the student detail page.
+
+### 2. Readiness score (0–100) — this is "progress"
+
+It mirrors telc scoring. The exam has a **written part** and an **oral
+part**, and a candidate passes only with **at least 60 % in each**.
+
+```
+written   = weighted average of Lesen, Sprachbausteine, Hören, Schreiben
+oral      = Sprechen
+readiness = weighted average of written and oral, by the exam's points
+ready     = written ≥ 60 AND oral ≥ 60
+```
+
+- **Weights:** the official telc B1+ Beruf points per part. Until they are
+  entered from the official grid, the four written skills weigh equally and
+  written/oral follow the exam's total points split.
+- **Skills never practised count 0** here (option C): a student who skips
+  speaking is not ready, and the number must say so.
+- **Not enough data:** under **5 attempts** in total, readiness is returned as
+  `null` and shown as **"not enough exercises yet"** instead of a misleading
+  number.
+- **One number everywhere:** it is the app's readiness (the "62" in the
+  design, D7) **and** the dashboard's "Progress %". Shown as an **estimate**
+  ("estimated readiness"), never as a promise of passing.
+- `ready` is returned beside the score, so both products can show a "ready for
+  the exam" badge.
+
+### 3. Everything else derives from the same calculation
+
+| Shown | Calculation |
+|---|---|
+| **Average progress** (center dashboard KPI) | average readiness of the center's connected students that have a readiness (not `null`) |
+| **Weekly change** (app) | readiness today − readiness computed on the activity up to 7 days ago |
+| **Per-skill averages** (center dashboard) | average of each skill score across the center's students that practised it |
+| Alert **"inactive"** | no `StudentActivity` row for **7 days** |
+| Alert **"low progress"** | readiness **< 40** |
+| Alert **"weak skill"** | a skill **already practised** with a score **< 45** |
+
+The thresholds (7 days, 40, 45) are the ones the dashboard already uses. The
+"attempts below threshold" count in the app stays at **60 %** (D7).
+
+### 4. Level and target level
+
+- **Current level** (A1–B2): **declared by the student** at sign-up and
+  **editable by the center**. Stored on the student.
+- **Target level:** the product prepares **one exam, telc B1+ Beruf**, so there
+  is **no per-student target field**. The dashboard shows "B1+ Beruf" as a
+  fixed label. It becomes a real field only if other exams are added.
+
+### Build order
+
+1. D26 `StudentActivity` + D29 remote submit for all modules.
+2. This calculation as one backend service, with tests on the formula.
+3. Center dashboard routes (progress, skills, alerts) and the app's home
+   screen read it.
+
+---
+
+## D39. Resetting an activation code (moving a seat to another student)
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B11)
+**Status:** decided (limit included), not built
+
+### Why a reset, not "deactivate then activate"
+
+Today a seat moves by `deactivate` then `activate` (D18). `activate` puts the
+**same code value** back in the pool. The previous student still knows that
+value, so **they can redeem it again** before the new student does. A reset
+fixes this: the seat gets a **new value**, and the old one stops existing.
+
+### The route
+
+`POST /api/centers/me/activation-codes/:id/reset` — center login, same lock
+as D18 (`ACCOUNT_NOT_FINALIZED`, `SUBSCRIPTION_INACTIVE`), own center only
+(another center's code → 404).
+
+### What the backend does, in one transaction
+
+1. **Checks whether the code was used** — it has, or had, a student since it
+   was created or last reset.
+2. **If a student is connected:** disconnects them. Their access ends at once
+   (`center_id` cleared, tier kept — exactly as deactivation does), and
+   redeeming a new code later works (D17).
+3. **Clears the seat's link:** `student_id`, `linked_name`, `linked_email`,
+   `connected_at`, `connected_ip`.
+4. **Generates a new code value** (D16) **on the same row**: same seat, same
+   plan, same `expires_at`. The old value is no longer valid; typing it
+   answers `CODE_INVALID`. Keeping the row means the number of codes still
+   equals the number of paid seats (D18).
+5. **Status becomes `ACTIVATED`**: the seat waits for its new student.
+6. **Logs the reset** in `ActivationCodeEvent`: which manager, when, the
+   **old value**, and the student who was cut off.
+7. **Marks the previous student's learning data on this seat for deletion**:
+   hidden at once, erased 7 days later (see below).
+
+### The previous student's data is erased
+
+A reset gives the seat to someone new, and **the previous student's learning
+data on that seat is permanently erased**. Decided by the backend dev and
+Herman: resetting a seat means losing what was done on it.
+
+- **Hidden at once, erased after 7 days.** At the reset (step 7) the data is
+  marked for deletion and disappears from every screen — the center, the new
+  student and the previous student see nothing of it. A daily job erases it
+  **permanently 7 days later**. Until then support can restore it if the
+  manager reset the wrong code. After that there is no undo.
+- **What is erased:** the previous student's learning data
+  **since they connected to this seat** (`connected_at`): `StudentActivity`
+  rows and the detailed attempt rows behind them (writing, listening,
+  Sprachbausteine, Lesen, speaking sessions and evaluations), with their
+  stored files (audio).
+- **Kept:** the student's **account** (email, password, name), so they can log
+  in and redeem another code if a center pays for one. They start again from
+  zero.
+- **Kept:** any learning data from **before** they connected to this seat (for
+  example as an independent user): it was not done on this school's seat.
+- **Kept:** the event log line (manager, time, old code value, student id), so
+  the reset itself stays traceable.
+- **No undo for the manager.** The confirmation says so in plain words: "Amina
+  will lose access and all her progress on this seat will be permanently
+  deleted." The 7-day window is for support, not a button.
+
+### The limit
+
+Without a limit, one paid seat serves a whole class in turn. Decided:
+
+- **2 resets of a used code per seat per billing period** (anchor day to anchor
+  day, D4). A code that was **never used** can be reset freely (a leaked or
+  mistyped code costs nothing).
+- **Trial code:** 1 reset during the trial.
+- Over the limit: `409 CODE_RESET_LIMIT_REACHED`, with `resetsAvailableAt` =
+  the next renewal date.
+- Counted from the event log, so no counter can drift.
+- **Known edge, accepted:** if the wrong person redeems a code first, the reset
+  that fixes it counts against the limit. Rare; support handles it by hand.
+- The billing period comes from D4's anchor day, which is not built yet. Until
+  it is, the period is the month ending at `paid_until`.
+
+Common practice: Microsoft volume licences may be reassigned only once every
+90 days (except hardware failure), for the same reason — a licence is for one
+person, not a rota.
+
+### Effect on the existing routes
+
+- `deactivate` stays: taking a seat back without handing it on (a student who
+  left, a student who stopped paying the school).
+- `activate` (`deactivated` → `activated`, same value) is **replaced by
+  reset**, so a seat is never handed on with a value someone else knows.
+
+### Frontend (reset)
+
+A **"Reset"** button per code, with a confirmation naming the student who will
+lose access, stating that **their progress on this seat is permanently
+deleted**, and showing the resets left until the renewal date.
+
+---
+
+## D40. Speaking phrases: AI-drafted, teacher-reviewed, served by the backend
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B13)
+**Status:** decided, not built
+
+In the Flutter app a phrase is a German sentence, its translation and a type
+(e.g. giving an opinion, agreeing, disagreeing, asking back).
+
+- **Source:** drafted with AI from the telc B1+ Beruf speaking tasks (the
+  Modelltest themes), grouped by type and by Teil.
+- **Review:** **every phrase is checked by a German teacher** before it goes
+  live. A wrong phrase taught as correct costs trust.
+- **Size for the first release:** 20–30 phrases per type.
+- **Storage:** in the backend, served to the app, so a phrase can be fixed
+  without releasing a new app version. Only reviewed phrases are served. After it, the
+new code is shown to hand out.
+
+---
+
+## D37. Deleting a center account is a request, not a deletion
+
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B8)
+**Status:** decided, not built
+
+The "delete my account" button **deletes nothing**. It sends a request to the
+Lerniqo team, who contact the manager to understand the problem and then
+handle the deletion by hand.
+
+- **Backend:** one route, center login required. It emails the team (same
+  inbox as support, `SUPPORT_EMAIL`, D24) with the center's name, the
+  manager's name, email and phone, and that they ask for the account **and all
+  its information** to be deleted. Rate-limited, so one click cannot flood the
+  inbox. The account, seats, codes, students and payments stay exactly as they
+  are.
+- **Confirmation to the manager:** the same route also emails the manager
+  that the request was received and that an administrator will contact them
+  about deleting the account.
+- **Frontend:** after the click, the manager sees a message that an
+  administrator will contact them about deleting the account.
+- **Paid seats, refunds, connected students:** decided case by case when the
+  team talks to the manager; nothing is automatic.
 
 ---
 
@@ -1449,25 +1800,25 @@ here.
 
 All open items here need a joint decision by the backend dev and Herman.
 
-- [ ] **D4** Subscription model: School Pack (M3) or per-code expiry (M1)? *(proposal recorded above)*
-- [ ] **B1** Is a 10-seat minimum right after a 1-seat trial (free → 45,000 XAF/month)?
-- [ ] **B2** Minimum charge for small pro rata payments (needs Notch Pay's fees and minimum amount)?
-- [ ] **B3** AI cost per speaking session: is 4,500 XAF per Start seat profitable?
+- [x] **D4** Subscription model → **School Pack (M3)**: one renewal date per school, at least 10 seats, pro rata for seats added mid-period, all codes end together (D4). Decided 2026-09-18.
+- [x] **B1** 10-seat minimum after a 1-seat trial → **kept** (D4). Decided 2026-09-18.
+- [ ] **B2** Minimum charge for small pro rata payments — **owner: Herman** (needs Notch Pay's fees and minimum amount). Calculation proposed in D4.
+- [x] **B3** 4,500 XAF per Start seat → **kept**. Decided 2026-09-18.
 - [x] **B4** AI quotas → **per rolling 24 hours, as the backend already enforces**: Start 2, Pro 5, Premium 20 (D15). The landing page's "5 total / 20 total" wording is wrong and must change. Whether the *numbers* stay is revisited with B3 (AI cost per session).
-- [ ] **B5** Are prices VAT-inclusive? Do German schools pay in EUR?
-- [ ] **B6** Card payments: Stripe, or Notch Pay only?
-- [ ] **B7** Referral codes: discount, credit, or tracking only?
-- [ ] **B8** Account deletion: what happens to paid seats (refund?) and connected students?
+- [x] **B5** VAT / EUR → **dropped for now**: prices as listed, in XAF. Revisit only when German schools are sold to. Decided 2026-09-18.
+- [x] **B6** Card payments → **mobile: Stripe; web: Notch Pay and Stripe** (D35). Decided 2026-09-18.
+- [x] **B7** Referral codes → **not done; the field is removed from the payment step** (D36). Decided 2026-09-18.
+- [x] **B8** Account deletion → **a request emailed to the team, who contact the manager; nothing is deleted automatically** (D37). Decided 2026-09-18.
 - [x] **B9** `public` codes → **not done at all, only personal codes** (D5)
-- [ ] **B10** Student level, target level, and how "progress" / readiness is calculated?
-- [ ] **B11** Code reuse: how many times can a code move to another student per period?
+- [x] **B10** Level, target level, progress → **level declared by the student, editable by the center; no target field (one exam); progress = exam readiness computed in the backend from `StudentActivity`** (D38). Decided 2026-09-18.
+- [x] **B11** Code reuse → **a reset gives the seat a new code value, disconnects the old student and erases their learning data on that seat; their account is kept** (D39). Limit: 2 resets of a used code per seat per billing period, 1 for the trial code.
 - [x] **B12** Trial abuse → **accepted as is**: 14 days, 1 Start seat (D6)
-- [ ] **B13** Speaking phrases: where does the content come from?
+- [x] **B13** Speaking phrases → **AI-drafted from the telc B1+ Beruf speaking tasks, every phrase reviewed by a German teacher, 20–30 per type, served by the backend** (D40). Decided 2026-09-18.
 - [x] **B14** Flutter app home screen → **definitions agreed, refined at implementation** (D7)
 - [x] **B15** → **Google sign-in removed (code to delete); devices screen set aside** (D8)
-- [ ] **B16** Guest / demo mode in the Flutter app (`POST /api/auth/guest`): keep as a no-account preview, or remove now that access needs a code (D9)?
-- [ ] **B18** Grammar content: who writes and **reviews** the question bank (a German teacher is mandatory if AI generates it), what language Teil 1 answers use (Teil 1 is German→**French** today, which does not suit German schools), which levels (B1 only or A1–B2), and how many questions a first release needs? *(the route is a day's work; the bank is the project)*
-- [ ] **B17** **Payment flow shape: two backend steps, or one frontend-style call?** *(moved from T4 — Herman owns Notch Pay and the payment flow)*
+- [x] **B16** Guest mode (`POST /api/auth/guest`) → **kept for the demo phase**; revisited when the demo phase ends. Decided 2026-09-18.
+- [ ] **B19** Independent user subscription (D35): price **4,800 XAF** (decided 2026-09-18). **Not built now — centers come first.** Still to define when it is picked up: plans, monthly/annual, trial, grace, what happens if they later join a center, and Apple/Google in-app billing vs Stripe in the Flutter app.
+- [ ] **B17** **Payment flow shape: two backend steps, or one frontend-style call?** — **owner: Herman** *(moved from T4 — Herman owns Notch Pay and the payment flow)*
 
   **What exists in the backend today (built and tested, phases 6 and 7a):**
   1. `POST /api/payments` — center login required, header `Idempotency-Key`
@@ -1502,7 +1853,7 @@ All open items here need a joint decision by the backend dev and Herman.
 
   **What the frontend spec expects:** one call
   `POST /api/centers/me/subscription` with `{ seatMix, billingPeriod,
-  paymentMethod, referralCode?, phone? }`, returning `{ paymentId, status,
+  paymentMethod, referralCode?, phone? }` (`referralCode` is dropped, D36), returning `{ paymentId, status,
   amountXaf, next: { type: "mobile_money_prompt" | "redirect", redirectUrl } }`.
 
   **Options:**
@@ -1519,7 +1870,7 @@ All open items here need a joint decision by the backend dev and Herman.
     screen. Can be combined with A or B.
 
   **Decided elsewhere, not part of this question:** seat content, renewal, pro
-  rata, billing period (D4); card provider (B6); referral codes (B7);
+  rata, billing period (D4); card provider (B6, D35); referral codes (B7, D36: none);
   `paymentMethod` being stored on the payment follows from B6.
 
   **Recommendation (backend dev):** A, and C only if Notch Pay's direct push is
@@ -1536,7 +1887,7 @@ answered or built before it can start.
 
 | # | Item | Why it is first | Blocked by |
 |---|---|---|---|
-| 1 | **D4 subscription model** (you + Herman) | Renewal, adding seats, code expiry and invoice amounts all wait on it. No paid school can exist until it is answered | — |
+| 1 | ~~**D4 subscription model** (you + Herman)~~ **decided 2026-09-18: M3** | Renewal, adding seats, code expiry and invoice amounts are now built on D4's rules | — |
 | 2 | **B3 AI cost per speaking session** | Decides whether 4,500 XAF per seat earns or loses money. It can change D4's prices | — |
 | 3 | **Phase 1 backend: account context** — `/me` shape (D2), locations (D14), plans (D15), split profile routes (D11), center change-password (D23) | The dashboard cannot leave fake mode without it, and it needs no business answer | — |
 | 4 | **Phase 2: activation codes + trial** (D1, D3, D16–D19) | The core mechanic: without codes a school has nothing to give its students. Trial codes do not wait on D4; paid codes do | partly D4 |
@@ -1548,7 +1899,7 @@ answered or built before it can start.
 | # | Item | Why | Blocked by |
 |---|---|---|---|
 | 7 | **`StudentActivity` + remote submit for all modules** (D26, D29) | Without it the school dashboard is empty and students lose history on reinstall | — |
-| 8 | **B10 progress / readiness formula** (you + Herman) | The number the school and the student both see. Nothing can be displayed before it is defined | — |
+| 8 | ~~**B10 progress / readiness formula**~~ **decided: D38** | The number the school and the student both see | — |
 | 9 | **Center dashboard data routes** (numbers, per-skill scores, sessions, alerts) | What a manager opens every day; the reason a school renews | 7, 8 |
 | 10 | **Landing page: error codes, token refresh, real logout** (D10 prompt) | Without it the dashboard breaks the moment fake mode is off | 3 |
 | 11 | **Landing page: pages off fake data** | Every page still reads localStorage even in real mode | 3, 4, 10 |
@@ -1559,12 +1910,12 @@ answered or built before it can start.
 | # | Item | Blocked by |
 |---|---|---|
 | 13 | Billing page and invoices (D27) + **B5** VAT / EUR | D4, 6 |
-| 14 | **B6** card provider, **B7** referral, **B8** account deletion | — |
+| 14 | ~~**B6** card provider~~ (D35), ~~**B7** referral~~ (D36), ~~**B8** account deletion~~ (D37) | — |
 | 15 | **B1** 10-seat minimum, **B2** minimum charge, **B11** code moves per period | D4, B3 |
 | 16 | Support form (D24) | 3 |
 | 17 | School logo (D22) | 3 |
 | 18 | Speaking room real short code (D32) | — |
-| 19 | **B18** grammar content + the grammar route (D28), **B13** speaking phrases | content, not code |
+| 19 | the grammar route (D28), **B13** speaking phrases | content, not code |
 | 20 | **B16** guest mode, newsletter removal (D30), the dead notification switch (D31) | — |
 
 **Rule of thumb:** P0 decides whether the business works, P1 decides whether

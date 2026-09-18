@@ -292,8 +292,9 @@ model ActivationCode {
   connected_ip  String?
 
   /// When the seat stops working, compared on read. Null means it follows the
-  /// center's subscription rather than a date of its own — which is what paid
-  /// codes do until D4 says otherwise.
+  /// center's subscription rather than a date of its own — which is what every
+  /// paid code does (D4: all codes of a school end with its pack). Only the
+  /// trial code carries a date.
   expires_at DateTime?
 
   created_at DateTime @default(now())
