@@ -33,6 +33,8 @@ import { CentersService } from './centers.service';
 import { CenterTrialService } from './center-trial.service';
 import { CenterActivationCodesController } from './center-activation-codes.controller';
 import { CenterActivationCodesService } from './center-activation-codes.service';
+import { CodeRedemptionController } from './code-redemption.controller';
+import { CodeRedemptionService } from './code-redemption.service';
 
 @Module({
   // SubscriptionAccessModule imports nothing, so this cannot close a cycle
@@ -41,6 +43,7 @@ import { CenterActivationCodesService } from './center-activation-codes.service'
   controllers: [
     CenterAuthController,
     CenterActivationCodesController,
+    CodeRedemptionController,
     CenterProfileController,
     CenterSubscriptionController,
     CenterStudentsController,
@@ -55,6 +58,7 @@ import { CenterActivationCodesService } from './center-activation-codes.service'
     CenterSubscriptionService,
     CenterTrialService,
     CenterActivationCodesService,
+    CodeRedemptionService,
     SubscriptionPolicyService,
     PricingService,
     CenterSeatsService,

@@ -341,6 +341,31 @@ export class RateLimitService {
     ]);
   }
 
+  /**
+   * Caps guessing at activation codes, which are stored readable and so can
+   * only be protected by how fast anyone may try them.
+   *
+   * Two buckets, because they stop different things. Per student is the tight
+   * one: an honest student types a code a handful of times, not dozens. Per IP
+   * is deliberately loose, because a whole classroom behind one school router
+   * redeems its codes in the same quarter of an hour, and a tight IP limit
+   * would lock out the class the product was sold to.
+   */
+  checkCodeRedeemLimit(studentId: string, ip: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:codes:redeem:student:${studentId}`,
+        max: 5,
+        ttlSeconds: 15 * 60,
+      },
+      {
+        key: `ratelimit:codes:redeem:ip:${ip}`,
+        max: 60,
+        ttlSeconds: 15 * 60,
+      },
+    ]);
+  }
+
   /** Center verification is isolated from student verification traffic. */
   checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
     return this.enforceDistributed([

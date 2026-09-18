@@ -19,6 +19,11 @@ const EXEMPT: Record<string, string> = {
   // A blocked student still has to log in, refresh and reset a password.
   // Refusing here would strand the account their center may yet pay for.
   AuthController: 'auth must stay reachable while blocked',
+  // Redeeming a code is how a student WITHOUT access gets it. Requiring a live
+  // subscription here would make the door open only for people already
+  // inside. The route checks the code's own center instead.
+  CodeRedemptionController:
+    'redeeming is how a student with no access gets some',
   // Guards are per-route here. Room creation carries both guards; the public
   // room lookup stays open so a guest can join by link. Proven in
   // room-subscription.spec.ts rather than by this sweep.
