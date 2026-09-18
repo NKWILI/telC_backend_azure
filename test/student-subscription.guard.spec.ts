@@ -134,17 +134,20 @@ describe('StudentSubscriptionGuard', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('refuses with SUBSCRIPTION_INACTIVE, distinct from an auth failure', async () => {
+    it('refuses with ACTIVATION_REQUIRED and a reason, distinct from an auth failure', async () => {
       givenStudent('center-1', subscription({ paid_until: daysFromNow(-8) }));
 
       const error = await guard
         .canActivate(authenticated({ studentId: 'student-1' }))
         .catch((e: unknown) => e);
 
+      // One code the app catches everywhere, sending the student to the
+      // activation screen; the reason picks the sentence it shows (D19).
       expect(error).toBeInstanceOf(ForbiddenException);
       expect((error as ForbiddenException).getStatus()).toBe(403);
       expect((error as ForbiddenException).getResponse()).toMatchObject({
-        message: 'SUBSCRIPTION_INACTIVE',
+        message: 'ACTIVATION_REQUIRED',
+        reason: 'CENTER_UNPAID',
       });
     });
 
@@ -162,20 +165,41 @@ describe('StudentSubscriptionGuard', () => {
   });
 
   describe('students no subscription governs', () => {
-    it('admits a student who belongs to no center', async () => {
-      givenStudent(null, null);
+    it('admits a student who was using the app on their own before codes were required', async () => {
+      prisma.$queryRaw.mockResolvedValue([
+        { center_id: null, plan: null, tier: null, grandfathered_access: true },
+      ]);
 
       await expect(
         guard.canActivate(authenticated({ studentId: 'student-1' })),
       ).resolves.toBe(true);
     });
 
-    it('admits a guest, who belongs to no center', async () => {
-      // A real guest token carries a real studentId (TokenService
-      // .generateGuestAccessToken), so the guard looks the row up like any
-      // other. Guests have no center, so they pass on that basis rather than
-      // by skipping the check.
-      givenStudent(null, null);
+    it('sends a new account with no code to the activation screen', async () => {
+      prisma.$queryRaw.mockResolvedValue([
+        {
+          center_id: null,
+          plan: null,
+          tier: null,
+          grandfathered_access: false,
+        },
+      ]);
+
+      const error = await guard
+        .canActivate(authenticated({ studentId: 'student-1' }))
+        .catch((e: unknown) => e);
+
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        message: 'ACTIVATION_REQUIRED',
+        reason: 'NO_CODE',
+      });
+    });
+
+    it('admits a guest, which writes no student row, until guest mode is decided', async () => {
+      // `/api/auth/guest` mints an id and writes nothing, so the lookup finds
+      // no row. Whether guests should learn at all is B16, still open; until
+      // then they keep the access they have today.
+      prisma.$queryRaw.mockResolvedValue([]);
       const context = authenticated({
         studentId: 'guest-student-1',
         deviceId: 'guest',

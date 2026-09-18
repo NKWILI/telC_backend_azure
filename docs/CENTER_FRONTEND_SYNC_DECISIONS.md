@@ -1368,6 +1368,31 @@ exists exactly for two students sitting in the same room.
 
 ---
 
+## D34. Students already using the app keep access; new accounts need a code
+
+**Decided:** 2026-09-18
+**Status:** decided, built in phase 9
+
+D9 says an account alone gives no access. Applied literally, every student who
+registered in the Flutter app on their own before schools existed would be
+locked out on release day. So:
+
+- **Accounts that exist without a school when this ships keep their access.**
+  A migration marks exactly those rows (`grandfathered_access`), at the moment
+  it runs. On production that moment is the release: no date to configure, and
+  no account created later can fall under it.
+- **Every account created after that needs a code** (D9, D17).
+- **Students a school released or deactivated are refused**, even if they
+  predate the rule. The mark is only honoured with no tier, and a tier means a
+  school once governed them.
+- **Guest tokens are unchanged** until B16 (guest mode) is decided.
+
+A refused student gets `ACTIVATION_REQUIRED` (D19) with the reason: `NO_CODE`,
+`CODE_DEACTIVATED`, `CODE_EXPIRED` or `CENTER_UNPAID`. This replaces
+`SUBSCRIPTION_INACTIVE` on student learning routes; center routes keep it.
+
+---
+
 # Question register
 
 Every open question for syncing the backend with the center dashboard and the

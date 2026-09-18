@@ -71,7 +71,7 @@ describe('StudentEntitlementService', () => {
 
   describe('students no center governs', () => {
     it('reports NONE rather than blocked for a student with no center', async () => {
-      givenRow({ center_id: null, plan: null });
+      givenRow({ center_id: null, plan: null, grandfathered_access: true });
 
       // NONE is distinct from BLOCKED on purpose. A client must be able to
       // tell "you have no school" from "your school stopped paying", because
@@ -83,6 +83,7 @@ describe('StudentEntitlementService', () => {
         tier: null,
         studentExists: true,
         wasGoverned: false,
+        accessRefusal: null,
       });
     });
 
@@ -207,6 +208,101 @@ describe('StudentEntitlementService', () => {
         studentExists: true,
         wasGoverned: true,
       });
+    });
+  });
+
+  /**
+   * D9 and D34: an account alone is not access; a code is.
+   *
+   * Except for the people already using the app without a school when this
+   * shipped. The migration that introduced the rule marked each of them, so
+   * "existing users keep access" means exactly the rows that existed then —
+   * no date to configure, and nobody created later can slip under it.
+   */
+  describe('an account alone is not access', () => {
+    it('lets a student who predates the rule keep learning', async () => {
+      givenRow({ center_id: null, tier: null, grandfathered_access: true });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: true,
+        accessRefusal: null,
+      });
+    });
+
+    it('refuses a new account that has never redeemed a code', async () => {
+      givenRow({ center_id: null, tier: null, grandfathered_access: false });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        status: 'NONE',
+        studentsMayLearn: false,
+        accessRefusal: 'NO_CODE',
+      });
+    });
+
+    it('refuses a student a school took back, and says so', async () => {
+      givenRow({
+        center_id: null,
+        tier: 'START',
+        grandfathered_access: false,
+        last_code_status: 'DEACTIVATED',
+        last_code_expires_at: null,
+      });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: false,
+        accessRefusal: 'CODE_DEACTIVATED',
+      });
+    });
+
+    it('refuses a student whose code has run out, and says so', async () => {
+      givenRow({
+        center_id: null,
+        tier: 'START',
+        grandfathered_access: false,
+        last_code_status: 'CONNECTED',
+        last_code_expires_at: daysFromNow(-1),
+      });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: false,
+        accessRefusal: 'CODE_EXPIRED',
+      });
+    });
+
+    it('does not let the grandfather mark cover a student a school released', async () => {
+      // The mark was only ever set on rows with no tier. A tier means a school
+      // governed this student; releasing them must not restore free access.
+      givenRow({ center_id: null, tier: 'PRO', grandfathered_access: true });
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: false,
+      });
+    });
+
+    it('names the school as the reason once its subscription lapses', async () => {
+      givenRow(withSubscription({ paid_until: daysFromNow(-8) }));
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: false,
+        accessRefusal: 'CENTER_UNPAID',
+      });
+    });
+
+    it('leaves a guest token alone until guest mode is decided (B16)', async () => {
+      givenRow(null);
+
+      await expect(service.forStudent('student-1')).resolves.toMatchObject({
+        studentsMayLearn: true,
+        accessRefusal: null,
+      });
+    });
+
+    it('still costs one query, refusal reason included', async () => {
+      givenRow({ center_id: null, tier: null, grandfathered_access: false });
+
+      await service.forStudent('student-1');
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     });
   });
 

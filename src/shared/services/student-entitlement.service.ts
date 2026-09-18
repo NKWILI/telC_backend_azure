@@ -55,21 +55,38 @@ export interface StudentEntitlement {
    * a way for a center to hand its students a paid tier for free.
    */
   wasGoverned: boolean;
+  /**
+   * Why this student may not learn, in the words the app turns into a
+   * sentence — or null when they may (D19).
+   *
+   * `NO_CODE` for an account that never redeemed one, `CODE_DEACTIVATED` when
+   * a school took theirs back, `CODE_EXPIRED` when it ran out, `CENTER_UNPAID`
+   * when their school's subscription lapsed. It is for wording only; whether
+   * they may learn is `studentsMayLearn`.
+   */
+  accessRefusal: AccessRefusal | null;
 }
 
-/** A student no center governs. `studentExists` and `wasGoverned` are filled
- *  in per row, because those are the parts that differ between an independent
- *  student, a released one, and a token naming nobody. */
-const ungoverned = (
-  studentExists: boolean,
-  wasGoverned: boolean,
-): StudentEntitlement => ({
+export type AccessRefusal =
+  | 'NO_CODE'
+  | 'CODE_DEACTIVATED'
+  | 'CODE_EXPIRED'
+  | 'CENTER_UNPAID';
+
+/**
+ * A token naming no student row: a guest.
+ *
+ * `/api/auth/guest` mints an id and writes nothing. Whether guests may learn at
+ * all is still undecided (B16), so until then they keep what they have today.
+ */
+const guest = (): StudentEntitlement => ({
   status: 'NONE',
   studentsMayLearn: true,
   graceEndsAt: null,
   tier: null,
-  studentExists,
-  wasGoverned,
+  studentExists: false,
+  wasGoverned: false,
+  accessRefusal: null,
 });
 
 /** One row per student, or none at all if the student is gone. */
@@ -80,6 +97,11 @@ interface EntitlementRow {
   trial_ends_at: Date | null;
   paid_until: Date | null;
   tier: Tier | null;
+  /** Set by the migration that required codes, on the users of that day. */
+  grandfathered_access?: boolean | null;
+  /** The student's most recent code, only for saying WHY access is refused. */
+  last_code_status?: string | null;
+  last_code_expires_at?: Date | null;
 }
 
 /**
@@ -112,13 +134,23 @@ export class StudentEntitlementService {
     //
     // The centers table is skipped entirely: center_id carries ON DELETE SET
     // NULL, so it cannot dangle, and nothing here needs the center itself.
+    // The last-code columns are scalar subqueries rather than a join, so this
+    // stays ONE statement, and they are only read to word a refusal. On the
+    // happy path they cost nothing a round trip would notice.
     const rows = await this.prisma.$queryRaw<EntitlementRow[]>`
       SELECT s.center_id,
              cs.plan::text AS plan,
              cs.trial_started_at,
              cs.trial_ends_at,
              cs.paid_until,
-             s.tier::text AS tier
+             s.tier::text AS tier,
+             s.grandfathered_access,
+             (SELECT ac.status::text FROM activation_codes ac
+               WHERE ac.student_id = s.id
+               ORDER BY ac.updated_at DESC LIMIT 1) AS last_code_status,
+             (SELECT ac.expires_at FROM activation_codes ac
+               WHERE ac.student_id = s.id
+               ORDER BY ac.updated_at DESC LIMIT 1) AS last_code_expires_at
         FROM students s
         LEFT JOIN center_subscriptions cs ON cs.center_id = s.center_id
        WHERE s.id = ${studentId}
@@ -129,7 +161,7 @@ export class StudentEntitlementService {
     // No row at all. A guest token, or an id that never existed: nothing can
     // be attributed to it, and nothing ever governed it.
     if (!row) {
-      return ungoverned(false, false);
+      return guest();
     }
 
     // A row, but no center. Either a genuine independent student or one a
@@ -139,7 +171,23 @@ export class StudentEntitlementService {
       // undefined, and treating that as "holds a tier" would mark a genuine
       // independent student as formerly governed and take the exam module
       // away from them.
-      return ungoverned(true, Boolean(row.tier));
+      const wasGoverned = Boolean(row.tier);
+
+      // An account alone is not access (D9) — except for the people already
+      // using the app on their own when that rule shipped (D34). The mark is
+      // honoured only without a tier: a school once governed anyone who has
+      // one, and releasing them must not restore free access.
+      const mayLearn = Boolean(row.grandfathered_access) && !wasGoverned;
+
+      return {
+        status: 'NONE',
+        studentsMayLearn: mayLearn,
+        graceEndsAt: null,
+        tier: null,
+        studentExists: true,
+        wasGoverned,
+        accessRefusal: mayLearn ? null : this.refusalFromLastCode(row),
+      };
     }
 
     // Every center is created with a subscription row, so its absence is a
@@ -160,6 +208,7 @@ export class StudentEntitlementService {
         tier: null,
         studentExists: true,
         wasGoverned: true,
+        accessRefusal: 'CENTER_UNPAID',
       };
     }
 
@@ -179,6 +228,29 @@ export class StudentEntitlementService {
       tier: row.tier,
       studentExists: true,
       wasGoverned: true,
+      // A governed student is refused only because their school is not
+      // entitled — a trial that ended, a payment that lapsed. Their code ends
+      // with the trial, so this is the reason even then.
+      accessRefusal: decision.studentsMayLearn ? null : 'CENTER_UNPAID',
     };
+  }
+
+  /**
+   * Why a student with no school may not learn, read from their latest code.
+   *
+   * Only wording: the decision was already made. A student whose code a school
+   * took back hears that, one whose code ran out hears that, and anyone else
+   * is asked for a code.
+   */
+  private refusalFromLastCode(row: EntitlementRow): AccessRefusal {
+    if (row.last_code_status === 'DEACTIVATED') {
+      return 'CODE_DEACTIVATED';
+    }
+
+    if (row.last_code_expires_at && row.last_code_expires_at <= new Date()) {
+      return 'CODE_EXPIRED';
+    }
+
+    return 'NO_CODE';
   }
 }

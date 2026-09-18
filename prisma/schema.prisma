@@ -74,6 +74,16 @@ model Student {
   /// from one. It decides what the student may do, so it is read per request.
   tier Tier?
 
+  /// True for a student who was using the app without a school when access
+  /// started requiring an activation code (D34).
+  ///
+  /// Set once, by the migration that introduced the rule, on every row that
+  /// had no center and no tier at that moment — so "people already using the
+  /// app keep it" means exactly those rows, with no date to configure and no
+  /// way for an account created later to fall under it. Nothing writes it
+  /// afterwards.
+  grandfathered_access Boolean @default(false)
+
   center          Center?         @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
