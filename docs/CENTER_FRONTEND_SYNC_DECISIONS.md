@@ -1604,6 +1604,12 @@ ready     = written ≥ 60 AND oral ≥ 60
 - **Weights:** the official telc B1+ Beruf points per part. Until they are
   entered from the official grid, the four written skills weigh equally and
   written/oral follow the exam's total points split.
+- **Agreed 2026-09-19 with Herman:** build now with provisional weights, kept
+  as constants in one place so the official grid replaces them without any
+  other change. Provisional: the four written skills **equal**; written/oral
+  **75 / 25**, the telc Deutsch B1 split (225 / 75 points) — to be checked
+  against the B1+ Beruf grid. The pass rule (each part ≥ 60) does not depend
+  on the weights.
 - **Skills never practised count 0** here (option C): a student who skips
   speaking is not ready, and the number must say so.
 - **Not enough data:** under **5 attempts** in total, readiness is returned as
