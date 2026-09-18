@@ -1,6 +1,7 @@
 import {
   alerts,
   readiness,
+  roundScores,
   skillScores,
   type SkillScores,
   type TeilScore,
@@ -88,6 +89,20 @@ describe('readiness', () => {
       oral: 0,
       ready: false,
     });
+  });
+
+  it('decides the pass on exact skill scores, not rounded ones', () => {
+    // Sprechen Teils 60, 60, 59 = 59.67: shown as 60, but not a pass.
+    const exact = skillScores([
+      { skill: 'SPRECHEN', teil: 1, score: 60 },
+      { skill: 'SPRECHEN', teil: 2, score: 60 },
+      { skill: 'SPRECHEN', teil: 3, score: 59 },
+    ]);
+    const all = { ...allAt(90), SPRECHEN: exact.SPRECHEN };
+
+    expect(roundScores(exact).SPRECHEN).toBe(60);
+    expect(readiness(all, 20).ready).toBe(false);
+    expect(readiness(all, 20).oral).toBe(60);
   });
 
   it('needs the pass mark in both parts, compared before rounding', () => {

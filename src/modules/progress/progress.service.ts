@@ -6,6 +6,7 @@ import {
   alerts,
   readiness,
   RECENT_ATTEMPTS_PER_TEIL,
+  roundScores,
   SKILLS,
   skillScores,
   type ProgressAlert,
@@ -152,8 +153,10 @@ export class ProgressService {
     activity: Activity | undefined,
     now: Date,
   ): StudentProgress {
-    const scores: SkillScores = skillScores(activity?.teils ?? []);
-    const result = readiness(scores, activity?.attempts ?? 0);
+    const exact: SkillScores = skillScores(activity?.teils ?? []);
+    // The pass decision on the exact scores; everything shown, rounded.
+    const result = readiness(exact, activity?.attempts ?? 0);
+    const scores = roundScores(exact);
     const lastActivityAt = activity?.lastActivityAt ?? null;
     const skills = {} as Record<SkillId, number | null>;
     for (const skill of SKILLS) skills[SKILL_ID[skill]] = scores[skill];

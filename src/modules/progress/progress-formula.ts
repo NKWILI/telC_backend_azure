@@ -78,7 +78,19 @@ export function skillScores(teils: TeilScore[]): SkillScores {
       continue;
     }
     const sum = own.reduce((total, t) => total + t.score, 0);
-    result[skill] = Math.round(sum / TEILS_PER_SKILL[skill]);
+    // Not rounded: the pass mark is decided on the exact score (59.67 is not
+    // 60). Round with `roundScores` only for display.
+    result[skill] = sum / TEILS_PER_SKILL[skill];
+  }
+  return result;
+}
+
+/** Whole points, for the response and for the alerts the user reads. */
+export function roundScores(scores: SkillScores): SkillScores {
+  const result = {} as SkillScores;
+  for (const skill of SKILLS) {
+    const score = scores[skill];
+    result[skill] = score === null ? null : Math.round(score);
   }
   return result;
 }
@@ -96,6 +108,9 @@ export interface Readiness {
  * Readiness mirrors telc scoring: a written and an oral part, each needing
  * the pass mark. Skills never practised count 0 here (option C): a student
  * who skips speaking is not ready, and the number says so.
+ *
+ * Takes the exact skill scores from `skillScores`, never the rounded ones:
+ * rounding first would let 59.67 pass.
  */
 export function readiness(
   skills: SkillScores,
@@ -129,6 +144,10 @@ export type ProgressAlert =
   | { type: 'low_progress'; readiness: number }
   | { type: 'weak_skill'; skill: Skill; score: number };
 
+/**
+ * Takes the rounded skill scores: an alert must agree with the number shown
+ * beside it, so a skill displayed as 45 is never flagged as under 45.
+ */
 export function alerts(
   skills: SkillScores,
   result: Readiness,
