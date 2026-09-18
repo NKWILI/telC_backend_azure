@@ -1166,7 +1166,18 @@ and `fr` dictionaries, and the localStorage entries that stored the notes
 ## D26. One `StudentActivity` table feeds every screen
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** built in the backend (phase 11, 2026-09-19); the Flutter app does not send attempts yet
+
+**As built:** `student_activities` holds one row per completed attempt: student,
+skill (`HOEREN`/`LESEN`/`SPRACHBAUSTEINE`/`SCHREIBEN`/`SPRECHEN`), Teil, score,
+max score (100 today), duration, Modelltest and the detailed attempt's id.
+Written by one function (`recordActivity`), in the same transaction as the
+detailed row: Hören, Sprachbausteine and Lesen at submit, Schreiben when its
+correction finishes **with a real score** (the stub's 75 after a model failure
+is not recorded), Sprechen when `evaluate` returns. Lesen gained
+`lesen_attempts` and Sprechen gained `speaking_attempts`. Guests get no rows
+(no student row). The migration backfilled the existing Hören, Sprachbausteine
+and Schreiben attempts of real students, skipping the stub-scored writing.
 
 ### The problem
 
@@ -1296,7 +1307,19 @@ questions.
 ## D29. Module history and progress: one pattern, server-owned, offline fallback
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** backend built (phase 11, 2026-09-19); the Flutter app side (remote submit on, offline queue) is not done
+
+**As built:** every module's `/sessions` item carries the shared fields
+`attemptId`, `skill`, `teil`, `score`, `maxScore`, `status`
+(`completed`/`pending`), `completedAt`, `durationSeconds`, `modelltestId`,
+next to the fields it already had (none removed). Every `/teils` item carries
+`attempts`, `bestScore`, `lastScore`, `lastAttemptAt`, `maxScore`, read from
+`StudentActivity`. Lesen gained `GET /api/reading/sessions` and
+`GET /api/reading/teils`. Speaking `/sessions` now reads the kept evaluations
+(the old `exam_sessions` source was never scored). Every submit, and
+`evaluate`, accepts an optional `attemptId` (UUID from the app): a repeat is
+stored once and answered from the first copy; another student's id is
+`409 ATTEMPT_ID_TAKEN`. A repeated `evaluate` costs no quota and no model call.
 
 ### Today
 
@@ -1531,7 +1554,7 @@ the code rule (D34).
 ## D38. Level, skill scores and exam readiness ("progress")
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B10)
-**Status:** decided, not built — waits on D26 and D29
+**Status:** decided, not built — D26 and D29 are built in the backend (phase 11); this is next
 
 ### Prerequisite: the data must reach the server
 
