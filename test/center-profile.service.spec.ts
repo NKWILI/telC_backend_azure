@@ -103,7 +103,7 @@ describe('CenterProfileService', () => {
         paidUntil: null,
         graceEndsAt: null,
         studentsMayLearn: false,
-        seats: { START: 0, PRO: 0, PREMIUM: 0 },
+        seats: { start: 0, pro: 0, premium: 0 },
       },
     });
   });

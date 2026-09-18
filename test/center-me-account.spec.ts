@@ -103,7 +103,9 @@ describe('CenterProfileService account state', () => {
 
     const profile = await service.getProfile(signedIdentity);
 
-    expect(profile.account.seats).toEqual({ START: 7, PRO: 3, PREMIUM: 0 });
+    // Plan ids, the same words `GET /api/plans` uses. A client should not have
+    // to know that the database spells them differently.
+    expect(profile.account.seats).toEqual({ start: 7, pro: 3, premium: 0 });
   });
 
   it('reads the subscription scoped to the signed center, never an id from a client', async () => {

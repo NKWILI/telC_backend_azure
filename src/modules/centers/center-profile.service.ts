@@ -23,7 +23,8 @@ import {
 } from './center-onboarding';
 import { deriveAccountState } from './center-account-state';
 import { SubscriptionPolicyService } from './subscription-policy.service';
-import { type CenterPlan, Tier } from '@prisma/client';
+import { type CenterPlan } from '@prisma/client';
+import { emptySeatsByPlan, planIdFor } from '../../shared/plan-id';
 
 type SignedCenterIdentity = Pick<
   CenterAccessTokenPayload,
@@ -38,8 +39,13 @@ type SubscriptionFacts = {
   paid_until: Date | null;
 };
 
-/** Every tier present, zero included, so no client writes `?? 0`. */
-type SeatsByTier = Record<Tier, number>;
+/**
+ * Seats per plan, in the words a client uses (`start`, not `START`).
+ *
+ * The database spells tiers in upper case; that stays inside. A response that
+ * mixed both vocabularies would make every client translate between them.
+ */
+type SeatsByPlan = ReturnType<typeof emptySeatsByPlan>;
 
 /**
  * The address fields a country can demand, in the order a form shows them, so
@@ -278,7 +284,7 @@ export class CenterProfileService {
       };
     },
     subscription: SubscriptionFacts,
-    seats: SeatsByTier,
+    seats: SeatsByPlan,
   ): CenterProfileResponseDto {
     const onboarding = this.toOnboardingState(centerUser);
     const decision = this.policy.evaluate(subscription);
@@ -357,20 +363,16 @@ export class CenterProfileService {
    */
   private async loadSeats(
     identity: SignedCenterIdentity,
-  ): Promise<SeatsByTier> {
+  ): Promise<SeatsByPlan> {
     const rows = await this.prisma.centerSeat.findMany({
       where: { center_id: identity.centerId },
       select: { tier: true, quantity: true },
     });
 
-    const seats: SeatsByTier = {
-      [Tier.START]: 0,
-      [Tier.PRO]: 0,
-      [Tier.PREMIUM]: 0,
-    };
+    const seats = emptySeatsByPlan();
 
     for (const row of rows) {
-      seats[row.tier] = row.quantity;
+      seats[planIdFor(row.tier)] = row.quantity;
     }
 
     return seats;

@@ -8,7 +8,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Trim } from './center-validation.decorators';
-import type { Tier } from '@prisma/client';
+import type { SeatsByPlan } from '../../../shared/plan-id';
 import {
   CenterAuthCenterDto,
   CenterAuthUserDto,
@@ -103,11 +103,11 @@ export class CenterAccountStateDto {
   studentsMayLearn: boolean;
 
   @ApiProperty({
-    example: { START: 7, PRO: 3, PREMIUM: 0 },
+    example: { start: 7, pro: 3, premium: 0 },
     description:
-      'Seats held per tier, zeros included, from the seat rows. Absent and zero mean the same thing to a dashboard.',
+      'Seats held per plan, zeros included, from the seat rows. Keyed by the same plan ids `GET /api/plans` uses, so a client never translates between two vocabularies. Absent and zero mean the same thing to a dashboard.',
   })
-  seats: Record<Tier, number>;
+  seats: SeatsByPlan;
 }
 
 export class CenterProfileResponseDto {
