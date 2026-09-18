@@ -4,9 +4,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ActivationCodeStatus, Prisma, type Tier } from '@prisma/client';
+import {
+  ActivationCodeStatus,
+  Prisma,
+  type CefrLevel,
+  type Tier,
+} from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
+import {
+  ProgressService,
+  type StudentProgress,
+} from '../progress/progress.service';
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
 
@@ -27,6 +36,8 @@ export interface UpdateStudentInput {
    * at the next renewal.
    */
   tier?: Tier;
+  /** The student's current level (D38): declared by them, editable here. */
+  level?: CefrLevel;
 }
 
 export interface CenterStudentView {
@@ -46,11 +57,17 @@ export interface CenterStudentView {
    * student provisioned before tiers existed.
    */
   tier: Tier | null;
+  level: CefrLevel | null;
+  /** Skill scores, readiness and alerts (D38), from their activity. */
+  progress: StudentProgress;
 }
 
 @Injectable()
 export class CenterStudentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly progress: ProgressService,
+  ) {}
 
   async list(
     identity: SignedCenterIdentity,
@@ -73,8 +90,11 @@ export class CenterStudentsService {
       this.prisma.student.count({ where }),
     ]);
 
+    // One query for the whole page, not one per student.
+    const progress = await this.progress.forStudents(rows.map((r) => r.id));
+
     return {
-      students: rows.map((row) => this.toView(row)),
+      students: rows.map((row) => this.toView(row, progress.get(row.id)!)),
       total,
       page: query.page,
       pageSize: query.pageSize,
@@ -85,7 +105,8 @@ export class CenterStudentsService {
     identity: SignedCenterIdentity,
     studentId: string,
   ): Promise<CenterStudentView> {
-    return this.toView(await this.loadOwned(identity, studentId));
+    const student = await this.loadOwned(identity, studentId);
+    return this.withProgress(student);
   }
 
   /**
@@ -113,6 +134,7 @@ export class CenterStudentsService {
       ...(changes.lastName !== undefined && { last_name: changes.lastName }),
       ...(changes.phone !== undefined && { phone: changes.phone }),
       ...(changes.tier !== undefined && { tier: changes.tier }),
+      ...(changes.level !== undefined && { level: changes.level }),
     };
 
     if (Object.keys(data).length === 0) {
@@ -145,7 +167,14 @@ export class CenterStudentsService {
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    return this.toView(updated);
+    return this.withProgress(updated);
+  }
+
+  private async withProgress(
+    row: Parameters<CenterStudentsService['toView']>[0],
+  ): Promise<CenterStudentView> {
+    const progress = await this.progress.forStudents([row.id]);
+    return this.toView(row, progress.get(row.id)!);
   }
 
   /**
@@ -264,18 +293,22 @@ export class CenterStudentsService {
    * spread would put every one of them in an API response the moment someone
    * added a column.
    */
-  private toView(row: {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-    email: string | null;
-    phone: string | null;
-    activated_at: Date | null;
-    activation_key_expires: Date | null;
-    created_at: Date;
-    last_seen_at: Date;
-    tier: Tier | null;
-  }): CenterStudentView {
+  private toView(
+    row: {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      phone: string | null;
+      activated_at: Date | null;
+      activation_key_expires: Date | null;
+      created_at: Date;
+      last_seen_at: Date;
+      tier: Tier | null;
+      level: CefrLevel | null;
+    },
+    progress: StudentProgress,
+  ): CenterStudentView {
     return {
       id: row.id,
       firstName: row.first_name,
@@ -288,6 +321,8 @@ export class CenterStudentsService {
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at,
       tier: row.tier,
+      level: row.level,
+      progress,
     };
   }
 }

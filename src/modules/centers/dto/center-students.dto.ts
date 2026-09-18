@@ -11,7 +11,11 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { Tier } from '@prisma/client';
+import { CefrLevel, Tier } from '@prisma/client';
+import {
+  CenterProgressSummaryDto,
+  StudentProgressDto,
+} from '../../progress/progress.dto';
 import { Trim } from './center-validation.decorators';
 
 /** Name and phone only. Email is identity and is not editable here. */
@@ -50,6 +54,16 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsEnum(Tier)
   tier?: Tier;
+
+  @ApiPropertyOptional({
+    enum: CefrLevel,
+    example: CefrLevel.B1,
+    description:
+      'The student current German level. Declared by the student, correctable by the center.',
+  })
+  @IsOptional()
+  @IsEnum(CefrLevel)
+  level?: CefrLevel;
 }
 
 export class ListStudentsQueryDto {
@@ -93,7 +107,25 @@ export class CenterStudentDto {
 
   @ApiProperty({ type: String, format: 'date-time' }) createdAt: Date;
   @ApiProperty({ type: String, format: 'date-time' }) lastSeenAt: Date;
+
+  @ApiPropertyOptional({ nullable: true, enum: Tier }) tier: Tier | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: CefrLevel,
+    description:
+      'Current level, null until set. The target is always telc B1+ Beruf: show it as a fixed label.',
+  })
+  level: CefrLevel | null;
+
+  @ApiProperty({
+    type: StudentProgressDto,
+    description: 'Skill scores, readiness and alerts (D38).',
+  })
+  progress: StudentProgressDto;
 }
+
+export { CenterProgressSummaryDto };
 
 export class CenterStudentListDto {
   @ApiProperty({ type: [CenterStudentDto] }) students: CenterStudentDto[];

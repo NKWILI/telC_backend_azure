@@ -16,6 +16,14 @@ export class AuthStudentDto {
 
   @ApiProperty({ example: true })
   emailVerified: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: ['A1', 'A2', 'B1', 'B2'],
+    description:
+      'Returned by the profile update; read it from GET /api/progress/me.',
+  })
+  level?: 'A1' | 'A2' | 'B1' | 'B2' | null;
 }
 
 export class AuthTokenResponseDto {

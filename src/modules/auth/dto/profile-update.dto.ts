@@ -1,5 +1,12 @@
-import { IsOptional, IsString, MinLength, IsEmail } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { CefrLevel } from '@prisma/client';
 
 export class ProfileUpdateDto {
   @ApiPropertyOptional({ minLength: 2, example: 'Ada' })
@@ -18,4 +25,12 @@ export class ProfileUpdateDto {
   @IsOptional()
   @IsEmail({}, { message: 'Email must be a valid email address' })
   email?: string;
+
+  @ApiPropertyOptional({
+    enum: CefrLevel,
+    description: 'The student current German level (D38).',
+  })
+  @IsOptional()
+  @IsEnum(CefrLevel)
+  level?: CefrLevel;
 }

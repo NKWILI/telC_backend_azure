@@ -9,6 +9,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterStudentsController } from '../src/modules/centers/center-students.controller';
 import { CenterStudentsService } from '../src/modules/centers/center-students.service';
+import { ProgressService } from '../src/modules/progress/progress.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
@@ -55,7 +56,10 @@ describe('CenterStudentsController contract', () => {
 
     const module = await Test.createTestingModule({
       controllers: [CenterStudentsController],
-      providers: [{ provide: CenterStudentsService, useValue: students }],
+      providers: [
+        { provide: CenterStudentsService, useValue: students },
+        { provide: ProgressService, useValue: { forCenter: jest.fn() } },
+      ],
     })
       .overrideGuard(CenterAuthGuard)
       .useValue({

@@ -7,6 +7,7 @@ export interface Student {
   created_at: string;
   updated_at: string;
   last_seen_at: string;
+  level?: 'A1' | 'A2' | 'B1' | 'B2' | null;
 }
 
 export interface AuthStudentResponse {

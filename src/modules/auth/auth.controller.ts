@@ -67,14 +67,11 @@ interface StudentResponseDto {
   lastName: string | null;
   email: string | null;
   emailVerified: boolean;
+  level?: 'A1' | 'A2' | 'B1' | 'B2' | null;
 }
 
 @ApiTags('Auth')
-@ApiExtraModels(
-  AuthTokenResponseDto,
-  AuthStudentDto,
-  RefreshResponseDto,
-)
+@ApiExtraModels(AuthTokenResponseDto, AuthStudentDto, RefreshResponseDto)
 @Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -408,7 +405,12 @@ export class AuthController {
     refreshToken: string;
     student: StudentResponseDto;
   }> {
-    if (!profileDto.firstName && !profileDto.lastName && !profileDto.email) {
+    if (
+      !profileDto.firstName &&
+      !profileDto.lastName &&
+      !profileDto.email &&
+      !profileDto.level
+    ) {
       throw new BadRequestException('NO_PROFILE_FIELDS');
     }
 
@@ -418,6 +420,7 @@ export class AuthController {
         firstName: profileDto.firstName,
         lastName: profileDto.lastName,
         email: profileDto.email,
+        level: profileDto.level,
       },
     );
 
@@ -449,6 +452,7 @@ export class AuthController {
         lastName: updated.last_name,
         email: updated.email,
         emailVerified: updated.email_verified,
+        level: updated.level ?? null,
       },
     };
   }
