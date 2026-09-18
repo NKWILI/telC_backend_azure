@@ -10,7 +10,7 @@ import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-pay
 import { PrismaService } from '../../shared/services/prisma.service';
 import { PricingService, type SeatMix } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
-import { deriveOnboardingState } from './center-onboarding';
+import { deriveOnboardingState, suppliedLocationOf } from './center-onboarding';
 
 /**
  * The manager is carried as well as the center, because profile completeness
@@ -164,7 +164,15 @@ export class PaymentsService {
       where: { id: identity.centerUserId, center_id: identity.centerId },
       select: {
         phone: true,
-        center: { select: { country: true, city: true } },
+        center: {
+          select: {
+            country: true,
+            city: true,
+            country_code: true,
+            city_id: true,
+            city_other: true,
+          },
+        },
       },
     });
 
@@ -173,8 +181,10 @@ export class PaymentsService {
     }
 
     const onboarding = deriveOnboardingState({
-      country: manager.center.country,
-      city: manager.center.city,
+      // Through the shared helper, so the till and the dashboard agree on
+      // what "complete" means. A center told it is ready to pay, then refused
+      // when it pays, is the worst possible place for these two to differ.
+      ...suppliedLocationOf(manager.center),
       phone: manager.phone,
     });
 

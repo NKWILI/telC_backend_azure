@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterAuthController } from '../src/modules/centers/center-auth.controller';
+import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { CenterAuthService } from '../src/modules/centers/center-auth.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { RateLimitService } from '../src/shared/services/rate-limit.service';
@@ -24,7 +25,7 @@ describe('Center registration contract', () => {
     managerFirstName: ' Alain ',
     managerLastName: ' Ngeukeu ',
     email: ' Manager@Example.COM ',
-    password: 'private-password',
+    password: 'Private-Passw0rd!',
   };
 
   beforeEach(async () => {
@@ -44,7 +45,22 @@ describe('Center registration contract', () => {
         { provide: CenterAuthService, useValue: {} },
         { provide: RateLimitService, useValue: rateLimitService },
       ],
-    }).compile();
+    })
+      // The controller now carries one guarded route (change-password). These
+      // suites cover the public ones, so the guard is stubbed rather than
+      // wired: its real behaviour is center-auth.guard.spec.ts.
+      .overrideGuard(CenterAuthGuard)
+      .useValue({
+        canActivate: (context: any) => {
+          context.switchToHttp().getRequest().centerUser = {
+            centerUserId: 'owner-1',
+            centerId: 'center-1',
+            sessionId: 'session-1',
+          };
+          return true;
+        },
+      })
+      .compile();
 
     app = module.createNestApplication();
     app.useGlobalPipes(createGlobalValidationPipe());

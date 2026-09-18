@@ -10,6 +10,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   MaxUtf8Bytes,
+  StrongPassword,
   NormalizeEmail,
   Trim,
 } from './center-validation.decorators';
@@ -86,6 +87,7 @@ export class CenterResetPasswordDto {
   @IsString()
   @MinLength(8)
   @MaxUtf8Bytes(72)
+  @StrongPassword()
   newPassword: string;
 
   @ApiProperty({ maxLength: 255 })
@@ -157,4 +159,30 @@ export class CenterLoginDto {
   @IsString()
   @MaxLength(255)
   deviceName?: string;
+}
+
+/**
+ * Changing a password from inside the dashboard.
+ *
+ * The current password is the proof, so there is no code and no device here:
+ * who is asking comes from the access token. The confirm field a form shows is
+ * checked in the browser — the API takes one new password.
+ */
+export class CenterChangePasswordDto {
+  @ApiProperty({ format: 'password' })
+  @IsString()
+  @IsNotEmpty()
+  currentPassword: string;
+
+  @ApiProperty({
+    minLength: 8,
+    format: 'password',
+    description:
+      'At least 8 characters with an uppercase letter, a digit and a special character, and at most 72 UTF-8 bytes — the same rule registration and reset apply. The shape is checked here; the rule itself is enforced in the service, so every caller gets the same answer.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxUtf8Bytes(72)
+  @StrongPassword()
+  newPassword: string;
 }

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/require-await */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CenterProfileService } from '../src/modules/centers/center-profile.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 
 describe('CenterProfileService', () => {
   const signedIdentity = {
@@ -41,11 +42,20 @@ describe('CenterProfileService', () => {
       $transaction: jest.fn(async (operations: unknown) =>
         Array.isArray(operations) ? Promise.all(operations) : operations,
       ),
+      centerSubscription: {
+        findUnique: jest.fn().mockResolvedValue({
+          plan: 'TRIAL',
+          trial_started_at: null,
+          trial_ends_at: null,
+          paid_until: null,
+        }),
+      },
+      centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
       get student(): never {
         throw new Error('Student must never be accessed');
       },
     };
-    service = new CenterProfileService(prisma);
+    service = new CenterProfileService(prisma, new SubscriptionPolicyService());
   });
 
   it('scopes the profile read by both signed identifiers', async () => {
@@ -71,15 +81,41 @@ describe('CenterProfileService', () => {
       center: {
         id: 'center-1',
         name: 'Goethe Language Center',
+        // This fixture predates the structured columns, which is exactly the
+        // case the legacy pair still exists for: the row is readable and its
+        // onboarding still counts as complete.
         country: 'Cameroon',
         city: 'Douala',
         logoUrl: null,
+        countryCode: null,
+        regionId: null,
+        cityId: null,
+        cityOther: null,
+        district: null,
+        postalCode: null,
+        street: null,
+        houseNumber: null,
       },
       // Derived on every read, never stored. This row has all three required
       // fields, so it is complete. The rules themselves are covered in
       // center-onboarding-state.spec.ts; this asserts the block belongs to the
       // response shape, so a future refactor cannot quietly drop it.
       onboarding: { complete: true, missing: [] },
+      // Also derived on every read: what the dashboard shell shows above every
+      // page. Asserted whole here so a refactor cannot quietly drop a field
+      // the shell depends on; the mapping rules themselves live in
+      // center-account-state.spec.ts.
+      account: {
+        paymentStatus: 'unpaid',
+        subscriptionStatus: 'TRIAL_PENDING',
+        onboardingCompleted: false,
+        onboardingStep: 3,
+        trialEndsAt: null,
+        paidUntil: null,
+        graceEndsAt: null,
+        studentsMayLearn: false,
+        seats: { start: 0, pro: 0, premium: 0 },
+      },
     });
   });
 
@@ -106,34 +142,16 @@ describe('CenterProfileService', () => {
     );
   });
 
-  it('routes user fields and center fields to their own tables', async () => {
-    await service.updateProfile(signedIdentity, {
-      firstName: 'Alain-Michel',
-      city: 'Yaounde',
-    });
-
-    expect(prisma.centerUser.update).toHaveBeenCalledWith({
-      where: { id: 'owner-1' },
-      data: { first_name: 'Alain-Michel' },
-    });
-    expect(prisma.center.update).toHaveBeenCalledWith({
-      where: { id: 'center-1' },
-      data: { city: 'Yaounde' },
-    });
-  });
-
-  it('touches only the table a partial update names', async () => {
-    await service.updateProfile(signedIdentity, { phone: '+237690000001' });
-
-    expect(prisma.centerUser.update).toHaveBeenCalled();
-    expect(prisma.center.update).not.toHaveBeenCalled();
-  });
-
-  it('refuses to update a profile outside the signed center', async () => {
+  // Each write now has its own route (see center-location-write.spec.ts for
+  // what they accept); these keep the two rules that must hold for both.
+  it('refuses to update anything outside the signed center', async () => {
     prisma.centerUser.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.updateProfile(signedIdentity, { city: 'Yaounde' }),
+      service.updateCenter(signedIdentity, { name: 'Institut Lerniqo' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.updateManager(signedIdentity, { phone: '+237690000001' }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.centerUser.update).not.toHaveBeenCalled();
     expect(prisma.center.update).not.toHaveBeenCalled();
@@ -141,7 +159,10 @@ describe('CenterProfileService', () => {
 
   it('rejects an update that carries no allowlisted field', async () => {
     await expect(
-      service.updateProfile(signedIdentity, {}),
+      service.updateCenter(signedIdentity, {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateManager(signedIdentity, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.centerUser.update).not.toHaveBeenCalled();
     expect(prisma.center.update).not.toHaveBeenCalled();

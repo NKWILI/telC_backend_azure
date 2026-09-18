@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterAuthController } from '../src/modules/centers/center-auth.controller';
+import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { CenterAuthService } from '../src/modules/centers/center-auth.service';
 import { TokenService } from '../src/modules/auth/token.service';
@@ -24,7 +25,7 @@ const VALID = {
   managerFirstName: 'Alain',
   managerLastName: 'Ngeukeu',
   email: 'manager@example.com',
-  password: 'a-strong-password',
+  password: 'A-Strong-Passw0rd!',
 };
 
 describe('POST /api/center-auth/register accepts five fields', () => {
@@ -55,7 +56,22 @@ describe('POST /api/center-auth/register accepts five fields', () => {
           },
         },
       ],
-    }).compile();
+    })
+      // The controller now carries one guarded route (change-password). These
+      // suites cover the public ones, so the guard is stubbed rather than
+      // wired: its real behaviour is center-auth.guard.spec.ts.
+      .overrideGuard(CenterAuthGuard)
+      .useValue({
+        canActivate: (context: any) => {
+          context.switchToHttp().getRequest().centerUser = {
+            centerUserId: 'owner-1',
+            centerId: 'center-1',
+            sessionId: 'session-1',
+          };
+          return true;
+        },
+      })
+      .compile();
 
     app = module.createNestApplication();
     app.useGlobalPipes(createGlobalValidationPipe());

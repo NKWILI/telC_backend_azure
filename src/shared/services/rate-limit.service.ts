@@ -323,6 +323,24 @@ export class RateLimitService {
     ]);
   }
 
+  /**
+   * Caps guessing at the CURRENT password from inside an open session.
+   *
+   * Keyed on the center user rather than the IP: the caller is authenticated,
+   * and what needs protecting is one account — an attacker holding a stolen
+   * session would otherwise be free to try passwords until one matched, and
+   * every match hands them the ability to lock the owner out.
+   */
+  checkCenterChangePasswordLimit(centerUserId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:centers:change-password:user:${centerUserId}`,
+        max: this.resetPasswordMaxAttempts,
+        ttlSeconds: this.resetPasswordWindowSeconds,
+      },
+    ]);
+  }
+
   /** Center verification is isolated from student verification traffic. */
   checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
     return this.enforceDistributed([

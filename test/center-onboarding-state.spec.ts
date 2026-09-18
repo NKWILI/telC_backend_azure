@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
 import { CenterProfileService } from '../src/modules/centers/center-profile.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 
 /**
  * Onboarding completeness, derived on read.
@@ -54,8 +55,22 @@ describe('onboarding state on the center profile', () => {
   };
 
   beforeEach(() => {
-    prisma = { centerUser: { findFirst: jest.fn() } };
-    service = new CenterProfileService(prisma);
+    prisma = {
+      centerUser: { findFirst: jest.fn() },
+      // The profile read now also answers where the center stands, so the
+      // fixture carries a subscription and its (empty) seat rows. A center
+      // without a subscription is a fault, not a state to test here.
+      centerSubscription: {
+        findUnique: jest.fn().mockResolvedValue({
+          plan: 'TRIAL',
+          trial_started_at: null,
+          trial_ends_at: null,
+          paid_until: null,
+        }),
+      },
+      centerSeat: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    service = new CenterProfileService(prisma, new SubscriptionPolicyService());
   });
 
   it('reports a complete profile', async () => {

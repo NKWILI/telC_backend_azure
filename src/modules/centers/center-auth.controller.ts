@@ -1,10 +1,22 @@
-import { Body, Controller, Ip, Post, UseFilters } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Post,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadGatewayResponse,
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -15,7 +27,11 @@ import { RateLimitService } from '../../shared/services/rate-limit.service';
 import { CenterAuthService } from './center-auth.service';
 import { CentersService } from './centers.service';
 import { CenterExceptionFilter } from './center-exception.filter';
+import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
+import { CurrentCenterUser } from './decorators/current-center-user.decorator';
+import { CenterAuthGuard } from './guards/center-auth.guard';
 import {
+  CenterChangePasswordDto,
   CenterForgotPasswordDto,
   CenterLoginDto,
   CenterRefreshTokenDto,
@@ -25,6 +41,7 @@ import {
 } from './dto/center-auth-request.dto';
 import {
   CenterAuthResponseDto,
+  CenterChangePasswordResponseDto,
   CenterLogoutResponseDto,
   CenterMessageResponseDto,
   CenterTokenPairDto,
@@ -203,5 +220,33 @@ export class CenterAuthController {
     @Body() dto: CenterRefreshTokenDto,
   ): Promise<CenterLogoutResponseDto> {
     return this.centerAuthService.logout(dto);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(CenterAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Change the signed-in manager password',
+    description:
+      'The current password is the proof, so no code is emailed and nothing is sent to the address on file. Every OTHER device is signed out — whoever knew the old password may be holding one — while the caller keeps the session it is asking from. The new password must pass the same rule as registration and reset; a confirm field is checked in the browser only. Rate limited per manager, because an open session must not become a way to guess the current password.',
+  })
+  @ApiOkResponse({ type: CenterChangePasswordResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
+  async changePassword(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+    @Body() dto: CenterChangePasswordDto,
+  ): Promise<CenterChangePasswordResponseDto> {
+    // Before the bcrypt comparison, so a flood of guesses is refused without
+    // paying for a hash each time.
+    await this.rateLimitService.checkCenterChangePasswordLimit(
+      centerUser.centerUserId,
+    );
+
+    await this.centerAuthService.changePassword(centerUser, dto);
+
+    return { success: true };
   }
 }

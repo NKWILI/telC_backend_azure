@@ -24,7 +24,8 @@ import { CenterProfileService } from './center-profile.service';
 import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import {
   CenterProfileResponseDto,
-  UpdateCenterProfileDto,
+  UpdateCenterDto,
+  UpdateCenterManagerDto,
 } from './dto/center-profile.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
 import { CenterAuthGuard } from './guards/center-auth.guard';
@@ -57,9 +58,9 @@ export class CenterProfileController {
   @Patch('me')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Update the signed-in center profile',
+    summary: 'Update the school',
     description:
-      'Updates only the allowlisted fields supplied. Identity, role, email and verification state are not editable here.',
+      "The school's name, where it is, and the rest of its address. Only the allowlisted fields supplied are written; anything else in the body is a 400. `regionId` is not accepted — it is looked up from the city, so a city cannot be filed under a region it does not belong to. Which address fields are required depends on the country being set (`GET /api/locations`), and a request that sets a country without them answers ADDRESS_INCOMPLETE naming the missing ones. The manager's own details are a separate route.",
   })
   @ApiOkResponse({ type: CenterProfileResponseDto })
   @ApiBadRequestResponse({ type: CenterErrorResponseDto })
@@ -68,8 +69,27 @@ export class CenterProfileController {
   @ApiServiceUnavailableResponse({ type: CenterErrorResponseDto })
   async updateMe(
     @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
-    @Body() dto: UpdateCenterProfileDto,
+    @Body() dto: UpdateCenterDto,
   ): Promise<CenterProfileResponseDto> {
-    return this.profileService.updateProfile(centerUser, dto);
+    return this.profileService.updateCenter(centerUser, dto);
+  }
+
+  @Patch('me/manager')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Update the manager',
+    description:
+      'Who the manager is, how to reach them, and where they are — which is not necessarily where the school is. No address fields: nothing is posted to a manager. Email is not editable here; changing the address a verification link was sent to is its own flow. Role, verification state and center are never editable.',
+  })
+  @ApiOkResponse({ type: CenterProfileResponseDto })
+  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
+  @ApiServiceUnavailableResponse({ type: CenterErrorResponseDto })
+  async updateManager(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+    @Body() dto: UpdateCenterManagerDto,
+  ): Promise<CenterProfileResponseDto> {
+    return this.profileService.updateManager(centerUser, dto);
   }
 }

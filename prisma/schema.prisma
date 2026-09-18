@@ -126,13 +126,40 @@ model Center {
   /// says nothing.
   name String
 
-  /// Collected during onboarding rather than at registration, so both are
-  /// nullable until a center completes its profile. Nothing reads them today;
-  /// they exist for invoices and for knowing which market a school is in.
-  /// Profile completeness is derived from these being present, never stored.
+  /// The first, free-text pair, kept only until every row has moved to the
+  /// structured columns below. Nothing new writes them; they are dropped in a
+  /// migration of their own once production is checked, because a column drop
+  /// is not something to ride along with the feature that replaces it.
   country    String?
   city       String?
   logo_url   String?
+
+  /// Where the school is, as ids rather than prose.
+  ///
+  /// A controlled country decides the address rules, the currency and later
+  /// the tax; free text would give back "Douala / douala / Dla", which no
+  /// report can group. Collected during onboarding rather than at
+  /// registration, so all of it is nullable until a center completes its
+  /// profile.
+  country_code String?
+  /// Never supplied by a client: it is looked up from the chosen city, so a
+  /// city can never end up filed under a region it does not belong to.
+  region_id    String?
+  /// The city we list, or…
+  city_id      String?
+  /// …the one we do not. A school in a town missing from the list types it
+  /// here and is never blocked from onboarding; a name typed often enough is
+  /// promoted into the list, and these rows repointed.
+  city_other   String?
+
+  /// The rest of the address, required or not depending on the country: a
+  /// quarter is how an address is given in Cameroon, while Germany needs
+  /// street, number and postal code. The rule lives beside the country list,
+  /// not here — a column cannot express "required only for CM".
+  district     String?
+  postal_code  String?
+  street       String?
+  house_number String?
   created_at DateTime @default(now())
   updated_at DateTime @default(now()) @updatedAt
 
@@ -314,6 +341,16 @@ model CenterUser {
   /// during onboarding rather than at registration. Nullable for that reason.
   /// This is who gets contacted about a late payment or a locked account.
   phone        String?
+
+  /// Where the manager is, which is not necessarily where the school is — a
+  /// chain's owner may sit in Yaoundé while the school is in Douala. Same
+  /// three columns as the center, and the same rule: the region is derived
+  /// from the city, never sent by a client. No address fields: nothing is
+  /// posted to a manager.
+  country_code String?
+  region_id    String?
+  city_id      String?
+  city_other   String?
   created_at   DateTime       @default(now())
   updated_at   DateTime       @default(now()) @updatedAt
   last_seen_at DateTime       @default(now())
