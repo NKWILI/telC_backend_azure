@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
 import { CenterStudentsController } from '../src/modules/centers/center-students.controller';
+import { CenterActivationCodesController } from '../src/modules/centers/center-activation-codes.controller';
 import { CenterSubscriptionService } from '../src/modules/centers/center-subscription.service';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 import { PricingService } from '../src/modules/centers/pricing.service';
@@ -26,14 +27,19 @@ const enforced = (handler: unknown) =>
  * test rather than a support ticket.
  */
 describe('what a blocked center can and cannot do', () => {
+  // Access is now granted through activation codes, and handing a seat to a
+  // new student is what reactivating a code does. The old routes that created
+  // students and minted per-student keys are gone (D20).
   describe('refused: granting new access', () => {
-    it('cannot provision a student', () => {
-      expect(enforced(CenterStudentsController.prototype.provision)).toBe(true);
+    it('cannot reactivate a code, which would give a seat to someone new', () => {
+      expect(enforced(CenterActivationCodesController.prototype.activate)).toBe(
+        true,
+      );
     });
 
-    it('cannot mint a replacement activation key', () => {
+    it('cannot act on codes at all while blocked', () => {
       expect(
-        enforced(CenterStudentsController.prototype.issueActivationKey),
+        enforced(CenterActivationCodesController.prototype.deactivate),
       ).toBe(true);
     });
   });
@@ -122,10 +128,14 @@ describe('what a blocked center can and cannot do', () => {
       expect(enforced(CenterStudentsController.prototype.remove)).toBe(false);
     });
 
-    it('can still revoke an activation key', () => {
-      expect(
-        enforced(CenterStudentsController.prototype.revokeActivationKey),
-      ).toBe(false);
+    it('can still see its codes and seats', () => {
+      // Seeing what it holds is how a lapsed center decides to pay.
+      expect(enforced(CenterActivationCodesController.prototype.list)).toBe(
+        false,
+      );
+      expect(enforced(CenterActivationCodesController.prototype.seats)).toBe(
+        false,
+      );
     });
   });
   /**

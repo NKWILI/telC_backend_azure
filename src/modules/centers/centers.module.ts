@@ -11,9 +11,6 @@ import { CenterSubscriptionController } from './center-subscription.controller';
 import { CenterSubscriptionService } from './center-subscription.service';
 import { CenterStudentsController } from './center-students.controller';
 import { CenterStudentsService } from './center-students.service';
-import { StudentActivationController } from './student-activation.controller';
-import { StudentActivationService } from './student-activation.service';
-import { StudentProvisioningService } from './student-provisioning.service';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 import { PricingService } from './pricing.service';
 import { CenterSeatsService } from './center-seats.service';
@@ -47,7 +44,6 @@ import { CodeRedemptionService } from './code-redemption.service';
     CenterProfileController,
     CenterSubscriptionController,
     CenterStudentsController,
-    StudentActivationController,
     PaymentsController,
     PaymentWebhooksController,
   ],
@@ -81,8 +77,6 @@ import { CodeRedemptionService } from './code-redemption.service';
           ),
         }),
     },
-    StudentProvisioningService,
-    StudentActivationService,
     CenterStudentsService,
     CenterAuthGuard,
     CenterSubscriptionGuard,

@@ -9,9 +9,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { CenterStudentsController } from '../src/modules/centers/center-students.controller';
 import { CenterStudentsService } from '../src/modules/centers/center-students.service';
-import { StudentProvisioningService } from '../src/modules/centers/student-provisioning.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
-import { CenterSubscriptionGuard } from '../src/modules/centers/guards/center-subscription.guard';
 import { createGlobalValidationPipe } from '../src/shared/pipes/global-validation.pipe';
 
 describe('CenterStudentsController contract', () => {
@@ -37,17 +35,8 @@ describe('CenterStudentsController contract', () => {
     lastSeenAt: new Date('2026-08-23T00:00:00.000Z'),
   };
 
-  const validBody = {
-    firstName: '  Awa  ',
-    lastName: ' Mbarga ',
-    email: ' Awa@Example.COM ',
-    phone: ' +237690000000 ',
-    tier: 'START',
-  };
-
   let app: INestApplication<App>;
   let students: Record<string, jest.Mock>;
-  let provisioning: { provision: jest.Mock };
   let guardAllows: boolean;
 
   beforeEach(async () => {
@@ -62,26 +51,11 @@ describe('CenterStudentsController contract', () => {
       get: jest.fn().mockResolvedValue(student),
       update: jest.fn().mockResolvedValue(student),
       remove: jest.fn().mockResolvedValue({ removed: true }),
-      issueActivationKey: jest.fn().mockResolvedValue({
-        activationKey: 'raw-key',
-        activationKeyExpiresAt: new Date('2026-09-01T00:00:00.000Z'),
-      }),
-      revokeActivationKey: jest.fn().mockResolvedValue({ revoked: true }),
-    };
-    provisioning = {
-      provision: jest.fn().mockResolvedValue({
-        ...student,
-        activationKey: 'raw-key',
-        activationKeyExpiresAt: new Date('2026-09-01T00:00:00.000Z'),
-      }),
     };
 
     const module = await Test.createTestingModule({
       controllers: [CenterStudentsController],
-      providers: [
-        { provide: CenterStudentsService, useValue: students },
-        { provide: StudentProvisioningService, useValue: provisioning },
-      ],
+      providers: [{ provide: CenterStudentsService, useValue: students }],
     })
       .overrideGuard(CenterAuthGuard)
       .useValue({
@@ -91,11 +65,6 @@ describe('CenterStudentsController contract', () => {
           return true;
         },
       })
-      // This spec is about the controller contract. Whether the center is
-      // entitled to provision is center-subscription.guard.spec's subject,
-      // and which routes it protects is center-blocked-surface.spec's.
-      .overrideGuard(CenterSubscriptionGuard)
-      .useValue({ canActivate: () => true })
       .compile();
 
     app = module.createNestApplication();
@@ -133,105 +102,6 @@ describe('CenterStudentsController contract', () => {
       .expect(400);
 
     expect(response.body.error).toBe('VALIDATION_ERROR');
-  });
-
-  it('provisions a student with normalized input', async () => {
-    await http().post('/api/centers/me/students').send(validBody).expect(201);
-
-    expect(provisioning.provision).toHaveBeenCalledWith(signedIdentity, {
-      firstName: 'Awa',
-      lastName: 'Mbarga',
-      email: 'awa@example.com',
-      phone: '+237690000000',
-      tier: 'START',
-    });
-  });
-
-  /**
-   * The tier decides what the student may do, so it is not a field to guess
-   * at. A center holding several tiers has no obvious default, and defaulting
-   * to the cheapest would quietly put a student the school meant to give the
-   * exam module into a tier without it.
-   */
-  describe('the tier is required and must be a real tier', () => {
-    it('refuses a body with no tier', async () => {
-      const withoutTier = { ...validBody };
-      delete (withoutTier as Partial<typeof validBody>).tier;
-
-      await http()
-        .post('/api/centers/me/students')
-        .send(withoutTier)
-        .expect(400);
-
-      expect(provisioning.provision).not.toHaveBeenCalled();
-    });
-
-    it.each(['GOLD', 'start', '', 1, null])(
-      'refuses %s as a tier',
-      async (tier) => {
-        await http()
-          .post('/api/centers/me/students')
-          .send({ ...validBody, tier })
-          .expect(400);
-
-        expect(provisioning.provision).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each(['START', 'PRO', 'PREMIUM'])('accepts %s', async (tier) => {
-      await http()
-        .post('/api/centers/me/students')
-        .send({ ...validBody, tier })
-        .expect(201);
-
-      expect(provisioning.provision).toHaveBeenCalledWith(
-        signedIdentity,
-        expect.objectContaining({ tier }),
-      );
-    });
-  });
-
-  it('returns the activation key once, on provisioning', async () => {
-    const response = await http()
-      .post('/api/centers/me/students')
-      .send(validBody)
-      .expect(201);
-
-    expect(response.body.activationKey).toBe('raw-key');
-  });
-
-  it.each([
-    ['a missing email', { ...validBody, email: undefined }],
-    ['an invalid email', { ...validBody, email: 'not-an-email' }],
-    ['a missing first name', { ...validBody, firstName: '  ' }],
-    ['a client-supplied center id', { ...validBody, centerId: 'other-center' }],
-    ['a client-supplied password', { ...validBody, password: 'hunter2' }],
-    ['a client-supplied activation key', { ...validBody, activationKey: 'x' }],
-    [
-      'a client-supplied activated flag',
-      { ...validBody, activatedAt: '2026-01-01' },
-    ],
-  ])('rejects %s before reaching the service', async (_case, body) => {
-    const response = await http()
-      .post('/api/centers/me/students')
-      .send(body)
-      .expect(400);
-
-    expect(response.body.error).toBe('VALIDATION_ERROR');
-    expect(provisioning.provision).not.toHaveBeenCalled();
-  });
-
-  it('surfaces a full center as 403 with a distinct code', async () => {
-    provisioning.provision.mockRejectedValue(
-      new ForbiddenException('SEAT_LIMIT_REACHED'),
-    );
-
-    const response = await http()
-      .post('/api/centers/me/students')
-      .send(validBody)
-      .expect(403);
-
-    expect(response.body.error).toBe('SEAT_LIMIT_REACHED');
   });
 
   it('answers 404 for another center student', async () => {
@@ -333,32 +203,22 @@ describe('CenterStudentsController contract', () => {
     expect(students.remove).toHaveBeenCalledWith(signedIdentity, 'student-1');
   });
 
-  it('mints a replacement activation key', async () => {
-    const response = await http()
-      .post('/api/centers/me/students/student-1/activation-key')
-      .expect(201);
-
-    expect(response.body.activationKey).toBe('raw-key');
-    expect(students.issueActivationKey).toHaveBeenCalledWith(
-      signedIdentity,
-      'student-1',
-    );
-  });
-
-  it('revokes an outstanding activation key', async () => {
-    await http()
-      .delete('/api/centers/me/students/student-1/activation-key')
-      .expect(200)
-      .expect({ revoked: true });
+  // Students now arrive by redeeming a code (D1, D17). The routes that created
+  // them and minted per-student keys are removed, not merely unused (D20).
+  it.each([
+    ['post', '/api/centers/me/students'],
+    ['post', '/api/centers/me/students/student-1/activation-key'],
+    ['delete', '/api/centers/me/students/student-1/activation-key'],
+  ] as const)('no longer serves %s %s', async (method, path) => {
+    await http()[method](path).expect(404);
   });
 
   it('refuses every route without a center token', async () => {
     guardAllows = false;
 
     await http().get('/api/centers/me/students').expect(403);
-    await http().post('/api/centers/me/students').send(validBody).expect(403);
     await http().delete('/api/centers/me/students/student-1').expect(403);
     expect(students.list).not.toHaveBeenCalled();
-    expect(provisioning.provision).not.toHaveBeenCalled();
+    expect(students.remove).not.toHaveBeenCalled();
   });
 });
