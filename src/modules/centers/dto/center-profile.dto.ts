@@ -110,12 +110,55 @@ export class CenterAccountStateDto {
   seats: SeatsByPlan;
 }
 
+/**
+ * The school as the dashboard reads it: the login shape plus where it is.
+ *
+ * A separate class rather than fields added to `CenterAuthCenterDto`, because
+ * that one is the login response and a session reply has no business carrying
+ * a street address. What a settings form prefills from belongs here.
+ */
+export class CenterProfileCenterDto extends CenterAuthCenterDto {
+  @ApiPropertyOptional({ nullable: true, example: 'CM' })
+  countryCode: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'littoral',
+    description:
+      'Derived from the city when it was written; never sent by a client.',
+  })
+  regionId: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'douala' })
+  cityId: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Kribi',
+    description:
+      'Set instead of `cityId` when the school is in a town we do not list. Exactly one of the two is ever present.',
+  })
+  cityOther: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Akwa' })
+  district: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: '45127' })
+  postalCode: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Hauptstraße' })
+  street: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: '12' })
+  houseNumber: string | null;
+}
+
 export class CenterProfileResponseDto {
   @ApiProperty({ type: CenterAuthUserDto })
   centerUser: CenterAuthUserDto;
 
-  @ApiProperty({ type: CenterAuthCenterDto })
-  center: CenterAuthCenterDto;
+  @ApiProperty({ type: CenterProfileCenterDto })
+  center: CenterProfileCenterDto;
 
   @ApiProperty({ type: CenterOnboardingStateDto })
   onboarding: CenterOnboardingStateDto;

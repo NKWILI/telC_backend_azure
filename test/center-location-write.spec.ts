@@ -120,6 +120,13 @@ describe('CenterProfileService location writes', () => {
     });
 
     it('requires a district in Cameroon, where that is how an address is given', async () => {
+      // Missing from the request AND from the row. A district already stored
+      // satisfies the rule — see "editing a location that is already stored".
+      prisma.centerUser.findFirst.mockResolvedValue({
+        ...storedUser,
+        center: { ...storedUser.center, district: null },
+      });
+
       await expect(
         service.updateCenter(signedIdentity, {
           countryCode: 'CM',
@@ -171,6 +178,95 @@ describe('CenterProfileService location writes', () => {
       await service.updateCenter(signedIdentity, { name: 'Institut Lerniqo' });
 
       expect(prisma.centerUser.update).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * A profile form prefills from what was saved. If the read does not return
+   * the columns the write stores, the settings page shows empty fields over a
+   * complete address, and the manager retypes it.
+   */
+  describe('reading back what was written', () => {
+    it('returns the structured location, not only the legacy pair', async () => {
+      const profile = await service.getProfile(signedIdentity);
+
+      expect(profile.center).toEqual(
+        expect.objectContaining({
+          countryCode: 'CM',
+          regionId: 'littoral',
+          cityId: 'douala',
+          cityOther: null,
+          district: 'Akwa',
+          postalCode: null,
+          street: null,
+          houseNumber: null,
+        }),
+      );
+    });
+  });
+
+  describe('editing a location that is already stored', () => {
+    it('keeps the stored country when only the city changes', async () => {
+      await service.updateCenter(signedIdentity, { cityId: 'nkongsamba' });
+
+      expect(centerWrite()).toEqual(
+        expect.objectContaining({
+          country_code: 'CM',
+          region_id: 'littoral',
+          city_id: 'nkongsamba',
+        }),
+      );
+    });
+
+    it('does not demand an address that is already on the row', async () => {
+      // The German rules ask for street, number and postal code. They are
+      // stored; a move from Essen to Köln must not ask for them again.
+      prisma.centerUser.findFirst.mockResolvedValue({
+        ...storedUser,
+        center: {
+          ...storedUser.center,
+          country_code: 'DE',
+          region_id: 'nordrhein-westfalen',
+          city_id: 'essen',
+          district: null,
+          postal_code: '45127',
+          street: 'Hauptstraße',
+          house_number: '12',
+        },
+      });
+
+      await service.updateCenter(signedIdentity, { cityId: 'koeln' });
+
+      expect(centerWrite()).toEqual(
+        expect.objectContaining({ country_code: 'DE', city_id: 'koeln' }),
+      );
+    });
+
+    it('clears a field the new country does not collect', async () => {
+      prisma.centerUser.findFirst.mockResolvedValue({
+        ...storedUser,
+        center: {
+          ...storedUser.center,
+          country_code: 'DE',
+          region_id: 'nordrhein-westfalen',
+          city_id: 'essen',
+          postal_code: '45127',
+          street: 'Hauptstraße',
+          house_number: '12',
+        },
+      });
+
+      // Cameroon has no postal code to ask for, so a German one left behind
+      // would be printed on an invoice nobody can deliver to.
+      await service.updateCenter(signedIdentity, {
+        countryCode: 'CM',
+        cityId: 'douala',
+        district: 'Akwa',
+      });
+
+      expect(centerWrite()).toEqual(
+        expect.objectContaining({ country_code: 'CM', postal_code: null }),
+      );
     });
   });
 

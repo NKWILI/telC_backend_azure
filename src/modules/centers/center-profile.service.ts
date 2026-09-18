@@ -58,6 +58,34 @@ const REQUIRED_ADDRESS_FIELDS = [
   'houseNumber',
 ] as const;
 
+/** The column each of those fields is stored in. */
+const ADDRESS_COLUMNS: Record<
+  (typeof REQUIRED_ADDRESS_FIELDS)[number],
+  string
+> = {
+  district: 'district',
+  postalCode: 'postal_code',
+  street: 'street',
+  houseNumber: 'house_number',
+};
+
+/**
+ * What a write needs to know about the row it is changing.
+ *
+ * Optional throughout, because a center that has not onboarded has none of it,
+ * and the fixtures of older tests carry only the legacy pair.
+ */
+interface StoredLocation {
+  country_code?: string | null;
+  region_id?: string | null;
+  city_id?: string | null;
+  city_other?: string | null;
+  district?: string | null;
+  postal_code?: string | null;
+  street?: string | null;
+  house_number?: string | null;
+}
+
 @Injectable()
 export class CenterProfileService {
   constructor(
@@ -99,18 +127,24 @@ export class CenterProfileService {
     identity: SignedCenterIdentity,
     changes: UpdateCenterDto,
   ): Promise<CenterProfileResponseDto> {
+    // Read before building the write. A profile edit changes what is already
+    // there: a school moving from Essen to Köln must not be asked again for
+    // the street it already gave, and that cannot be judged from the request
+    // body alone.
+    const stored = (await this.loadOwnedUser(identity)).center;
+    const location = this.toLocationData(changes, stored);
+
     const data: Prisma.CenterUpdateInput = {
       ...(changes.name !== undefined && { name: changes.name }),
       ...(changes.logoUrl !== undefined && { logo_url: changes.logoUrl }),
-      ...this.toLocationData(changes),
-      ...this.toAddressData(changes),
+      ...location,
+      ...this.toAddressData(changes, stored, location.country_code),
     };
 
     if (Object.keys(data).length === 0) {
       throw new BadRequestException('NO_PROFILE_FIELDS_SUPPLIED');
     }
 
-    await this.loadOwnedUser(identity);
     await this.prisma.center.update({
       where: { id: identity.centerId },
       data,
@@ -129,18 +163,19 @@ export class CenterProfileService {
     identity: SignedCenterIdentity,
     changes: UpdateCenterManagerDto,
   ): Promise<CenterProfileResponseDto> {
+    const stored = await this.loadOwnedUser(identity);
+
     const data: Prisma.CenterUserUpdateInput = {
       ...(changes.firstName !== undefined && { first_name: changes.firstName }),
       ...(changes.lastName !== undefined && { last_name: changes.lastName }),
       ...(changes.phone !== undefined && { phone: changes.phone }),
-      ...this.toLocationData(changes),
+      ...this.toLocationData(changes, stored),
     };
 
     if (Object.keys(data).length === 0) {
       throw new BadRequestException('NO_PROFILE_FIELDS_SUPPLIED');
     }
 
-    await this.loadOwnedUser(identity);
     await this.prisma.centerUser.update({
       where: { id: identity.centerUserId },
       data,
@@ -157,20 +192,35 @@ export class CenterProfileService {
    * city and never from the request, so a city cannot be filed under a region
    * it does not belong to.
    */
-  private toLocationData(changes: {
-    countryCode?: string;
-    cityId?: string;
-    cityOther?: string;
-  }) {
-    if (
-      changes.countryCode === undefined &&
-      changes.cityId === undefined &&
-      changes.cityOther === undefined
-    ) {
+  private toLocationData(
+    changes: {
+      countryCode?: string;
+      cityId?: string;
+      cityOther?: string;
+    },
+    stored: StoredLocation,
+  ) {
+    const touchesLocation =
+      changes.countryCode !== undefined ||
+      changes.cityId !== undefined ||
+      changes.cityOther !== undefined;
+
+    if (!touchesLocation) {
       return {};
     }
 
-    const resolved = resolveLocation(changes);
+    // The request changes the stored location rather than replacing it.
+    // Sending only a city keeps the country already on the row; sending only a
+    // country keeps the city, which is then re-checked against it — so moving
+    // a German school to Cameroon while keeping "essen" is still refused.
+    const namesACity =
+      changes.cityId !== undefined || changes.cityOther !== undefined;
+
+    const resolved = resolveLocation({
+      countryCode: changes.countryCode ?? stored.country_code,
+      cityId: namesACity ? changes.cityId : stored.city_id,
+      cityOther: namesACity ? changes.cityOther : stored.city_other,
+    });
 
     if (isLocationRefusal(resolved)) {
       // The field travels with the code so the refusal lands on the input that
@@ -197,8 +247,12 @@ export class CenterProfileService {
    * an invoice can be addressed at all, and a client that skips them would
    * leave a German school with no street on its invoice.
    */
-  private toAddressData(changes: UpdateCenterDto) {
-    const address = {
+  private toAddressData(
+    changes: UpdateCenterDto,
+    stored: StoredLocation,
+    countryCode: string | undefined,
+  ) {
+    const address: Record<string, string | null> = {
       ...(changes.district !== undefined && { district: changes.district }),
       ...(changes.postalCode !== undefined && {
         postal_code: changes.postalCode,
@@ -209,23 +263,32 @@ export class CenterProfileService {
       }),
     };
 
-    // Only a request that sets the country is checked for completeness. A
-    // rename must not fail because an address typed under older rules is now
-    // short of a field.
-    if (changes.countryCode === undefined) {
+    // Nothing about the location moved, so nothing is re-judged. A rename must
+    // not fail because an address typed under older rules is short of a field.
+    if (countryCode === undefined) {
       return address;
     }
 
-    const rules = addressRulesFor(changes.countryCode);
+    const rules = addressRulesFor(countryCode);
 
-    // A country that resolves to no rules was already refused by
-    // `toLocationData`; this is the type narrowing, not a second check.
+    // A country with no rules was already refused by `toLocationData`; this is
+    // the type narrowing, not a second check.
     if (!rules) {
       return address;
     }
 
+    // Judged on what the row will hold after this write, not on what the
+    // request carries. Asking a school to retype an address it already gave,
+    // because it moved one city, is how a form gets abandoned.
+    const after = {
+      district: changes.district ?? stored.district,
+      postalCode: changes.postalCode ?? stored.postal_code,
+      street: changes.street ?? stored.street,
+      houseNumber: changes.houseNumber ?? stored.house_number,
+    };
+
     const missing = REQUIRED_ADDRESS_FIELDS.filter(
-      (field) => rules[field] === 'required' && !changes[field]?.trim(),
+      (field) => rules[field] === 'required' && !after[field]?.trim(),
     );
 
     if (missing.length > 0) {
@@ -233,6 +296,16 @@ export class CenterProfileService {
         message: 'ADDRESS_INCOMPLETE',
         missing,
       });
+    }
+
+    // A field the new country does not collect is cleared rather than left
+    // behind. A German postal code surviving a move to Cameroon would be
+    // printed on an invoice nobody can deliver to, and `@IsNotEmpty()` leaves
+    // a client no way to erase it.
+    for (const field of REQUIRED_ADDRESS_FIELDS) {
+      if (rules[field] === 'absent') {
+        address[ADDRESS_COLUMNS[field]] = null;
+      }
     }
 
     return address;
@@ -278,10 +351,7 @@ export class CenterProfileService {
         country: string | null;
         city: string | null;
         logo_url: string | null;
-        country_code?: string | null;
-        city_id?: string | null;
-        city_other?: string | null;
-      };
+      } & StoredLocation;
     },
     subscription: SubscriptionFacts,
     seats: SeatsByPlan,
@@ -302,9 +372,23 @@ export class CenterProfileService {
       center: {
         id: centerUser.center.id,
         name: centerUser.center.name,
+        // The first, free-text pair. Still reported until the columns are
+        // dropped, because rows written before the structured ones hold their
+        // location here and nowhere else.
         country: centerUser.center.country,
         city: centerUser.center.city,
         logoUrl: centerUser.center.logo_url,
+        // What the settings form prefills from. A read that omitted these
+        // would show empty fields over a complete address, and the manager
+        // would retype what they already gave.
+        countryCode: centerUser.center.country_code ?? null,
+        regionId: centerUser.center.region_id ?? null,
+        cityId: centerUser.center.city_id ?? null,
+        cityOther: centerUser.center.city_other ?? null,
+        district: centerUser.center.district ?? null,
+        postalCode: centerUser.center.postal_code ?? null,
+        street: centerUser.center.street ?? null,
+        houseNumber: centerUser.center.house_number ?? null,
       },
       onboarding,
       account: {

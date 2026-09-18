@@ -81,9 +81,20 @@ describe('CenterProfileService', () => {
       center: {
         id: 'center-1',
         name: 'Goethe Language Center',
+        // This fixture predates the structured columns, which is exactly the
+        // case the legacy pair still exists for: the row is readable and its
+        // onboarding still counts as complete.
         country: 'Cameroon',
         city: 'Douala',
         logoUrl: null,
+        countryCode: null,
+        regionId: null,
+        cityId: null,
+        cityOther: null,
+        district: null,
+        postalCode: null,
+        street: null,
+        houseNumber: null,
       },
       // Derived on every read, never stored. This row has all three required
       // fields, so it is complete. The rules themselves are covered in
