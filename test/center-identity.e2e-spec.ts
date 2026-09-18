@@ -18,6 +18,7 @@ import { CenterAuthController } from '../src/modules/centers/center-auth.control
 import { CenterAuthService } from '../src/modules/centers/center-auth.service';
 import { CenterProfileController } from '../src/modules/centers/center-profile.controller';
 import { CenterProfileService } from '../src/modules/centers/center-profile.service';
+import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 import { CentersService } from '../src/modules/centers/centers.service';
 import { CenterAuthGuard } from '../src/modules/centers/guards/center-auth.guard';
 import { EmailService } from '../src/modules/auth/email.service';
@@ -207,7 +208,7 @@ describe('center identity end to end', () => {
     managerFirstName: 'Alain',
     managerLastName: 'Ngeukeu',
     email: 'owner@example.com',
-    password: 'a-strong-password',
+    password: 'A-Strong-Passw0rd!',
   };
   const DEVICE = 'browser-installation-1';
 
@@ -227,6 +228,9 @@ describe('center identity end to end', () => {
         CentersService,
         CenterAuthService,
         CenterProfileService,
+        // The profile read reports where the center stands, which is the
+        // policy service's question (phase 8).
+        SubscriptionPolicyService,
         CenterAuthGuard,
         TokenService,
         TokenCryptoService,
@@ -348,14 +352,22 @@ describe('center identity end to end', () => {
     // 7. ...and not without one.
     await http().get('/api/centers/me').expect(401);
 
-    // 8. Update allowlisted fields; reject an escalation attempt.
+    // 8. Update the school — name and a structured location (D11, D14) —
+    // and reject an escalation attempt.
     const patched = await http()
       .patch('/api/centers/me')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({ city: 'Yaounde', centerName: 'Goethe Douala' })
+      .send({
+        name: 'Goethe Douala',
+        countryCode: 'CM',
+        cityId: 'yaounde',
+        district: 'Bastos',
+      })
       .expect(200);
-    expect(patched.body.center.city).toBe('Yaounde');
     expect(patched.body.center.name).toBe('Goethe Douala');
+    // The region is filled in from the city, never taken from the client.
+    expect(patched.body.center.cityId).toBe('yaounde');
+    expect(patched.body.center.regionId).toBe('centre');
 
     await http()
       .patch('/api/centers/me')
@@ -441,7 +453,7 @@ describe('center identity end to end', () => {
       .send({
         email: registration.email,
         code,
-        newPassword: 'a-different-password',
+        newPassword: 'A-Different-Passw0rd!',
         deviceId: 'device-new',
       })
       .expect(201);
@@ -469,7 +481,7 @@ describe('center identity end to end', () => {
       .post('/api/center-auth/login')
       .send({
         email: registration.email,
-        password: 'a-different-password',
+        password: 'A-Different-Passw0rd!',
         deviceId: 'device-new',
       })
       .expect(201);
