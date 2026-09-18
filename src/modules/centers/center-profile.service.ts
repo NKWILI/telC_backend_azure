@@ -7,9 +7,18 @@ import { Prisma } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { CenterProfileResponseDto } from './dto/center-profile.dto';
-import type { UpdateCenterProfileDto } from './dto/center-profile.dto';
+import type {
+  UpdateCenterDto,
+  UpdateCenterManagerDto,
+} from './dto/center-profile.dto';
+import {
+  addressRulesFor,
+  isLocationRefusal,
+  resolveLocation,
+} from '../locations/location-resolver';
 import {
   deriveOnboardingState,
+  suppliedLocationOf,
   type OnboardingState,
 } from './center-onboarding';
 import { deriveAccountState } from './center-account-state';
@@ -31,6 +40,17 @@ type SubscriptionFacts = {
 
 /** Every tier present, zero included, so no client writes `?? 0`. */
 type SeatsByTier = Record<Tier, number>;
+
+/**
+ * The address fields a country can demand, in the order a form shows them, so
+ * a refusal lists them the same way twice running.
+ */
+const REQUIRED_ADDRESS_FIELDS = [
+  'district',
+  'postalCode',
+  'street',
+  'houseNumber',
+] as const;
 
 @Injectable()
 export class CenterProfileService {
@@ -61,49 +81,155 @@ export class CenterProfileService {
     return this.toProfile(centerUser, subscription, seats);
   }
 
-  async updateProfile(
+  /**
+   * The school: its name, where it is, and the rest of its address.
+   *
+   * Separate from the manager route because the address rules belong to the
+   * school's country — a quarter in Cameroon, a street and postal code in
+   * Germany — and nothing is ever posted to a manager. One route for both
+   * would need a branch per field to know which rules applied.
+   */
+  async updateCenter(
     identity: SignedCenterIdentity,
-    changes: UpdateCenterProfileDto,
+    changes: UpdateCenterDto,
   ): Promise<CenterProfileResponseDto> {
-    const userData = this.toCenterUserData(changes);
-    const centerData = this.toCenterData(changes);
+    const data: Prisma.CenterUpdateInput = {
+      ...(changes.name !== undefined && { name: changes.name }),
+      ...(changes.logoUrl !== undefined && { logo_url: changes.logoUrl }),
+      ...this.toLocationData(changes),
+      ...this.toAddressData(changes),
+    };
 
-    if (
-      Object.keys(userData).length === 0 &&
-      Object.keys(centerData).length === 0
-    ) {
+    if (Object.keys(data).length === 0) {
       throw new BadRequestException('NO_PROFILE_FIELDS_SUPPLIED');
     }
 
-    // Prove ownership before writing. Both identifiers come from the signed
-    // token, so a caller cannot reach another center's row even by guessing.
     await this.loadOwnedUser(identity);
+    await this.prisma.center.update({
+      where: { id: identity.centerId },
+      data,
+    });
 
-    // PrismaPromise, not Promise: $transaction([...]) only accepts the
-    // lazy query objects Prisma returns, which is what makes the batch atomic.
-    const writes: Prisma.PrismaPromise<unknown>[] = [];
-    if (Object.keys(userData).length > 0) {
-      writes.push(
-        this.prisma.centerUser.update({
-          where: { id: identity.centerUserId },
-          data: userData,
-        }),
-      );
-    }
-    if (Object.keys(centerData).length > 0) {
-      writes.push(
-        this.prisma.center.update({
-          where: { id: identity.centerId },
-          data: centerData,
-        }),
-      );
-    }
-    await this.prisma.$transaction(writes);
-
-    // Re-read rather than patch the in-memory row: the response carries
-    // derived state, and deriving it from what we hoped we wrote is how a
-    // client ends up with a status the database disagrees with.
     return this.getProfile(identity);
+  }
+
+  /**
+   * The manager: who they are, how to reach them, and where they are.
+   *
+   * `email` is deliberately not here. Changing the address a verification link
+   * was sent to is its own flow, not a field on a profile form.
+   */
+  async updateManager(
+    identity: SignedCenterIdentity,
+    changes: UpdateCenterManagerDto,
+  ): Promise<CenterProfileResponseDto> {
+    const data: Prisma.CenterUserUpdateInput = {
+      ...(changes.firstName !== undefined && { first_name: changes.firstName }),
+      ...(changes.lastName !== undefined && { last_name: changes.lastName }),
+      ...(changes.phone !== undefined && { phone: changes.phone }),
+      ...this.toLocationData(changes),
+    };
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('NO_PROFILE_FIELDS_SUPPLIED');
+    }
+
+    await this.loadOwnedUser(identity);
+    await this.prisma.centerUser.update({
+      where: { id: identity.centerUserId },
+      data,
+    });
+
+    return this.getProfile(identity);
+  }
+
+  /**
+   * Turns a country and a city into the four columns we store, or refuses.
+   *
+   * Shared by both routes, because "is this a real place" is the same question
+   * for a school and for a manager. `region_id` is written from the resolved
+   * city and never from the request, so a city cannot be filed under a region
+   * it does not belong to.
+   */
+  private toLocationData(changes: {
+    countryCode?: string;
+    cityId?: string;
+    cityOther?: string;
+  }) {
+    if (
+      changes.countryCode === undefined &&
+      changes.cityId === undefined &&
+      changes.cityOther === undefined
+    ) {
+      return {};
+    }
+
+    const resolved = resolveLocation(changes);
+
+    if (isLocationRefusal(resolved)) {
+      // The field travels with the code so the refusal lands on the input that
+      // caused it: "unknown city" pointing at the country box helps nobody.
+      throw new BadRequestException({
+        message: resolved.code,
+        field: resolved.field,
+      });
+    }
+
+    return {
+      country_code: resolved.countryCode,
+      region_id: resolved.regionId,
+      city_id: resolved.cityId,
+      city_other: resolved.cityOther,
+    };
+  }
+
+  /**
+   * The rest of the address, checked against the rules of the country being
+   * set.
+   *
+   * Enforced here rather than trusted from the form: the rules decide whether
+   * an invoice can be addressed at all, and a client that skips them would
+   * leave a German school with no street on its invoice.
+   */
+  private toAddressData(changes: UpdateCenterDto) {
+    const address = {
+      ...(changes.district !== undefined && { district: changes.district }),
+      ...(changes.postalCode !== undefined && {
+        postal_code: changes.postalCode,
+      }),
+      ...(changes.street !== undefined && { street: changes.street }),
+      ...(changes.houseNumber !== undefined && {
+        house_number: changes.houseNumber,
+      }),
+    };
+
+    // Only a request that sets the country is checked for completeness. A
+    // rename must not fail because an address typed under older rules is now
+    // short of a field.
+    if (changes.countryCode === undefined) {
+      return address;
+    }
+
+    const rules = addressRulesFor(changes.countryCode);
+
+    // A country that resolves to no rules was already refused by
+    // `toLocationData`; this is the type narrowing, not a second check.
+    if (!rules) {
+      return address;
+    }
+
+    const missing = REQUIRED_ADDRESS_FIELDS.filter(
+      (field) => rules[field] === 'required' && !changes[field]?.trim(),
+    );
+
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        message: 'ADDRESS_INCOMPLETE',
+        missing,
+      });
+    }
+
+    return address;
   }
 
   /**
@@ -122,23 +248,6 @@ export class CenterProfileService {
     }
 
     return centerUser;
-  }
-
-  private toCenterUserData(changes: UpdateCenterProfileDto) {
-    return {
-      ...(changes.firstName !== undefined && { first_name: changes.firstName }),
-      ...(changes.lastName !== undefined && { last_name: changes.lastName }),
-      ...(changes.phone !== undefined && { phone: changes.phone }),
-    };
-  }
-
-  private toCenterData(changes: UpdateCenterProfileDto) {
-    return {
-      ...(changes.centerName !== undefined && { name: changes.centerName }),
-      ...(changes.country !== undefined && { country: changes.country }),
-      ...(changes.city !== undefined && { city: changes.city }),
-      ...(changes.logoUrl !== undefined && { logo_url: changes.logoUrl }),
-    };
   }
 
   /**
@@ -163,6 +272,9 @@ export class CenterProfileService {
         country: string | null;
         city: string | null;
         logo_url: string | null;
+        country_code?: string | null;
+        city_id?: string | null;
+        city_other?: string | null;
       };
     },
     subscription: SubscriptionFacts,
@@ -279,13 +391,18 @@ export class CenterProfileService {
    */
   private toOnboardingState(centerUser: {
     phone: string | null;
-    center: { country: string | null; city: string | null };
+    center: {
+      country: string | null;
+      city: string | null;
+      country_code?: string | null;
+      city_id?: string | null;
+      city_other?: string | null;
+    };
   }): OnboardingState {
     // The rules live in `center-onboarding` because payment creation asks the
     // same question, and a second copy here is the one that would drift.
     return deriveOnboardingState({
-      country: centerUser.center.country,
-      city: centerUser.center.city,
+      ...suppliedLocationOf(centerUser.center),
       phone: centerUser.phone,
     });
   }

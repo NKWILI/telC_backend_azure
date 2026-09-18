@@ -37,12 +37,17 @@ describe('CenterProfileController contract', () => {
   };
 
   let app: INestApplication<App>;
-  let profileService: { getProfile: jest.Mock; updateProfile: jest.Mock };
+  let profileService: {
+    getProfile: jest.Mock;
+    updateCenter: jest.Mock;
+    updateManager: jest.Mock;
+  };
 
   beforeEach(async () => {
     profileService = {
       getProfile: jest.fn().mockResolvedValue(profile),
-      updateProfile: jest.fn().mockResolvedValue(profile),
+      updateCenter: jest.fn().mockResolvedValue(profile),
+      updateManager: jest.fn().mockResolvedValue(profile),
     };
 
     const module = await Test.createTestingModule({
@@ -76,16 +81,46 @@ describe('CenterProfileController contract', () => {
     expect(profileService.getProfile).toHaveBeenCalledWith(signedIdentity);
   });
 
-  it('updates allowlisted fields, scoped by the signed identity', async () => {
+  it('updates the school, scoped by the signed identity', async () => {
     await request(app.getHttpServer())
       .patch('/api/centers/me')
-      .send({ city: ' Yaounde ', phone: ' +237690000001 ' })
+      .send({ name: ' Institut Lerniqo ', cityId: ' douala ' })
       .expect(200);
 
-    expect(profileService.updateProfile).toHaveBeenCalledWith(signedIdentity, {
-      city: 'Yaounde',
-      phone: '+237690000001',
+    expect(profileService.updateCenter).toHaveBeenCalledWith(signedIdentity, {
+      name: 'Institut Lerniqo',
+      cityId: 'douala',
     });
+  });
+
+  // The manager's own details are a separate route, because the address rules
+  // belong to the school's country and nothing is posted to a manager.
+  it('updates the manager on its own route', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/centers/me/manager')
+      .send({ phone: ' +237690000001 ', cityId: 'yaounde' })
+      .expect(200);
+
+    expect(profileService.updateManager).toHaveBeenCalledWith(signedIdentity, {
+      phone: '+237690000001',
+      cityId: 'yaounde',
+    });
+  });
+
+  it('refuses a school body that carries manager fields', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/centers/me')
+      .send({ phone: '+237690000001' })
+      .expect(400);
+
+    expect(profileService.updateCenter).not.toHaveBeenCalled();
+  });
+
+  it('refuses a region sent by a client: it is looked up from the city', async () => {
+    await request(app.getHttpServer())
+      .patch('/api/centers/me')
+      .send({ countryCode: 'CM', cityId: 'douala', regionId: 'centre' })
+      .expect(400);
   });
 
   // An empty body is a business rule, not a shape rule: every field is
@@ -93,7 +128,7 @@ describe('CenterProfileController contract', () => {
   // check. The service owns it (see center-profile.service.spec) and this
   // asserts the resulting contract on the wire.
   it('surfaces the service rejection of an empty patch as a 400', async () => {
-    profileService.updateProfile.mockRejectedValue(
+    profileService.updateCenter.mockRejectedValue(
       new BadRequestException('NO_PROFILE_FIELDS_SUPPLIED'),
     );
 
@@ -119,7 +154,7 @@ describe('CenterProfileController contract', () => {
       .expect(400);
 
     expect(response.body.error).toBe('VALIDATION_ERROR');
-    expect(profileService.updateProfile).not.toHaveBeenCalled();
+    expect(profileService.updateCenter).not.toHaveBeenCalled();
   });
 
   it('rejects a non-HTTPS logo url', async () => {
@@ -129,6 +164,6 @@ describe('CenterProfileController contract', () => {
       .expect(400);
 
     expect(response.body.error).toBe('VALIDATION_ERROR');
-    expect(profileService.updateProfile).not.toHaveBeenCalled();
+    expect(profileService.updateCenter).not.toHaveBeenCalled();
   });
 });

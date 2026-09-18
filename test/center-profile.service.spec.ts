@@ -131,34 +131,16 @@ describe('CenterProfileService', () => {
     );
   });
 
-  it('routes user fields and center fields to their own tables', async () => {
-    await service.updateProfile(signedIdentity, {
-      firstName: 'Alain-Michel',
-      city: 'Yaounde',
-    });
-
-    expect(prisma.centerUser.update).toHaveBeenCalledWith({
-      where: { id: 'owner-1' },
-      data: { first_name: 'Alain-Michel' },
-    });
-    expect(prisma.center.update).toHaveBeenCalledWith({
-      where: { id: 'center-1' },
-      data: { city: 'Yaounde' },
-    });
-  });
-
-  it('touches only the table a partial update names', async () => {
-    await service.updateProfile(signedIdentity, { phone: '+237690000001' });
-
-    expect(prisma.centerUser.update).toHaveBeenCalled();
-    expect(prisma.center.update).not.toHaveBeenCalled();
-  });
-
-  it('refuses to update a profile outside the signed center', async () => {
+  // Each write now has its own route (see center-location-write.spec.ts for
+  // what they accept); these keep the two rules that must hold for both.
+  it('refuses to update anything outside the signed center', async () => {
     prisma.centerUser.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.updateProfile(signedIdentity, { city: 'Yaounde' }),
+      service.updateCenter(signedIdentity, { name: 'Institut Lerniqo' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.updateManager(signedIdentity, { phone: '+237690000001' }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.centerUser.update).not.toHaveBeenCalled();
     expect(prisma.center.update).not.toHaveBeenCalled();
@@ -166,7 +148,10 @@ describe('CenterProfileService', () => {
 
   it('rejects an update that carries no allowlisted field', async () => {
     await expect(
-      service.updateProfile(signedIdentity, {}),
+      service.updateCenter(signedIdentity, {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.updateManager(signedIdentity, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.centerUser.update).not.toHaveBeenCalled();
     expect(prisma.center.update).not.toHaveBeenCalled();

@@ -39,6 +39,32 @@ export interface OnboardingState {
   missing: RequiredProfileField[];
 }
 
+/**
+ * What a center row says about where it is, whichever columns hold it.
+ *
+ * The structured columns are the answer; the old free-text pair is the
+ * fallback. Both are read because every center that onboarded before the
+ * structured columns existed would otherwise read as incomplete and be sent
+ * back through a form it already filled in — and, worse, be refused a payment
+ * it is trying to make. The fallback disappears with the columns, once
+ * production has been checked.
+ *
+ * A town we do not list counts as a city: the school answered the question,
+ * and the answer being absent from our list is our gap, not theirs.
+ */
+export function suppliedLocationOf(center: {
+  country_code?: string | null;
+  city_id?: string | null;
+  city_other?: string | null;
+  country?: string | null;
+  city?: string | null;
+}): { country: string | null; city: string | null } {
+  return {
+    country: center.country_code ?? center.country ?? null,
+    city: center.city_id ?? center.city_other ?? center.city ?? null,
+  };
+}
+
 /** Blank is not an answer. Spaces must not satisfy a checklist. */
 const isSupplied = (value: string | null | undefined): boolean =>
   typeof value === 'string' && value.trim().length > 0;

@@ -125,13 +125,121 @@ export class CenterProfileResponseDto {
 }
 
 /**
- * The allowlist *is* the security boundary. Every field a center may change
- * about itself is declared here, and the global pipe's `forbidNonWhitelisted`
- * turns anything else — `role`, `email`, `emailVerified`, `centerId`,
- * `password` — into a 400 before a handler ever runs. Adding a property here
- * grants write access, so add deliberately.
+ * What a center may change about the school itself.
+ *
+ * The allowlist *is* the boundary: the global pipe runs with
+ * `forbidNonWhitelisted`, so anything not declared here — `centerId`,
+ * `onboardingCompleted`, a price — is a 400 before a handler runs. Adding a
+ * property grants write access, so add deliberately.
+ *
+ * `regionId` is absent on purpose. It is looked up from the city, so a client
+ * cannot file a city under a region it does not belong to.
  */
-export class UpdateCenterProfileDto {
+export class UpdateCenterDto {
+  @ApiPropertyOptional({ maxLength: 150, description: 'The school name.' })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
+  name?: string;
+
+  @ApiPropertyOptional({
+    example: 'CM',
+    description:
+      'From `GET /api/locations`. Decides which address fields are required.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2)
+  countryCode?: string;
+
+  @ApiPropertyOptional({
+    example: 'douala',
+    description:
+      'A city id from `GET /api/locations`. Use this or `cityOther`.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  cityId?: string;
+
+  @ApiPropertyOptional({
+    example: 'Kribi',
+    description:
+      'A town we do not list yet. Sent instead of `cityId`, never with it, so a school is never blocked by a missing city.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  cityOther?: string;
+
+  @ApiPropertyOptional({
+    example: 'Akwa',
+    description: 'Quarter. Required in Cameroon, optional in Germany.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  district?: string;
+
+  @ApiPropertyOptional({
+    example: '45127',
+    description: 'Required in Germany, not collected in Cameroon.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  postalCode?: string;
+
+  @ApiPropertyOptional({ example: 'Hauptstraße', maxLength: 150 })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
+  street?: string;
+
+  @ApiPropertyOptional({ example: '12', maxLength: 20 })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  houseNumber?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 2048,
+    description:
+      'An https URL to the school logo. Kept here until the upload route exists, so a center that already hosts its logo somewhere does not lose the ability to point at it.',
+  })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Matches(/^https:\/\//i, { message: 'Logo URL must use HTTPS' })
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  logoUrl?: string;
+}
+
+/**
+ * What a manager may change about themselves.
+ *
+ * No address fields: nothing is ever posted to a manager, so asking for a
+ * street would be collecting personal data with no purpose. `email` is absent
+ * because changing it is a verification flow, not a profile edit.
+ */
+export class UpdateCenterManagerDto {
   @ApiPropertyOptional({ maxLength: 100 })
   @Trim()
   @IsOptional()
@@ -148,7 +256,11 @@ export class UpdateCenterProfileDto {
   @MaxLength(100)
   lastName?: string;
 
-  @ApiPropertyOptional({ maxLength: 30 })
+  @ApiPropertyOptional({
+    maxLength: 30,
+    description:
+      'The manager own number. This is who gets contacted about a late payment.',
+  })
   @Trim()
   @IsOptional()
   @IsString()
@@ -157,36 +269,27 @@ export class UpdateCenterProfileDto {
   @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
   phone?: string;
 
-  @ApiPropertyOptional({ maxLength: 150 })
+  @ApiPropertyOptional({ example: 'CM' })
   @Trim()
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(150)
-  centerName?: string;
+  @MaxLength(2)
+  countryCode?: string;
 
-  @ApiPropertyOptional({ maxLength: 100 })
-  @Trim()
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  country?: string;
-
-  @ApiPropertyOptional({ maxLength: 100 })
+  @ApiPropertyOptional({ example: 'yaounde' })
   @Trim()
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  city?: string;
+  cityId?: string;
 
-  @ApiPropertyOptional({ maxLength: 2048 })
+  @ApiPropertyOptional({ example: 'Kribi' })
   @Trim()
   @IsOptional()
   @IsString()
-  @MaxLength(2048)
-  @Matches(/^https:\/\//i, { message: 'Logo URL must use HTTPS' })
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  logoUrl?: string;
+  @IsNotEmpty()
+  @MaxLength(100)
+  cityOther?: string;
 }
