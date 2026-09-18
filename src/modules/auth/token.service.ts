@@ -4,7 +4,6 @@ import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import {
   AccessTokenPayload,
   RefreshTokenPayload,
-  LinkingTokenPayload,
   CenterAccessTokenPayload,
   CenterRefreshTokenPayload,
 } from '../../shared/interfaces/token-payload.interface';
@@ -356,59 +355,4 @@ export class TokenService {
       .digest('hex');
   }
 
-  /**
-   * Generate a linking token for OAuth account linking (30 minutes)
-   * Contains: email, provider, providerId
-   */
-  generateLinkingToken(payload: {
-    email: string;
-    provider: string;
-    providerId: string;
-  }): string {
-    return jwt.sign(
-      {
-        type: 'linking',
-        email: payload.email,
-        provider: payload.provider,
-        providerId: payload.providerId,
-      },
-      this.accessTokenSecret,
-      {
-        algorithm: 'HS256',
-        issuer: this.issuer,
-        audience: this.audience,
-        expiresIn: '30m',
-      },
-    );
-  }
-
-  /**
-   * Verify and decode a linking token
-   */
-  verifyLinkingToken(token: string): LinkingTokenPayload {
-    try {
-      const decoded = jwt.verify(token, this.accessTokenSecret, {
-        algorithms: ['HS256'],
-        issuer: this.issuer,
-        audience: this.audience,
-      }) as LinkingTokenPayload;
-      if (
-        decoded.type !== 'linking' ||
-        typeof decoded.email !== 'string' ||
-        typeof decoded.provider !== 'string' ||
-        typeof decoded.providerId !== 'string'
-      ) {
-        throw new UnauthorizedException('LINKING_TOKEN_INVALID');
-      }
-      return decoded;
-    } catch (error) {
-      if (error instanceof jwt.TokenExpiredError) {
-        throw new UnauthorizedException('LINKING_TOKEN_EXPIRED');
-      }
-      if (error instanceof jwt.JsonWebTokenError) {
-        throw new UnauthorizedException('LINKING_TOKEN_INVALID');
-      }
-      throw new UnauthorizedException('LINKING_TOKEN_INVALID');
-    }
-  }
 }

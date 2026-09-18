@@ -3,7 +3,6 @@ import { AuthService } from './auth.service';
 import { TokenService } from './token.service';
 import { TokenCryptoService } from './token-crypto.service';
 import { EmailService } from './email.service';
-import { GoogleService } from './google.service';
 import { AuthController } from './auth.controller';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { SubscriptionAccessModule } from '../../shared/subscription-access.module';
@@ -17,7 +16,6 @@ import { SubscriptionAccessModule } from '../../shared/subscription-access.modul
     TokenService,
     TokenCryptoService,
     EmailService,
-    GoogleService,
     AuthService,
     JwtAuthGuard,
   ],

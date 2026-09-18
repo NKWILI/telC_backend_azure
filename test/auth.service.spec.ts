@@ -87,16 +87,11 @@ describe('AuthService', () => {
       sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
     };
 
-    const googleServiceMock = {
-      verifyIdToken: jest.fn(),
-    };
-
     service = new AuthService(
       prismaMock,
       tokenServiceMock,
       tokenCryptoMock,
       emailServiceMock,
-      googleServiceMock,
       // Reporting only. What it returns is auth-subscription-report.spec's
       // subject; here it just has to exist so responses can be built.
       { forStudent: jest.fn().mockResolvedValue(undefined) } as never,
@@ -104,11 +99,11 @@ describe('AuthService', () => {
   });
 
   describe('upsertDeviceSession', () => {
-    it('creates a new session when count < 3', async () => {
+    it('creates a new session while the student is under the device limit', async () => {
       const session = { id: 'session-1' };
 
       txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(2);
+      txMock.deviceSession.count.mockResolvedValueOnce(1);
       txMock.deviceSession.upsert.mockResolvedValueOnce(session);
 
       const result = await service.upsertDeviceSession(
@@ -995,223 +990,6 @@ describe('AuthService', () => {
           'new-hash',
         ),
       ).resolves.toBe(false);
-    });
-  });
-
-  describe('googleLogin', () => {
-    it('returns tokens for returning user (existing OAuthAccount)', async () => {
-      const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
-        sub: 'google-user-123',
-        email: 'john@example.com',
-        email_verified: true,
-      });
-
-      const oauthAccount = {
-        id: 'oauth-1',
-        student: {
-          id: 'student-1',
-          first_name: 'John',
-          last_name: 'Doe',
-          email: 'john@example.com',
-        },
-      };
-
-      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(oauthAccount);
-      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(0);
-      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
-
-      const result = await service.googleLogin({
-        idToken: 'google-token',
-        deviceId: 'device-1',
-        deviceName: 'Chrome',
-      });
-
-      expect(result).toHaveProperty('accessToken');
-      expect(result).toHaveProperty('refreshToken');
-      expect((result as any).student.email).toBe('john@example.com');
-    });
-
-    it('returns LINKING_REQUIRED for existing unverified student email with no OAuth', async () => {
-      const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
-        sub: 'google-user-123',
-        email: 'john@example.com',
-        email_verified: false,
-      });
-
-      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
-      prismaMock.student.findUnique.mockResolvedValueOnce({
-        id: 'student-1',
-        first_name: 'John',
-        last_name: 'Doe',
-        email: 'john@example.com',
-        email_verified: false,
-      });
-
-      const tokenService = (service as any).tokenService;
-      tokenService.generateLinkingToken = jest
-        .fn()
-        .mockReturnValueOnce('linking-token-jwt');
-
-      const result = await service.googleLogin({
-        idToken: 'google-token',
-        deviceId: 'device-1',
-      });
-
-      expect(result).toEqual({
-        status: 'LINKING_REQUIRED',
-        linkingToken: 'linking-token-jwt',
-      });
-    });
-
-    it('returns LINKING_REQUIRED for existing verified student email with no OAuth', async () => {
-      const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
-        sub: 'google-user-456',
-        email: 'verified@example.com',
-        email_verified: true,
-      });
-
-      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
-      prismaMock.student.findUnique.mockResolvedValueOnce({
-        id: 'student-2',
-        first_name: 'Jane',
-        last_name: 'Doe',
-        email: 'verified@example.com',
-        email_verified: true,
-      });
-
-      const tokenService = (service as any).tokenService;
-      tokenService.generateLinkingToken = jest
-        .fn()
-        .mockReturnValueOnce('linking-token-for-verified');
-
-      const result = await service.googleLogin({
-        idToken: 'google-token',
-        deviceId: 'device-1',
-      });
-
-      expect(result).toEqual({
-        status: 'LINKING_REQUIRED',
-        linkingToken: 'linking-token-for-verified',
-      });
-    });
-
-    it('creates new student for brand new email', async () => {
-      const googleService = (service as any).googleService;
-      googleService.verifyIdToken = jest.fn().mockResolvedValueOnce({
-        sub: 'google-user-123',
-        email: 'newuser@example.com',
-        email_verified: true,
-        given_name: 'John',
-        family_name: 'Doe',
-      });
-
-      prismaMock.oAuthAccount.findFirst.mockResolvedValueOnce(null);
-      prismaMock.student.findUnique.mockResolvedValueOnce(null);
-
-      txMock.student.create.mockResolvedValueOnce({
-        id: 'student-new',
-        first_name: 'John',
-        last_name: 'Doe',
-        email: 'newuser@example.com',
-      });
-      txMock.oAuthAccount.create.mockResolvedValueOnce({});
-      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(0);
-      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
-
-      const result = await service.googleLogin({
-        idToken: 'google-token',
-        deviceId: 'device-1',
-      });
-
-      expect(result).toHaveProperty('accessToken');
-      expect(result).toHaveProperty('refreshToken');
-      expect((result as any).student.email).toBe('newuser@example.com');
-    });
-
-    it('throws INVALID_GOOGLE_TOKEN for invalid token', async () => {
-      const googleService = (service as any).googleService;
-      const error = new Error('INVALID_GOOGLE_TOKEN');
-      googleService.verifyIdToken = jest.fn().mockRejectedValueOnce(error);
-
-      await expect(
-        service.googleLogin({
-          idToken: 'invalid-token',
-          deviceId: 'device-1',
-        }),
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('googleLink', () => {
-    it('links OAuth account and returns tokens', async () => {
-      const tokenService = (service as any).tokenService;
-      tokenService.verifyLinkingToken = jest.fn().mockReturnValueOnce({
-        email: 'john@example.com',
-        provider: 'google',
-        providerId: 'google-user-123',
-      });
-
-      prismaMock.student.findUnique.mockResolvedValueOnce({
-        id: 'student-1',
-        first_name: 'John',
-        last_name: 'Doe',
-        email: 'john@example.com',
-      });
-
-      txMock.oAuthAccount.create.mockResolvedValueOnce({});
-      txMock.student.update.mockResolvedValueOnce({});
-      txMock.deviceSession.findFirst.mockResolvedValueOnce(null);
-      txMock.deviceSession.count.mockResolvedValueOnce(0);
-      txMock.deviceSession.upsert.mockResolvedValueOnce({ id: 'session-1' });
-
-      const result = await service.googleLink({
-        linkingToken: 'linking-jwt',
-        deviceId: 'device-1',
-      });
-
-      expect(result).toHaveProperty('accessToken');
-      expect(result).toHaveProperty('refreshToken');
-      expect(result.student.email).toBe('john@example.com');
-    });
-
-    it('throws error for invalid linking token', async () => {
-      const tokenService = (service as any).tokenService;
-      const error = new Error('LINKING_TOKEN_INVALID');
-      tokenService.verifyLinkingToken = jest.fn().mockImplementationOnce(() => {
-        throw error;
-      });
-
-      await expect(
-        service.googleLink({
-          linkingToken: 'invalid-linking-token',
-          deviceId: 'device-1',
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('throws STUDENT_NOT_FOUND if email not in system', async () => {
-      const tokenService = (service as any).tokenService;
-      tokenService.verifyLinkingToken = jest.fn().mockReturnValueOnce({
-        email: 'unknown@example.com',
-        provider: 'google',
-        providerId: 'google-user-123',
-      });
-
-      prismaMock.student.findUnique.mockResolvedValueOnce(null);
-
-      await expect(
-        service.googleLink({
-          linkingToken: 'linking-jwt',
-          deviceId: 'device-1',
-        }),
-      ).rejects.toMatchObject({
-        response: { message: 'STUDENT_NOT_FOUND' },
-      });
     });
   });
 

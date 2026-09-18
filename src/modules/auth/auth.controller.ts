@@ -22,8 +22,6 @@ import { VerifyEmailRequestDto } from './dto/verify-email-request.dto';
 import { VerifyEmailPublicRequestDto } from './dto/verify-email-public-request.dto';
 import { ForgotPasswordRequestDto } from './dto/forgot-password-request.dto';
 import { ResetPasswordRequestDto } from './dto/reset-password-request.dto';
-import { GoogleLoginRequestDto } from './dto/google-login-request.dto';
-import { GoogleLinkRequestDto } from './dto/google-link-request.dto';
 import { AuthTokenResponse } from './dto/auth-response.dto';
 import { RefreshRequestDto } from './dto/refresh-request.dto';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
@@ -58,7 +56,6 @@ import {
   AuthStudentDto,
   AuthTokenResponseDto,
   DeviceSessionResponseDto,
-  GoogleLinkingRequiredDto,
   MessageResponseDto,
   SuccessResponseDto,
   VerifiedResponseDto,
@@ -77,7 +74,6 @@ interface StudentResponseDto {
   AuthTokenResponseDto,
   AuthStudentDto,
   RefreshResponseDto,
-  GoogleLinkingRequiredDto,
 )
 @Controller('api/auth')
 export class AuthController {
@@ -546,47 +542,5 @@ export class AuthController {
       sessionId,
     );
     return { success: true };
-  }
-
-  /**
-   * POST /api/auth/google
-   * Login or request linking with Google OAuth
-   */
-  @Post('google')
-  @ApiOperation({
-    summary: 'Google login (currently disabled)',
-    deprecated: true,
-  })
-  @ApiCreatedResponse({
-    description: 'Legacy response; this integration is currently not in use.',
-    schema: {
-      oneOf: [
-        { $ref: getSchemaPath(AuthTokenResponseDto) },
-        { $ref: getSchemaPath(GoogleLinkingRequiredDto) },
-      ],
-    },
-  })
-  async googleLogin(
-    @Body() dto: GoogleLoginRequestDto,
-  ): Promise<
-    AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }
-  > {
-    return this.authService.googleLogin(dto);
-  }
-
-  /**
-   * POST /api/auth/google/link
-   * Link Google account to existing student
-   */
-  @Post('google/link')
-  @ApiOperation({
-    summary: 'Link a Google account (currently disabled)',
-    deprecated: true,
-  })
-  @ApiCreatedResponse({ type: AuthTokenResponseDto })
-  async googleLink(
-    @Body() dto: GoogleLinkRequestDto,
-  ): Promise<AuthTokenResponse> {
-    return this.authService.googleLink(dto);
   }
 }
