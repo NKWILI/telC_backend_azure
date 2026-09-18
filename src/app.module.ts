@@ -13,6 +13,7 @@ import { ModelltestsModule } from './modules/modelltests/modelltests.module';
 import { NewsletterModule } from './modules/newsletter/newsletter.module';
 import { RateLimitModule } from './shared/rate-limit.module';
 import { CentersModule } from './modules/centers/centers.module';
+import { LocationsModule } from './modules/locations/locations.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CentersModule } from './modules/centers/centers.module';
     SprachbausteineModule,
     LesenModule,
     NewsletterModule,
+    LocationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
