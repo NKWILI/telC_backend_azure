@@ -81,8 +81,6 @@ describe('AuthController (e2e)', () => {
     }),
     revokeDeviceSession: jest.fn().mockResolvedValue(undefined),
     getActiveDeviceSession: jest.fn().mockResolvedValue(session),
-    googleLogin: jest.fn(),
-    googleLink: jest.fn(),
     getDeviceSessions: jest.fn().mockResolvedValue(deviceSessions),
     updateStudentLastSeen: jest.fn().mockResolvedValue(undefined),
   };
@@ -465,84 +463,14 @@ describe('AuthController (e2e)', () => {
       });
   });
 
-  it('POST /api/auth/google returns tokens for returning user', async () => {
-    authService.googleLogin = jest.fn().mockResolvedValueOnce({
-      accessToken: 'access-token',
-      refreshToken: 'refresh-token',
-      student: verifiedAuthStudent,
-    });
-
-    await request(app.getHttpServer())
-      .post('/api/auth/google')
-      .send({ idToken: 'google-token', deviceId: 'device-1' })
-      .expect(201)
-      .expect((res) => {
-        expect(res.body.accessToken).toBe('access-token');
-        expect(res.body.refreshToken).toBe('refresh-token');
-      });
-  });
-
-  it('POST /api/auth/google returns LINKING_REQUIRED for existing student', async () => {
-    authService.googleLogin = jest.fn().mockResolvedValueOnce({
-      status: 'LINKING_REQUIRED',
-      linkingToken: 'linking-jwt',
-    });
-
-    await request(app.getHttpServer())
-      .post('/api/auth/google')
-      .send({ idToken: 'google-token', deviceId: 'device-1' })
-      .expect(201)
-      .expect((res) => {
-        expect(res.body.status).toBe('LINKING_REQUIRED');
-        expect(res.body.linkingToken).toBe('linking-jwt');
-      });
-  });
-
-  it('POST /api/auth/google returns 401 for invalid token', async () => {
-    authService.googleLogin = jest
-      .fn()
-      .mockRejectedValueOnce(new UnauthorizedException('INVALID_GOOGLE_TOKEN'));
-
-    await request(app.getHttpServer())
-      .post('/api/auth/google')
-      .send({ idToken: 'invalid-token', deviceId: 'device-1' })
-      .expect(401)
-      .expect((res) => {
-        expect(res.body.error).toBe('INVALID_GOOGLE_TOKEN');
-      });
-  });
-
-  it('POST /api/auth/google/link returns tokens for valid linking token', async () => {
-    authService.googleLink = jest.fn().mockResolvedValueOnce({
-      accessToken: 'access-token',
-      refreshToken: 'refresh-token',
-      student: verifiedAuthStudent,
-    });
-
-    await request(app.getHttpServer())
-      .post('/api/auth/google/link')
-      .send({ linkingToken: 'linking-jwt', deviceId: 'device-1' })
-      .expect(201)
-      .expect((res) => {
-        expect(res.body.accessToken).toBe('access-token');
-      });
-  });
-
-  it('POST /api/auth/google/link returns 401 for invalid linking token', async () => {
-    authService.googleLink = jest
-      .fn()
-      .mockRejectedValueOnce(
-        new UnauthorizedException('LINKING_TOKEN_INVALID'),
-      );
-
-    await request(app.getHttpServer())
-      .post('/api/auth/google/link')
-      .send({ linkingToken: 'invalid-linking-token', deviceId: 'device-1' })
-      .expect(401)
-      .expect((res) => {
-        expect(res.body.error).toBe('LINKING_TOKEN_INVALID');
-      });
-  });
+  // Google sign-in was removed (D8). Production held no Google-linked
+  // accounts, so nobody relied on these routes.
+  it.each(['/api/auth/google', '/api/auth/google/link'])(
+    'no longer serves POST %s',
+    async (path) => {
+      await request(app.getHttpServer()).post(path).send({}).expect(404);
+    },
+  );
 
   it('GET /api/auth/device-sessions returns 200 array with valid JWT', async () => {
     await request(app.getHttpServer())
@@ -600,7 +528,9 @@ describe('AuthController (e2e)', () => {
     expect(document.paths['/api/auth/device-sessions']?.get?.security).toEqual([
       { bearer: [] },
     ]);
-    expect(document.paths['/api/auth/google']?.post?.deprecated).toBe(true);
+    // Removed, not merely deprecated (D8): the contract no longer lists them.
+    expect(document.paths['/api/auth/google']).toBeUndefined();
+    expect(document.paths['/api/auth/google/link']).toBeUndefined();
     expect(document.components?.schemas).toHaveProperty('AuthTokenResponseDto');
     expect(document.components?.schemas).toHaveProperty(
       'DeviceSessionResponseDto',

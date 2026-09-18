@@ -70,7 +70,6 @@ describe('login and refresh report the subscription', () => {
       tokenServiceMock,
       { generateToken: () => 'raw', hashToken: () => 'hashed' } as any,
       { sendVerificationEmail: jest.fn() } as any,
-      { verifyIdToken: jest.fn() } as any,
       entitlement,
     );
   });

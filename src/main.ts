@@ -29,7 +29,7 @@ async function bootstrap() {
         '**Sprachbausteine**, **Listening (Hören)**, **Speaking (Sprechen)**, **Modelltests**.\n\n' +
         'Protected endpoints require the access token as `Authorization: Bearer <accessToken>`. ' +
         'Refresh tokens are single-use: after `POST /api/auth/refresh`, atomically replace both stored tokens with the returned pair. ' +
-        'Use `POST /api/auth/logout` to revoke one device session immediately. Google authentication is currently disabled. ' +
+        'Use `POST /api/auth/logout` to revoke one device session immediately. ' +
         'Language centers are a separate identity: their accounts live under `/api/center-auth/*`, ' +
         'their tokens are issued and verified independently of student tokens, and neither kind is accepted ' +
         'on the other side. Center endpoints carry `deviceId`, cap a center at three active devices, ' +

@@ -23,7 +23,6 @@ describe('CenterStudentsService', () => {
 
   let prisma: any;
   let tx: any;
-  let tokenCrypto: any;
   let service: CenterStudentsService;
 
   beforeEach(() => {
@@ -49,11 +48,7 @@ describe('CenterStudentsService', () => {
         Promise.resolve(cb(tx)),
       ),
     };
-    tokenCrypto = {
-      generateToken: jest.fn().mockReturnValue('raw-key'),
-      hashToken: jest.fn().mockReturnValue('hashed-key'),
-    };
-    service = new CenterStudentsService(prisma, tokenCrypto);
+    service = new CenterStudentsService(prisma);
   });
 
   /**
@@ -357,47 +352,6 @@ describe('CenterStudentsService', () => {
           to_status: 'DEACTIVATED',
           student_id: 'student-1',
         },
-      });
-    });
-  });
-
-  describe('activation keys', () => {
-    it('mints a key scoped to the signed center', async () => {
-      const result = await service.issueActivationKey(identity, 'student-1');
-
-      expect(prisma.student.updateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'student-1',
-          center_id: 'center-1',
-          activated_at: null,
-        },
-        data: expect.objectContaining({ activation_key_hash: 'hashed-key' }),
-      });
-      expect(result.activationKey).toBe('raw-key');
-    });
-
-    it('stores only the hash', async () => {
-      await service.issueActivationKey(identity, 'student-1');
-
-      const data = prisma.student.updateMany.mock.calls[0][0].data;
-      expect(JSON.stringify(data)).not.toContain('raw-key');
-    });
-
-    it('refuses to re-key a student who already activated', async () => {
-      // Re-keying an active account would let a center take it over.
-      prisma.student.updateMany.mockResolvedValue({ count: 0 });
-
-      await expect(
-        service.issueActivationKey(identity, 'student-1'),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
-
-    it('revokes an outstanding key', async () => {
-      await service.revokeActivationKey(identity, 'student-1');
-
-      expect(prisma.student.updateMany).toHaveBeenCalledWith({
-        where: { id: 'student-1', center_id: 'center-1', activated_at: null },
-        data: { activation_key_hash: null, activation_key_expires: null },
       });
     });
   });

@@ -8,9 +8,6 @@ export const AUTH_ERROR_MESSAGES: Record<string, string> = {
   EMAIL_DELIVERY_FAILED: 'Verification email delivery failed.',
   RESET_TOKEN_EXPIRED: 'Password reset link has expired.',
   RESET_TOKEN_INVALID: 'Invalid password reset token.',
-  LINKING_REQUIRED:
-    'An account with this email already exists. Confirm to link your Google account.',
-  INVALID_GOOGLE_TOKEN: 'Google authentication failed. Please try again.',
   INVALID_ACCESS_TOKEN: 'Invalid access token.',
   INVALID_REFRESH_TOKEN: 'Invalid refresh token.',
   SESSION_NOT_FOUND: 'Session not found.',

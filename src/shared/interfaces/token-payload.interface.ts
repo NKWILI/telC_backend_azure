@@ -38,12 +38,3 @@ export interface CenterRefreshTokenPayload {
   iat?: number;
   exp?: number;
 }
-
-export interface LinkingTokenPayload {
-  type: 'linking';
-  email: string;
-  provider: string;
-  providerId: string;
-  iat?: number;
-  exp?: number;
-}

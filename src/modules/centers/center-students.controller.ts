@@ -7,7 +7,6 @@ import {
   HttpStatus,
   Param,
   Patch,
-  Post,
   Query,
   UseFilters,
   UseGuards,
@@ -15,9 +14,6 @@ import {
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
-  ApiConflictResponse,
-  ApiCreatedResponse,
-  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -29,18 +25,13 @@ import { CenterExceptionFilter } from './center-exception.filter';
 import { CenterStudentsService } from './center-students.service';
 import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import {
-  ActivationKeyDto,
   CenterStudentDto,
   CenterStudentListDto,
   ListStudentsQueryDto,
-  ProvisionStudentDto,
-  ProvisionedStudentDto,
   UpdateStudentDto,
 } from './dto/center-students.dto';
 import { CenterErrorResponseDto } from './dto/center-error-response.dto';
 import { CenterAuthGuard } from './guards/center-auth.guard';
-import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
-import { StudentProvisioningService } from './student-provisioning.service';
 
 @ApiTags('Center Students')
 @ApiBearerAuth()
@@ -48,10 +39,10 @@ import { StudentProvisioningService } from './student-provisioning.service';
 @UseFilters(CenterExceptionFilter)
 @UseGuards(CenterAuthGuard)
 export class CenterStudentsController {
-  constructor(
-    private readonly students: CenterStudentsService,
-    private readonly provisioning: StudentProvisioningService,
-  ) {}
+  // No route adds a student here any more. Students arrive by redeeming a
+  // code the center was given (D1, D17); this controller is the roster of
+  // who did.
+  constructor(private readonly students: CenterStudentsService) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -67,37 +58,6 @@ export class CenterStudentsController {
     @Query() query: ListStudentsQueryDto,
   ): Promise<CenterStudentListDto> {
     return this.students.list(centerUser, query);
-  }
-
-  // Guarded, unlike the reads below: this is where a center consumes a seat
-  // and grants somebody new access to the product.
-  @Post()
-  @UseGuards(CenterSubscriptionGuard)
-  @ApiOperation({
-    summary: 'Provision a student and mint their first activation key',
-    description:
-      'Counts seats and inserts in one transaction, so two administrators cannot both take the last seat. The activation key is returned once and cannot be recovered later.',
-  })
-  @ApiCreatedResponse({ type: ProvisionedStudentDto })
-  @ApiBadRequestResponse({ type: CenterErrorResponseDto })
-  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
-  @ApiForbiddenResponse({
-    type: CenterErrorResponseDto,
-    description: 'SEAT_LIMIT_REACHED — every seat is in use.',
-  })
-  @ApiConflictResponse({
-    type: CenterErrorResponseDto,
-    description:
-      'STUDENT_EMAIL_ALREADY_EXISTS — the address belongs to someone.',
-  })
-  async provision(
-    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
-    @Body() dto: ProvisionStudentDto,
-  ): Promise<ProvisionedStudentDto> {
-    return this.provisioning.provision(
-      centerUser,
-      dto,
-    ) as Promise<ProvisionedStudentDto>;
   }
 
   @Get(':studentId')
@@ -151,37 +111,5 @@ export class CenterStudentsController {
     @Param('studentId') studentId: string,
   ): Promise<{ removed: true }> {
     return this.students.remove(centerUser, studentId);
-  }
-
-  // Also guarded: a key is access, so re-issuing one to a blocked center
-  // would hand out exactly what the block is meant to withhold.
-  @Post(':studentId/activation-key')
-  @UseGuards(CenterSubscriptionGuard)
-  @ApiOperation({
-    summary: 'Mint a replacement activation key',
-    description:
-      'For a student who lost their key or whose key expired. Refused once the student has activated, because re-keying a live account would take it from its owner.',
-  })
-  @ApiCreatedResponse({ type: ActivationKeyDto })
-  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
-  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
-  async issueActivationKey(
-    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
-    @Param('studentId') studentId: string,
-  ): Promise<ActivationKeyDto> {
-    return this.students.issueActivationKey(centerUser, studentId);
-  }
-
-  @Delete(':studentId/activation-key')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Revoke an outstanding activation key' })
-  @ApiOkResponse({ schema: { example: { revoked: true } } })
-  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
-  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
-  async revokeActivationKey(
-    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
-    @Param('studentId') studentId: string,
-  ): Promise<{ revoked: true }> {
-    return this.students.revokeActivationKey(centerUser, studentId);
   }
 }

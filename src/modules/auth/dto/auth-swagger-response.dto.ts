@@ -83,13 +83,3 @@ export class AuthErrorResponseDto {
   @ApiProperty({ example: 'Invalid refresh token.' })
   message: string | string[];
 }
-
-export class GoogleLinkingRequiredDto {
-  @ApiProperty({ enum: ['LINKING_REQUIRED'] })
-  status: 'LINKING_REQUIRED';
-
-  @ApiProperty({
-    description: 'Short-lived token used by the Google linking endpoint.',
-  })
-  linkingToken: string;
-}

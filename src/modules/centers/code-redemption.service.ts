@@ -8,6 +8,7 @@ import {
 import { ActivationCodeStatus, Prisma, type CenterPlan } from '@prisma/client';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { planIdFor, type PlanId } from '../../shared/plan-id';
+import { isUniqueViolationOn } from '../../shared/prisma-errors';
 import { normalizeActivationCode } from './activation-code-format';
 import { SubscriptionPolicyService } from './subscription-policy.service';
 
@@ -203,7 +204,7 @@ export class CodeRedemptionService {
       // The database allows one connected code per student. A second request
       // that raced this one past every check above lands here, and the student
       // hears the same thing they would have heard had it arrived later.
-      if (this.isSecondConnectedCode(error)) {
+      if (isUniqueViolationOn(error, 'student_id')) {
         throw new ConflictException('STUDENT_ALREADY_ACTIVE');
       }
       throw error;
@@ -280,23 +281,6 @@ export class CodeRedemptionService {
     return (
       !!subscription && this.policy.evaluate(subscription).studentsMayLearn
     );
-  }
-
-  /** The partial unique index on connected codes, and only that. */
-  private isSecondConnectedCode(error: unknown): boolean {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-      return false;
-    }
-
-    if (error.code !== 'P2002') {
-      return false;
-    }
-
-    const target = JSON.stringify(
-      (error.meta as { target?: unknown } | undefined)?.target ?? '',
-    );
-
-    return target.includes('student_id') || target.includes('one_connected');
   }
 
   private toResult(

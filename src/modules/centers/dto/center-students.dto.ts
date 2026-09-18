@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsEmail,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -13,62 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { Tier } from '@prisma/client';
-import { NormalizeEmail, Trim } from './center-validation.decorators';
-
-/**
- * Everything a center may supply when creating a student.
- *
- * The allowlist is the security boundary. With the global pipe's
- * `forbidNonWhitelisted`, anything absent here — `password`, `centerId`,
- * `activationKey`, `activatedAt` — is a 400 before a handler runs. A center
- * must never be able to set a student's password or move them to another
- * center, and the absence of those fields is what enforces it.
- */
-export class ProvisionStudentDto {
-  @ApiProperty({ example: 'Awa', maxLength: 100 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  firstName: string;
-
-  @ApiProperty({ example: 'Mbarga', maxLength: 100 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  lastName: string;
-
-  @ApiProperty({ format: 'email', maxLength: 254 })
-  @NormalizeEmail()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(254)
-  @IsEmail()
-  email: string;
-
-  @ApiPropertyOptional({
-    example: '+237690000000',
-    description:
-      'WhatsApp number. Optional, but the channel that reaches people.',
-    maxLength: 30,
-  })
-  @Trim()
-  @IsOptional()
-  @IsString()
-  @MaxLength(30)
-  @Matches(/^\+?[0-9 ()-]{5,30}$/, { message: 'Phone number is invalid' })
-  phone?: string;
-
-  @ApiProperty({
-    enum: Tier,
-    example: Tier.START,
-    description:
-      "Which tier's seat this student takes. Required: a center holding several tiers has no obvious default, and defaulting to the cheapest would quietly put a student into a tier without the exam module. A trialling center holds one START seat, so START is the only value it can use.",
-  })
-  @IsEnum(Tier)
-  tier: Tier;
-}
+import { Trim } from './center-validation.decorators';
 
 /** Name and phone only. Email is identity and is not editable here. */
 export class UpdateStudentDto {
@@ -156,26 +100,4 @@ export class CenterStudentListDto {
   @ApiProperty() total: number;
   @ApiProperty() page: number;
   @ApiProperty() pageSize: number;
-}
-
-export class ActivationKeyDto {
-  @ApiProperty({
-    description:
-      'Shown once. Only its hash is stored, so it cannot be recovered — mint a new one instead.',
-  })
-  activationKey: string;
-
-  @ApiProperty({ type: String, format: 'date-time' })
-  activationKeyExpiresAt: Date;
-}
-
-/**
- * The provisioning response: the student, plus the key.
- *
- * `activationKeyExpiresAt` is inherited rather than redeclared — the base
- * already carries it, and narrowing it here only duplicates the field.
- */
-export class ProvisionedStudentDto extends CenterStudentDto {
-  @ApiProperty({ description: 'Shown once, at creation. Never recoverable.' })
-  activationKey: string;
 }

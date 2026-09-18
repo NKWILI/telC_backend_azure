@@ -12,7 +12,6 @@ import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenService } from './token.service';
 import { TokenCryptoService } from './token-crypto.service';
 import { EmailService } from './email.service';
-import { GoogleService } from './google.service';
 import { Student } from '../../shared/interfaces/student.interface';
 import { DeviceSession } from '../../shared/interfaces/device-session.interface';
 import { AuthTokenResponse } from './dto/auth-response.dto';
@@ -66,7 +65,6 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly tokenCrypto: TokenCryptoService,
     private readonly emailService: EmailService,
-    private readonly googleService: GoogleService,
     // Required, not optional. Optional injection would let a wiring mistake
     // drop subscription reporting from every response with no error anywhere
     // — the field would simply stop appearing, and nothing would say so.
@@ -783,137 +781,5 @@ export class AuthService {
     }
 
     return session as unknown as DeviceSession;
-  }
-
-  /**
-   * Google OAuth Login
-   * Handles returning users, new users, and accounts awaiting linking
-   */
-  async googleLogin(dto: {
-    idToken: string;
-    deviceId: string;
-    deviceName?: string;
-  }): Promise<
-    AuthTokenResponse | { status: 'LINKING_REQUIRED'; linkingToken: string }
-  > {
-    const googlePayload = await this.googleService.verifyIdToken(dto.idToken);
-
-    // Check for returning user (existing OAuthAccount)
-    const oauthAccount = await this.prisma.oAuthAccount.findFirst({
-      where: {
-        provider: 'google',
-        provider_id: googlePayload.sub,
-      },
-      include: { student: true },
-    });
-
-    if (oauthAccount) {
-      const student = oauthAccount.student as VerificationStudentRecord;
-      return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
-    }
-
-    // Check if email exists
-    const existingStudent = (await this.prisma.student.findUnique({
-      where: { email: googlePayload.email },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-        email_verified: true,
-      } as any,
-    })) as VerificationStudentRecord | null;
-
-    if (existingStudent) {
-      // Email exists but no OAuth link → require linking
-      const linkingToken = this.tokenService.generateLinkingToken({
-        email: googlePayload.email,
-        provider: 'google',
-        providerId: googlePayload.sub,
-      });
-      return { status: 'LINKING_REQUIRED', linkingToken };
-    }
-
-    // Brand new user → create student + oauth account + issue tokens
-    const newStudent = await this.prisma.$transaction(async (tx) => {
-      const student = await tx.student.create({
-        data: {
-          first_name: googlePayload.given_name || null,
-          last_name: googlePayload.family_name || null,
-          email: googlePayload.email,
-          email_verified: googlePayload.email_verified,
-          password_hash: null,
-        },
-      });
-
-      await tx.oAuthAccount.create({
-        data: {
-          student_id: student.id,
-          provider: 'google',
-          provider_id: googlePayload.sub,
-        },
-      });
-
-      return student;
-    });
-
-    return this.issueAuthResponse(
-      {
-        id: newStudent.id,
-        first_name: newStudent.first_name,
-        last_name: newStudent.last_name,
-        email: newStudent.email,
-      } as VerificationStudentRecord,
-      dto.deviceId,
-      dto.deviceName,
-    );
-  }
-
-  /**
-   * Link Google account to existing student
-   * Consumes a linking token and creates OAuthAccount
-   */
-  async googleLink(dto: {
-    linkingToken: string;
-    deviceId: string;
-    deviceName?: string;
-  }): Promise<AuthTokenResponse> {
-    const linkingPayload = this.tokenService.verifyLinkingToken(
-      dto.linkingToken,
-    );
-
-    // Find student by email
-    const student = (await this.prisma.student.findUnique({
-      where: { email: linkingPayload.email },
-      select: {
-        id: true,
-        first_name: true,
-        last_name: true,
-        email: true,
-      } as any,
-    })) as VerificationStudentRecord | null;
-
-    if (!student) {
-      throw new BadRequestException('STUDENT_NOT_FOUND');
-    }
-
-    // Create OAuth account and mark email verified
-    await this.prisma.$transaction(async (tx) => {
-      await tx.oAuthAccount.create({
-        data: {
-          student_id: student.id,
-          provider: linkingPayload.provider,
-          provider_id: linkingPayload.providerId,
-        },
-      });
-
-      await tx.student.update({
-        where: { id: student.id },
-        data: { email_verified: true },
-      });
-    });
-
-    // Issue tokens
-    return this.issueAuthResponse(student, dto.deviceId, dto.deviceName);
   }
 }

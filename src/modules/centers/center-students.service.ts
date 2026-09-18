@@ -7,10 +7,6 @@ import {
 import { ActivationCodeStatus, Prisma, type Tier } from '@prisma/client';
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
-import { TokenCryptoService } from '../auth/token-crypto.service';
-import { ACTIVATION_KEY_TTL_DAYS } from './student-provisioning.service';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 type SignedCenterIdentity = Pick<CenterAccessTokenPayload, 'centerId'>;
 
@@ -54,10 +50,7 @@ export interface CenterStudentView {
 
 @Injectable()
 export class CenterStudentsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly tokenCrypto: TokenCryptoService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async list(
     identity: SignedCenterIdentity,
@@ -253,67 +246,6 @@ export class CenterStudentsService {
     return { removed: true };
   }
 
-  /**
-   * Mints a fresh key, replacing any outstanding one — for a student who lost
-   * the paper, or whose key expired.
-   *
-   * The `activated_at: null` predicate is the important part: a center must not
-   * be able to re-key an account that is already in use, because redeeming that
-   * key would set a new password and take the account from its owner.
-   */
-  async issueActivationKey(
-    identity: SignedCenterIdentity,
-    studentId: string,
-  ): Promise<{ activationKey: string; activationKeyExpiresAt: Date }> {
-    const rawKey = this.tokenCrypto.generateToken();
-    const activationKeyExpiresAt = new Date(
-      Date.now() + ACTIVATION_KEY_TTL_DAYS * DAY_MS,
-    );
-
-    const result = await this.prisma.student.updateMany({
-      where: {
-        id: studentId,
-        center_id: identity.centerId,
-        activated_at: null,
-      },
-      data: {
-        activation_key_hash: this.tokenCrypto.hashToken(rawKey),
-        activation_key_expires: activationKeyExpiresAt,
-      },
-    });
-
-    if (result.count !== 1) {
-      throw new NotFoundException('STUDENT_NOT_FOUND_OR_ALREADY_ACTIVE');
-    }
-
-    return { activationKey: rawKey, activationKeyExpiresAt };
-  }
-
-  async revokeActivationKey(
-    identity: SignedCenterIdentity,
-    studentId: string,
-  ): Promise<{ revoked: true }> {
-    const result = await this.prisma.student.updateMany({
-      where: {
-        id: studentId,
-        center_id: identity.centerId,
-        activated_at: null,
-      },
-      data: { activation_key_hash: null, activation_key_expires: null },
-    });
-
-    if (result.count !== 1) {
-      throw new NotFoundException('STUDENT_NOT_FOUND_OR_ALREADY_ACTIVE');
-    }
-
-    return { revoked: true };
-  }
-
-  /**
-   * 404 rather than 403 for a student outside this center. A 403 would confirm
-   * the id exists somewhere, which is exactly the probe a center could use to
-   * enumerate another school's roster.
-   */
   private async loadOwned(identity: SignedCenterIdentity, studentId: string) {
     const student = await this.prisma.student.findFirst({
       where: { id: studentId, center_id: identity.centerId },
