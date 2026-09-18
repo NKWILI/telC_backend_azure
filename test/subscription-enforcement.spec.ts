@@ -28,6 +28,9 @@ const EXEMPT: Record<string, string> = {
   // room lookup stays open so a guest can join by link. Proven in
   // room-subscription.spec.ts rather than by this sweep.
   RoomController: 'per-route guards; enforced on create, public on lookup',
+  // Reading one's own past results (D38). Nothing is practised or spent, and
+  // a student whose center lapsed should still see what they achieved.
+  ProgressController: 'a student reads their own history, even while blocked',
 };
 
 /** The seven the plan inventoried. Named so the scan cannot pass vacuously. */

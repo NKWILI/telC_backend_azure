@@ -18,14 +18,23 @@ describe('CenterStudentsService', () => {
     created_at: new Date(),
     last_seen_at: new Date(),
     tier: 'START',
+    level: 'B1',
     ...over,
   });
+
+  const PROGRESS = { readiness: { score: 62 } } as never;
 
   let prisma: any;
   let tx: any;
   let service: CenterStudentsService;
+  let progress: any;
 
   beforeEach(() => {
+    progress = {
+      forStudents: jest.fn((ids: string[]) =>
+        Promise.resolve(new Map(ids.map((id) => [id, PROGRESS]))),
+      ),
+    };
     tx = {
       student: {
         findFirst: jest.fn().mockResolvedValue(row()),
@@ -48,7 +57,7 @@ describe('CenterStudentsService', () => {
         Promise.resolve(cb(tx)),
       ),
     };
-    service = new CenterStudentsService(prisma);
+    service = new CenterStudentsService(prisma, progress);
   });
 
   /**
@@ -353,6 +362,39 @@ describe('CenterStudentsService', () => {
           student_id: 'student-1',
         },
       });
+    });
+  });
+
+  describe('progress and level (D38)', () => {
+    it('gives every listed student their numbers from one call for the page', async () => {
+      prisma.student.findMany.mockResolvedValue([
+        row(),
+        row({ id: 'student-2' }),
+      ]);
+
+      const result = await service.list(identity, { page: 1, pageSize: 20 });
+
+      expect(progress.forStudents).toHaveBeenCalledTimes(1);
+      expect(progress.forStudents).toHaveBeenCalledWith([
+        'student-1',
+        'student-2',
+      ]);
+      expect(result.students[1]).toMatchObject({
+        level: 'B1',
+        progress: PROGRESS,
+      });
+    });
+
+    it('lets the center correct the student level', async () => {
+      const updated = await service.update(identity, 'student-1', {
+        level: 'A2',
+      });
+
+      expect(tx.student.update).toHaveBeenCalledWith({
+        where: { id: 'student-1' },
+        data: { level: 'A2' },
+      });
+      expect(updated.level).toBe('A2');
     });
   });
 });

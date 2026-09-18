@@ -32,11 +32,12 @@ import { CenterActivationCodesController } from './center-activation-codes.contr
 import { CenterActivationCodesService } from './center-activation-codes.service';
 import { CodeRedemptionController } from './code-redemption.controller';
 import { CodeRedemptionService } from './code-redemption.service';
+import { ProgressModule } from '../progress/progress.module';
 
 @Module({
   // SubscriptionAccessModule imports nothing, so this cannot close a cycle
   // back through AuthModule.
-  imports: [AuthModule, SubscriptionAccessModule],
+  imports: [AuthModule, SubscriptionAccessModule, ProgressModule],
   controllers: [
     CenterAuthController,
     CenterActivationCodesController,

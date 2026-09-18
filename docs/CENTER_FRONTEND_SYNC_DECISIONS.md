@@ -1556,7 +1556,18 @@ the code rule (D34).
 ## D38. Level, skill scores and exam readiness ("progress")
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B10)
-**Status:** decided, not built — D26 and D29 are built in the backend (phase 11); this is next
+**Status:** built in the backend (phase 12, 2026-09-19); the dashboard and the Flutter app do not read it yet
+
+**As built:** `src/modules/progress/progress-formula.ts` holds the formula and
+every constant (weights, thresholds) in one place; one SQL query computes a
+whole page of students. Routes: `GET /api/progress/me` (skills, readiness,
+`ready`, weekly change, level, alerts — readable even while access is
+blocked: it is the student's own history); the center student list and
+detail gain `level` and `progress`; `GET /api/centers/me/students/summary`
+gives average readiness, students ready, per-skill averages and alert counts.
+`level` (A1–B2) is set at sign-up or in the profile, and editable by the
+center (`PATCH /api/centers/me/students/:id`). A student with no activity at
+all counts as `inactive`.
 
 ### Prerequisite: the data must reach the server
 

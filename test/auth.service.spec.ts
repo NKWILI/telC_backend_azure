@@ -302,6 +302,15 @@ describe('AuthService', () => {
       );
     });
 
+    it('stores the level the student declares at sign-up (D38)', async () => {
+      prismaMock.student.findUnique.mockResolvedValueOnce(null);
+      txMock.student.create.mockResolvedValueOnce({ id: 'student-1' });
+
+      await service.register({ ...dto, level: 'A2' });
+
+      expect(txMock.student.create.mock.calls[0][0].data.level).toBe('A2');
+    });
+
     it('returns generic success and does nothing for an existing verified email', async () => {
       prismaMock.student.findUnique.mockResolvedValueOnce({
         id: 'student-1',

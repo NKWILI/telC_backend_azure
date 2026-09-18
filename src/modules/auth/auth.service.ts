@@ -8,6 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import type { CefrLevel } from '@prisma/client';
 import { PrismaService } from '../../shared/services/prisma.service';
 import { TokenService } from './token.service';
 import { TokenCryptoService } from './token-crypto.service';
@@ -181,6 +182,7 @@ export class AuthService {
           first_name: dto.firstName,
           last_name: dto.lastName,
           email: dto.email,
+          level: dto.level ?? null,
           password_hash: passwordHash,
           email_verified: false,
           email_verification_token: tokenHash,
@@ -659,18 +661,25 @@ export class AuthService {
    */
   async updateStudentProfile(
     studentId: string,
-    updates: { firstName?: string; lastName?: string; email?: string },
+    updates: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      level?: CefrLevel;
+    },
   ): Promise<Student> {
     const data: {
       first_name?: string;
       last_name?: string;
       email?: string;
+      level?: CefrLevel;
       updated_at: Date;
     } = { updated_at: new Date() };
 
     if (updates.firstName?.trim()) data.first_name = updates.firstName.trim();
     if (updates.lastName?.trim()) data.last_name = updates.lastName.trim();
     if (updates.email?.trim()) data.email = updates.email.trim().toLowerCase();
+    if (updates.level) data.level = updates.level;
 
     try {
       const student = await this.prisma.student.update({

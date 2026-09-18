@@ -23,8 +23,10 @@ import {
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { CenterExceptionFilter } from './center-exception.filter';
 import { CenterStudentsService } from './center-students.service';
+import { ProgressService } from '../progress/progress.service';
 import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import {
+  CenterProgressSummaryDto,
   CenterStudentDto,
   CenterStudentListDto,
   ListStudentsQueryDto,
@@ -42,7 +44,10 @@ export class CenterStudentsController {
   // No route adds a student here any more. Students arrive by redeeming a
   // code the center was given (D1, D17); this controller is the roster of
   // who did.
-  constructor(private readonly students: CenterStudentsService) {}
+  constructor(
+    private readonly students: CenterStudentsService,
+    private readonly progress: ProgressService,
+  ) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -58,6 +63,22 @@ export class CenterStudentsController {
     @Query() query: ListStudentsQueryDto,
   ): Promise<CenterStudentListDto> {
     return this.students.list(centerUser, query);
+  }
+
+  // Declared before ':studentId', which would otherwise take "summary" as an id.
+  @Get('summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Progress numbers for the whole center',
+    description:
+      'Average readiness, students ready for the exam, per-skill averages and alert counts, over every student of this center (D38).',
+  })
+  @ApiOkResponse({ type: CenterProgressSummaryDto })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  summary(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+  ): Promise<CenterProgressSummaryDto> {
+    return this.progress.forCenter(centerUser.centerId);
   }
 
   @Get(':studentId')

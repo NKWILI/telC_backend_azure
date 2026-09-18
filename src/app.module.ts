@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { SpeakingModule } from './modules/speaking/speaking.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { ListeningModule } from './modules/listening/listening.module';
+import { ProgressModule } from './modules/progress/progress.module';
 import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine.module';
 import { LesenModule } from './modules/lesen/lesen.module';
 import { ModelltestsModule } from './modules/modelltests/modelltests.module';
@@ -29,6 +30,7 @@ import { PlansModule } from './modules/plans/plans.module';
     SpeakingModule,
     WritingModule,
     ListeningModule,
+    ProgressModule,
     ModelltestsModule,
     SprachbausteineModule,
     LesenModule,
