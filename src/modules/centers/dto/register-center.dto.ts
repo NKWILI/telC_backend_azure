@@ -9,6 +9,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   MaxUtf8Bytes,
   NormalizeEmail,
+  StrongPassword,
   Trim,
 } from './center-validation.decorators';
 
@@ -59,5 +60,9 @@ export class RegisterCenterDto {
   @IsString()
   @MinLength(8)
   @MaxUtf8Bytes(72)
+  // One rule for every place a password is set — register, reset, and change
+  // from inside the dashboard. Three forms with three rules is how a password
+  // accepted by one is refused by the next.
+  @StrongPassword()
   password: string;
 }

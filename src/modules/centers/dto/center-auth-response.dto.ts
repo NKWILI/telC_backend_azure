@@ -78,3 +78,15 @@ export class CenterAuthResponseDto {
   @ApiProperty({ type: CenterAuthCenterDto })
   center: CenterAuthCenterDto;
 }
+
+/**
+ * Nothing is returned but the fact it worked.
+ *
+ * Deliberately not a fresh token pair: the caller's session survives the
+ * change, so there is nothing to hand back, and returning tokens would suggest
+ * the old ones had stopped working.
+ */
+export class CenterChangePasswordResponseDto {
+  @ApiProperty({ example: true })
+  success: boolean;
+}

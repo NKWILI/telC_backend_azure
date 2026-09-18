@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   Optional,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -17,6 +18,7 @@ import * as bcrypt from 'bcryptjs';
 import { randomUUID, timingSafeEqual } from 'crypto';
 import type { CenterRefreshTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { PrismaService } from '../../shared/services/prisma.service';
+import { checkPassword } from '../../shared/password-policy';
 import { ValkeyService } from '../../shared/services/valkey.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 import { EmailService } from '../auth/email.service';
@@ -100,6 +102,16 @@ interface SessionIssueResult {
   accessToken: string;
   refreshToken: string;
   evictedSessionId: string | null;
+}
+
+/**
+ * Who is asking, taken from the access token and never from a body. The
+ * session id is here so the caller's own device survives the change.
+ */
+interface SignedCenterChangePasswordIdentity {
+  centerUserId: string;
+  centerId: string;
+  sessionId: string;
 }
 
 @Injectable()
@@ -451,6 +463,95 @@ export class CenterAuthService {
       { ...centerUser, password_hash: passwordHash },
       deviceId,
       input.deviceName,
+    );
+  }
+
+  /**
+   * Changes the password of a signed-in manager.
+   *
+   * The difference from a reset is what proves the request: there the proof is
+   * a code sent to the email address, here it is the password already in
+   * place. The consequence is the same — every OTHER device is signed out,
+   * because whoever knew the old password may be holding one of them — but the
+   * caller keeps their session, since signing someone out of the page they are
+   * standing on is a bug, not security.
+   */
+  async changePassword(
+    identity: SignedCenterChangePasswordIdentity,
+    input: { currentPassword: string; newPassword: string },
+  ): Promise<void> {
+    const refusal = checkPassword(input.newPassword);
+
+    if (refusal) {
+      throw new BadRequestException(refusal);
+    }
+
+    const centerUser = await this.prisma.centerUser.findFirst({
+      // Both identifiers come from the token, so a caller cannot reach another
+      // center's manager even by guessing an id.
+      where: { id: identity.centerUserId, center_id: identity.centerId },
+      select: { id: true, password_hash: true },
+    });
+
+    if (!centerUser) {
+      throw new NotFoundException('CENTER_PROFILE_NOT_FOUND');
+    }
+
+    const currentMatches = await bcrypt.compare(
+      input.currentPassword,
+      centerUser.password_hash,
+    );
+
+    if (!currentMatches) {
+      throw new BadRequestException('WRONG_CURRENT_PASSWORD');
+    }
+
+    // Refused rather than accepted as a no-op: a manager who "changed" their
+    // password and lost every other session would reasonably believe the old
+    // one no longer works.
+    if (input.currentPassword === input.newPassword) {
+      throw new BadRequestException('PASSWORD_UNCHANGED');
+    }
+
+    await this.prisma.centerUser.update({
+      where: { id: centerUser.id },
+      data: { password_hash: await bcrypt.hash(input.newPassword, 12) },
+    });
+
+    await this.revokeOtherCenterSessions(centerUser.id, identity.sessionId);
+  }
+
+  /**
+   * Every session but the one making the request.
+   *
+   * Separate from `revokeAllCenterSessions` rather than a flag on it: a reset
+   * happens without a session, a change happens inside one, and a parameter
+   * that is sometimes null is how the wrong branch gets taken.
+   */
+  private async revokeOtherCenterSessions(
+    centerUserId: string,
+    currentSessionId: string,
+  ): Promise<void> {
+    const sessions = await this.prisma.centerDeviceSession.findMany({
+      where: {
+        center_user_id: centerUserId,
+        id: { not: currentSessionId },
+        revoked_at: null,
+      },
+      select: { id: true },
+    });
+
+    await this.prisma.centerDeviceSession.updateMany({
+      where: {
+        center_user_id: centerUserId,
+        id: { not: currentSessionId },
+        revoked_at: null,
+      },
+      data: { revoked_at: new Date() },
+    });
+
+    await Promise.all(
+      sessions.map((session) => this.revokeCachedSession(session.id)),
     );
   }
 
