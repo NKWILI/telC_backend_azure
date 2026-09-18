@@ -244,13 +244,19 @@ export class CenterActivationCodesService {
 
       // Access ends on the student's side, and only for THIS center's hold on
       // them: a student who has since joined another school keeps that one.
+      //
+      // The tier is deliberately left, exactly as the older release path
+      // leaves it. A leftover tier is the evidence that a school once governed
+      // this student; without it they read as a genuine independent student,
+      // who is admitted to the exam module — so clearing it would turn
+      // "deactivated" into "upgraded".
       if (
         transition.to === ActivationCodeStatus.DEACTIVATED &&
         current.student_id
       ) {
         await tx.student.updateMany({
           where: { id: current.student_id, center_id: identity.centerId },
-          data: { center_id: null, tier: null },
+          data: { center_id: null },
         });
       }
 

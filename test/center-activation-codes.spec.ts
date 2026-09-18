@@ -172,9 +172,14 @@ describe('CenterActivationCodesService', () => {
 
       // Only this center's hold on the student is released: a student who has
       // since joined another school must not lose that school.
+      //
+      // And the tier stays. A leftover tier is how the system tells a student a
+      // school released from a genuine independent one — and independent
+      // students are admitted to the exam module. Clearing it would turn
+      // "deactivated" into "upgraded".
       expect(prisma.student.updateMany).toHaveBeenCalledWith({
         where: { id: 'student-1', center_id: 'center-1' },
-        data: { center_id: null, tier: null },
+        data: { center_id: null },
       });
       expect(code.linkedName).toBe('Amina Nguema');
     });
