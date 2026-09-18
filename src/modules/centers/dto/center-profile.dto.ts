@@ -8,10 +8,16 @@ import {
   MaxLength,
 } from 'class-validator';
 import { Trim } from './center-validation.decorators';
+import type { Tier } from '@prisma/client';
 import {
   CenterAuthCenterDto,
   CenterAuthUserDto,
 } from './center-auth-response.dto';
+import { CENTER_SUBSCRIPTION_STATUSES } from './center-subscription-response.dto';
+import type {
+  CenterPaymentStatus,
+  OnboardingStep,
+} from '../center-account-state';
 
 /**
  * Where a center stands in onboarding, worked out on every read.
@@ -37,6 +43,73 @@ export class CenterOnboardingStateDto {
   missing: string[];
 }
 
+/**
+ * Where the center stands, worked out on every read.
+ *
+ * No column backs any of this. A stored `paymentStatus` needs a job to flip it
+ * when a trial ends, and a job that runs late leaves the badge saying "trial"
+ * while the students are already blocked.
+ */
+export class CenterAccountStateDto {
+  @ApiProperty({
+    enum: ['unpaid', 'trial', 'paid'],
+    example: 'trial',
+    description:
+      'What a manager is shown. Coarse on purpose: a grace period still reads as paid, because access continues and the bill is late rather than unpaid.',
+  })
+  paymentStatus: CenterPaymentStatus;
+
+  @ApiProperty({
+    enum: CENTER_SUBSCRIPTION_STATUSES,
+    example: 'TRIAL',
+    description:
+      'The precise state behind `paymentStatus`, for the cases where the difference is a different sentence: GRACE_PERIOD means "payment late", BLOCKED means "access stopped".',
+  })
+  subscriptionStatus: (typeof CENTER_SUBSCRIPTION_STATUSES)[number];
+
+  @ApiProperty({
+    example: false,
+    description:
+      'True once a trial has started or a payment has ever succeeded. It never goes back to false: a lapsed center owes money, it does not owe its details again.',
+  })
+  onboardingCompleted: boolean;
+
+  @ApiProperty({
+    example: 3,
+    enum: [1, 2, 3, 4],
+    description:
+      'Where the wizard resumes: 1 manager details, 2 school details, 3 plan, 4 finished.',
+  })
+  onboardingStep: OnboardingStep;
+
+  @ApiPropertyOptional({ nullable: true, type: String, format: 'date-time' })
+  trialEndsAt: Date | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String, format: 'date-time' })
+  paidUntil: Date | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    format: 'date-time',
+    description: 'When a lapsed paid period stops being tolerated.',
+  })
+  graceEndsAt: Date | null;
+
+  @ApiProperty({
+    description:
+      'Whether this center students may currently learn. Read this rather than re-deriving access from the dates.',
+  })
+  studentsMayLearn: boolean;
+
+  @ApiProperty({
+    example: { START: 7, PRO: 3, PREMIUM: 0 },
+    description:
+      'Seats held per tier, zeros included, from the seat rows. Absent and zero mean the same thing to a dashboard.',
+  })
+  seats: Record<Tier, number>;
+}
+
 export class CenterProfileResponseDto {
   @ApiProperty({ type: CenterAuthUserDto })
   centerUser: CenterAuthUserDto;
@@ -46,6 +119,9 @@ export class CenterProfileResponseDto {
 
   @ApiProperty({ type: CenterOnboardingStateDto })
   onboarding: CenterOnboardingStateDto;
+
+  @ApiProperty({ type: CenterAccountStateDto })
+  account: CenterAccountStateDto;
 }
 
 /**

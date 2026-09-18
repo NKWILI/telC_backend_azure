@@ -12,20 +12,53 @@ import {
   deriveOnboardingState,
   type OnboardingState,
 } from './center-onboarding';
+import { deriveAccountState } from './center-account-state';
+import { SubscriptionPolicyService } from './subscription-policy.service';
+import { type CenterPlan, Tier } from '@prisma/client';
 
 type SignedCenterIdentity = Pick<
   CenterAccessTokenPayload,
   'centerUserId' | 'centerId'
 >;
 
+/** Exactly what the policy service reads, and nothing incidental with it. */
+type SubscriptionFacts = {
+  plan: CenterPlan;
+  trial_started_at: Date | null;
+  trial_ends_at: Date | null;
+  paid_until: Date | null;
+};
+
+/** Every tier present, zero included, so no client writes `?? 0`. */
+type SeatsByTier = Record<Tier, number>;
+
 @Injectable()
 export class CenterProfileService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // The policy service rather than a second reading of the timestamps here:
+    // two implementations of "is this center active" is how they come to
+    // disagree, and the one that disagrees is the one granting free access.
+    private readonly policy: SubscriptionPolicyService,
+  ) {}
 
+  /**
+   * Everything the dashboard shell reads on every page: who is signed in, what
+   * the center is, where it stands, and what it holds.
+   *
+   * One call on purpose. Split across three routes, each page would pick its
+   * own combination and they would disagree halfway through a render.
+   */
   async getProfile(
     identity: SignedCenterIdentity,
   ): Promise<CenterProfileResponseDto> {
-    return this.toProfile(await this.loadOwnedUser(identity));
+    const centerUser = await this.loadOwnedUser(identity);
+    const [subscription, seats] = await Promise.all([
+      this.loadSubscription(identity),
+      this.loadSeats(identity),
+    ]);
+
+    return this.toProfile(centerUser, subscription, seats);
   }
 
   async updateProfile(
@@ -67,7 +100,10 @@ export class CenterProfileService {
     }
     await this.prisma.$transaction(writes);
 
-    return this.toProfile(await this.loadOwnedUser(identity));
+    // Re-read rather than patch the in-memory row: the response carries
+    // derived state, and deriving it from what we hoped we wrote is how a
+    // client ends up with a status the database disagrees with.
+    return this.getProfile(identity);
   }
 
   /**
@@ -109,25 +145,32 @@ export class CenterProfileService {
    * Built field by field rather than by spreading the row, so a column added
    * to the schema later cannot leak into an API response by default.
    */
-  private toProfile(centerUser: {
-    id: string;
-    role: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    // Nullable because registration no longer collects them. A center that has
-    // not finished onboarding genuinely has no country, city or manager phone,
-    // and the response says so rather than inventing an empty string.
-    phone: string | null;
-    email_verified: boolean;
-    center: {
+  private toProfile(
+    centerUser: {
       id: string;
-      name: string;
-      country: string | null;
-      city: string | null;
-      logo_url: string | null;
-    };
-  }): CenterProfileResponseDto {
+      role: string;
+      first_name: string;
+      last_name: string;
+      email: string;
+      // Nullable because registration no longer collects them. A center that has
+      // not finished onboarding genuinely has no country, city or manager phone,
+      // and the response says so rather than inventing an empty string.
+      phone: string | null;
+      email_verified: boolean;
+      center: {
+        id: string;
+        name: string;
+        country: string | null;
+        city: string | null;
+        logo_url: string | null;
+      };
+    },
+    subscription: SubscriptionFacts,
+    seats: SeatsByTier,
+  ): CenterProfileResponseDto {
+    const onboarding = this.toOnboardingState(centerUser);
+    const decision = this.policy.evaluate(subscription);
+
     return {
       centerUser: {
         id: centerUser.id,
@@ -145,8 +188,80 @@ export class CenterProfileService {
         city: centerUser.center.city,
         logoUrl: centerUser.center.logo_url,
       },
-      onboarding: this.toOnboardingState(centerUser),
+      onboarding,
+      account: {
+        ...deriveAccountState({
+          subscriptionStatus: decision.status,
+          trialStartedAt: subscription.trial_started_at,
+          paidUntil: subscription.paid_until,
+          onboarding,
+        }),
+        // Carried alongside the coarse `paymentStatus` because "payment late"
+        // and "blocked" are different sentences to a manager, and only this
+        // tells them apart.
+        subscriptionStatus: decision.status,
+        trialEndsAt: subscription.trial_ends_at,
+        paidUntil: subscription.paid_until,
+        graceEndsAt: decision.graceEndsAt,
+        studentsMayLearn: decision.studentsMayLearn,
+        seats,
+      },
     };
+  }
+
+  /**
+   * Every center gets a subscription inside its registration transaction, so a
+   * missing row is a fault to surface rather than a state to accommodate —
+   * the same stance `CenterSubscriptionService` takes.
+   */
+  private async loadSubscription(
+    identity: SignedCenterIdentity,
+  ): Promise<SubscriptionFacts> {
+    const subscription = await this.prisma.centerSubscription.findUnique({
+      where: { center_id: identity.centerId },
+      // Named columns, not the row: the policy must not start depending on
+      // ids or timestamps that happen to travel with it.
+      select: {
+        plan: true,
+        trial_started_at: true,
+        trial_ends_at: true,
+        paid_until: true,
+      },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('CENTER_SUBSCRIPTION_NOT_FOUND');
+    }
+
+    return subscription;
+  }
+
+  /**
+   * Seats per tier, with absent tiers reported as zero.
+   *
+   * A tier with no row and a tier with zero seats mean the same thing to a
+   * dashboard, and leaving one of them undefined makes every client write the
+   * same `?? 0`.
+   */
+  private async loadSeats(
+    identity: SignedCenterIdentity,
+  ): Promise<SeatsByTier> {
+    const rows = await this.prisma.centerSeat.findMany({
+      where: { center_id: identity.centerId },
+      select: { tier: true, quantity: true },
+    });
+
+    const seats: SeatsByTier = {
+      [Tier.START]: 0,
+      [Tier.PRO]: 0,
+      [Tier.PREMIUM]: 0,
+    };
+
+    for (const row of rows) {
+      seats[row.tier] = row.quantity;
+    }
+
+    return seats;
   }
 
   /**
