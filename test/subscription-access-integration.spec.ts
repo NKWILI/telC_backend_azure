@@ -61,13 +61,19 @@ async function makeCenter(subscription: Record<string, unknown>) {
   });
 }
 
-async function makeStudent(centerId: string | null) {
+async function makeStudent(
+  centerId: string | null,
+  options: { grandfathered?: boolean } = {},
+) {
   return prisma.student.create({
     data: {
       email: `s-${Date.now()}-${Math.random()}@access.integration.test`,
       password_hash: await bcrypt.hash('x', 4),
       email_verified: true,
       center_id: centerId,
+      // Only ever set by the migration that required codes (D34); set here to
+      // stand in for someone who was using the app on their own that day.
+      grandfathered_access: options.grandfathered ?? false,
     },
   });
 }
@@ -111,8 +117,11 @@ describe('subscription access against real Postgres', () => {
 
     const refused = await attempt(asStudent(student.id), studentGuard);
     expect(refused).toBeInstanceOf(ForbiddenException);
+    // One error for every missing-access case (D19), with the reason and the
+    // status the app uses to word it.
     expect((refused as ForbiddenException).getResponse()).toMatchObject({
-      message: 'SUBSCRIPTION_INACTIVE',
+      message: 'ACTIVATION_REQUIRED',
+      reason: 'CENTER_UNPAID',
       subscriptionStatus: 'BLOCKED',
     });
   });
@@ -177,8 +186,8 @@ describe('subscription access against real Postgres', () => {
     );
   });
 
-  it('leaves a student with no center entirely alone', async () => {
-    const student = await makeStudent(null);
+  it('leaves a student who was already using the app on their own alone', async () => {
+    const student = await makeStudent(null, { grandfathered: true });
 
     await expect(studentGuard.canActivate(asStudent(student.id))).resolves.toBe(
       true,
@@ -190,15 +199,30 @@ describe('subscription access against real Postgres', () => {
     });
   });
 
-  it('leaves a removed student learning, rather than stranding them', async () => {
+  it('asks a new account with no school for a code (D9)', async () => {
+    const student = await makeStudent(null);
+
+    const refused = await attempt(asStudent(student.id), studentGuard);
+
+    expect((refused as ForbiddenException).getResponse()).toMatchObject({
+      message: 'ACTIVATION_REQUIRED',
+      reason: 'NO_CODE',
+    });
+  });
+
+  // This used to leave a removed student learning, on purpose, so that
+  // removal would not strand anyone. D34 reverses it: access now comes from a
+  // code, and a school taking a student back must actually end it — otherwise
+  // removing someone would hand them free access for ever.
+  it('stops a removed student learning, now that access comes from a code', async () => {
     const center = await makeCenter({
       plan: 'PAID',
-      paid_until: daysFromNow(-8),
+      paid_until: daysFromNow(30),
     });
     const student = await makeStudent(center.id);
 
-    expect(await attempt(asStudent(student.id), studentGuard)).toBeInstanceOf(
-      ForbiddenException,
+    await expect(studentGuard.canActivate(asStudent(student.id))).resolves.toBe(
+      true,
     );
 
     // What CenterStudentsService.remove does: unlink, never delete.
@@ -207,9 +231,10 @@ describe('subscription access against real Postgres', () => {
       data: { center_id: null },
     });
 
-    await expect(studentGuard.canActivate(asStudent(student.id))).resolves.toBe(
-      true,
-    );
+    const refused = await attempt(asStudent(student.id), studentGuard);
+    expect((refused as ForbiddenException).getResponse()).toMatchObject({
+      message: 'ACTIVATION_REQUIRED',
+    });
   });
 
   describe('the center side', () => {
@@ -271,7 +296,7 @@ describe('subscription access against real Postgres', () => {
     });
   });
 
-  it('frees a student when their center row is deleted, per ON DELETE SET NULL', async () => {
+  it('unlinks a student when their center row is deleted, per ON DELETE SET NULL', async () => {
     const center = await makeCenter({
       plan: 'PAID',
       paid_until: daysFromNow(30),
@@ -288,9 +313,12 @@ describe('subscription access against real Postgres', () => {
     });
     expect(reread!.center_id).toBeNull();
 
-    await expect(studentGuard.canActivate(asStudent(student.id))).resolves.toBe(
-      true,
-    );
+    // Unlinked, not freed: with no school behind them the student is asked
+    // for a code, like anyone else a school no longer governs (D34).
+    const refused = await attempt(asStudent(student.id), studentGuard);
+    expect((refused as ForbiddenException).getResponse()).toMatchObject({
+      message: 'ACTIVATION_REQUIRED',
+    });
   });
 
   it('fails closed when a center exists but its subscription row does not', async () => {
