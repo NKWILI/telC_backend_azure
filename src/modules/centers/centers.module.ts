@@ -30,6 +30,7 @@ import {
 import { CenterAuthGuard } from './guards/center-auth.guard';
 import { CenterSubscriptionGuard } from './guards/center-subscription.guard';
 import { CentersService } from './centers.service';
+import { CenterTrialService } from './center-trial.service';
 
 @Module({
   // SubscriptionAccessModule imports nothing, so this cannot close a cycle
@@ -49,6 +50,7 @@ import { CentersService } from './centers.service';
     CenterAuthService,
     CenterProfileService,
     CenterSubscriptionService,
+    CenterTrialService,
     SubscriptionPolicyService,
     PricingService,
     CenterSeatsService,

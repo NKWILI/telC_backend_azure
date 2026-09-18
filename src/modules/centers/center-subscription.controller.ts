@@ -11,6 +11,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -22,6 +23,8 @@ import {
 import type { CenterAccessTokenPayload } from '../../shared/interfaces/token-payload.interface';
 import { CenterExceptionFilter } from './center-exception.filter';
 import { CenterSubscriptionService } from './center-subscription.service';
+import { CenterTrialService } from './center-trial.service';
+import { TrialStartedDto } from './dto/activation-code.dto';
 import { CurrentCenterUser } from './decorators/current-center-user.decorator';
 import {
   CenterSubscriptionResponseDto,
@@ -40,7 +43,30 @@ import { CenterAuthGuard } from './guards/center-auth.guard';
 @UseFilters(CenterExceptionFilter)
 @UseGuards(CenterAuthGuard)
 export class CenterSubscriptionController {
-  constructor(private readonly subscriptions: CenterSubscriptionService) {}
+  constructor(
+    private readonly subscriptions: CenterSubscriptionService,
+    private readonly trials: CenterTrialService,
+  ) {}
+
+  @Post('trial')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Start the free trial',
+    description:
+      'Starts a 14-day trial now and issues its one activation code, which expires with it. The clock starts at this call rather than at the first student redemption, so the school knows the end date the moment it has a code to hand out. One trial per center: a second call answers TRIAL_ALREADY_USED, and a center that has paid answers ALREADY_PAID. Two calls arriving together start one trial. The trial seat is a Start seat at zero price.',
+  })
+  @ApiCreatedResponse({ type: TrialStartedDto })
+  @ApiConflictResponse({
+    type: CenterErrorResponseDto,
+    description: 'TRIAL_ALREADY_USED or ALREADY_PAID.',
+  })
+  @ApiUnauthorizedResponse({ type: CenterErrorResponseDto })
+  @ApiNotFoundResponse({ type: CenterErrorResponseDto })
+  async startTrial(
+    @CurrentCenterUser() centerUser: CenterAccessTokenPayload,
+  ): Promise<TrialStartedDto> {
+    return this.trials.start(centerUser);
+  }
 
   @Get('subscription')
   @HttpCode(HttpStatus.OK)
