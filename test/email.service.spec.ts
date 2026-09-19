@@ -313,4 +313,38 @@ describe('EmailService', () => {
       expect(send.mock.calls[0][0].html).not.toMatch(/Hallo\s+,/);
     });
   });
+
+  describe('sendSupportRequestToTeam (D24)', () => {
+    const service = () =>
+      new EmailService(
+        makeConfig({
+          RESEND_API_KEY: 'key',
+          EMAIL_FROM: 'noreply@example.com',
+          FRONTEND_URL: 'https://app.example.com',
+        }),
+      );
+
+    it('escapes everything a school typed, so it cannot inject markup', async () => {
+      const mailer = service();
+      const send = (mailer as any).resend.emails.send as jest.Mock;
+
+      await mailer.sendSupportRequestToTeam('team@example.com', {
+        subject: 'Support: <b>School</b>',
+        replyTo: 'awa@school.cm',
+        fields: [['Name (as typed)', '<img src=x onerror=alert(1)>']],
+        message: 'Hello <script>steal()</script>\nsecond line',
+      });
+
+      const { html, text, replyTo } = send.mock.calls[0][0];
+      expect(html).not.toContain('<img src=x');
+      expect(html).not.toContain('<script>');
+      expect(html).toContain(
+        '&lt;script&gt;steal()&lt;/script&gt;<br>second line',
+      );
+      expect(html).not.toContain('<b>School</b>');
+      // The plain-text part carries the message as typed.
+      expect(text).toContain('Hello <script>steal()</script>');
+      expect(replyTo).toBe('awa@school.cm');
+    });
+  });
 });

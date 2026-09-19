@@ -44,7 +44,7 @@ export const LERNIQO_LOGO_ATTACHMENT = {
   contentId: 'lerniqo-logo',
 };
 
-const escapeHtml = (value: string): string =>
+export const escapeHtml = (value: string): string =>
   value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
