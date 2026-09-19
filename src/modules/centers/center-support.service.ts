@@ -16,6 +16,13 @@ type Identity = Pick<CenterAccessTokenPayload, 'centerId' | 'centerUserId'>;
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
+ * Where support messages go when `SUPPORT_EMAIL` is not set: the founder's
+ * inbox, so nothing depends on the environment being configured. The variable
+ * still wins when set.
+ */
+export const DEFAULT_SUPPORT_EMAIL = 'ngeukeualain@gmail.com';
+
+/**
  * How often a center may write, counted from the stored rows rather than a
  * cache: Valkey is not deployed, and an in-memory counter would reset on every
  * deploy and differ between instances. The rows are the truth anyway.
@@ -169,13 +176,8 @@ export class CenterSupportService {
     requestId: string,
     send: (team: string) => Promise<void>,
   ): Promise<void> {
-    const team = this.config.get<string>('SUPPORT_EMAIL')?.trim();
-    if (!team) {
-      this.logger.error(
-        `SUPPORT_EMAIL is not set: support request ${requestId} is stored but was not emailed`,
-      );
-      return;
-    }
+    const team =
+      this.config.get<string>('SUPPORT_EMAIL')?.trim() || DEFAULT_SUPPORT_EMAIL;
     try {
       await send(team);
       await this.prisma.supportRequest.update({

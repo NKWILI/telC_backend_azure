@@ -107,13 +107,14 @@ describe('CenterSupportService', () => {
       expect(prisma.supportRequest.update).not.toHaveBeenCalled();
     });
 
-    it('stores without emailing when SUPPORT_EMAIL is not set', async () => {
+    it('emails the founder inbox when SUPPORT_EMAIL is not set', async () => {
       config.get.mockReturnValue(undefined);
 
       await service.contact(identity, form);
 
-      expect(prisma.supportRequest.create).toHaveBeenCalled();
-      expect(email.sendSupportRequestToTeam).not.toHaveBeenCalled();
+      expect(email.sendSupportRequestToTeam.mock.calls[0][0]).toBe(
+        'ngeukeualain@gmail.com',
+      );
     });
 
     it('refuses the 6th message in an hour, counted from the stored rows', async () => {
