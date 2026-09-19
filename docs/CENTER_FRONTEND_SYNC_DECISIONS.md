@@ -1796,9 +1796,10 @@ deleted**, and showing the resets left until the renewal date.
 
 ---
 
-## D40. Speaking phrases: AI-drafted, teacher-reviewed, served by the backend
+## D40. Speaking phrases: AI-drafted, served by the backend
 
-**Decided:** 2026-09-18, by the backend dev and Herman (settles B13)
+**Decided:** 2026-09-18, by the backend dev and Herman (settles B13).
+**Changed:** 2026-09-19 by the backend dev — **no German-teacher review**.
 **Status:** decided, not built
 
 In the Flutter app a phrase is a German sentence, its translation and a type
@@ -1806,12 +1807,12 @@ In the Flutter app a phrase is a German sentence, its translation and a type
 
 - **Source:** drafted with AI from the telc B1+ Beruf speaking tasks (the
   Modelltest themes), grouped by type and by Teil.
-- **Review:** **every phrase is checked by a German teacher** before it goes
-  live. A wrong phrase taught as correct costs trust.
+- **Review:** none by a teacher (changed 2026-09-19). The phrases go live as
+  drafted. Because they are stored in the backend, a wrong phrase is fixed or
+  hidden without releasing a new app version.
 - **Size for the first release:** 20–30 phrases per type.
 - **Storage:** in the backend, served to the app, so a phrase can be fixed
-  without releasing a new app version. Only reviewed phrases are served. After it, the
-new code is shown to hand out.
+  without releasing a new app version.
 
 ---
 
@@ -1907,7 +1908,7 @@ All open items here need a joint decision by the backend dev and Herman.
 - [x] **B10** Level, target level, progress → **level declared by the student, editable by the center; no target field (one exam); progress = exam readiness computed in the backend from `StudentActivity`** (D38). Decided 2026-09-18.
 - [x] **B11** Code reuse → **a reset gives the seat a new code value, disconnects the old student and erases their learning data on that seat; their account is kept** (D39). Limit: 2 resets of a used code per seat per billing period, 1 for the trial code.
 - [x] **B12** Trial abuse → **accepted as is**: 14 days, 1 Start seat (D6)
-- [x] **B13** Speaking phrases → **AI-drafted from the telc B1+ Beruf speaking tasks, every phrase reviewed by a German teacher, 20–30 per type, served by the backend** (D40). Decided 2026-09-18.
+- [x] **B13** Speaking phrases → **AI-drafted from the telc B1+ Beruf speaking tasks, 20–30 per type, served by the backend** (D40). Decided 2026-09-18; teacher review dropped 2026-09-19.
 - [x] **B14** Flutter app home screen → **definitions agreed, refined at implementation** (D7)
 - [x] **B15** → **Google sign-in removed (code to delete); devices screen set aside** (D8)
 - [x] **B16** Guest mode (`POST /api/auth/guest`) → **kept for the demo phase**; revisited when the demo phase ends. Decided 2026-09-18.
