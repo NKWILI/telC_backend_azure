@@ -38,8 +38,8 @@ async function makeCenter(paidUntil: Date | null = null) {
   return prisma.center.create({
     data: {
       name: `Activation Test ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: {
         create: { plan: paidUntil ? 'PAID' : 'TRIAL', paid_until: paidUntil },
       },

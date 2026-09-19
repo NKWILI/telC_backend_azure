@@ -54,8 +54,8 @@ async function makeCenter(subscription: Record<string, unknown>) {
   return prisma.center.create({
     data: {
       name: `Access Test ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: { create: { plan: 'TRIAL', ...subscription } },
     },
   });

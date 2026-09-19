@@ -37,10 +37,18 @@ export class CenterAuthCenterDto {
 
   // Both null until onboarding is complete. A client should read the
   // `onboarding` block rather than inferring completeness from these.
-  @ApiPropertyOptional({ nullable: true, example: 'CM' })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'CM',
+    description: 'The country code chosen at onboarding.',
+  })
   country: string | null;
 
-  @ApiPropertyOptional({ nullable: true, example: 'Douala' })
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'Douala',
+    description: 'The listed city name, or the town typed in.',
+  })
   city: string | null;
 
   @ApiPropertyOptional({ nullable: true, format: 'uri' })

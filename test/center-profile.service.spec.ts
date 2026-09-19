@@ -21,8 +21,10 @@ describe('CenterProfileService', () => {
     center: {
       id: 'center-1',
       name: 'Goethe Language Center',
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      region_id: 'littoral',
+      city_id: 'douala',
+      city_other: null,
       logo_url: null,
     },
   };
@@ -81,15 +83,13 @@ describe('CenterProfileService', () => {
       center: {
         id: 'center-1',
         name: 'Goethe Language Center',
-        // This fixture predates the structured columns, which is exactly the
-        // case the legacy pair still exists for: the row is readable and its
-        // onboarding still counts as complete.
-        country: 'Cameroon',
+        // Derived from the structured columns, the only ones stored.
+        country: 'CM',
         city: 'Douala',
         logoUrl: null,
-        countryCode: null,
-        regionId: null,
-        cityId: null,
+        countryCode: 'CM',
+        regionId: 'littoral',
+        cityId: 'douala',
         cityOther: null,
         district: null,
         postalCode: null,

@@ -642,7 +642,10 @@ for students if a device limit is ever added there (T22).
 ## D14. Locations: controlled country, searchable city, region derived
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** **built (phase 8)**; the legacy free-text `country`/`city` columns
+were dropped on 2026-09-19 (production holds demo data only). Responses keep
+`center.country` (the country code) and `center.city` (the listed city name or
+the town typed in), derived from the structured columns.
 
 ### The rule
 

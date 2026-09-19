@@ -54,8 +54,8 @@ async function makeCenter(name: string, trialSeats = 3) {
   return prisma.center.create({
     data: {
       name,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: { create: { plan: 'TRIAL' } },
       seats: {
         create: { tier: 'START', quantity: trialSeats, unit_price_xaf: 0 },

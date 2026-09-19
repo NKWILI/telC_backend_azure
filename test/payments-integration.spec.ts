@@ -55,8 +55,8 @@ async function makeCenter(over: Record<string, unknown> = {}) {
   const center = await prisma.center.create({
     data: {
       name: `Payments Test ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: { create: { plan: 'TRIAL' } },
       ...over,
     },
@@ -455,8 +455,8 @@ describe('payments against real Postgres', () => {
       const center = await prisma.center.create({
         data: {
           name: `Payments Test Draft No Phone ${Date.now()}`,
-          country: 'Cameroon',
-          city: 'Douala',
+          country_code: 'CM',
+          city_id: 'douala',
           subscription: { create: { plan: 'TRIAL' } },
         },
       });

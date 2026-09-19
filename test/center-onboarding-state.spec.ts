@@ -38,8 +38,9 @@ const managerRow = (
     center: {
       id: 'center-1',
       name: 'Institut Goethe Douala',
-      country: 'CM',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
+      city_other: null,
       logo_url: null,
       ...(centerOver ?? {}),
     },
@@ -83,7 +84,12 @@ describe('onboarding state on the center profile', () => {
 
   it('reports a freshly registered center as incomplete', async () => {
     // Exactly what five-field registration writes: a name and nothing else.
-    given(managerRow({ phone: null, center: { country: null, city: null } }));
+    given(
+      managerRow({
+        phone: null,
+        center: { country_code: null, city_id: null },
+      }),
+    );
 
     const profile: any = await service.getProfile(identity);
 
@@ -93,7 +99,7 @@ describe('onboarding state on the center profile', () => {
 
   describe('each field on its own', () => {
     it('names country when only that is absent', async () => {
-      given(managerRow({ center: { country: null } }));
+      given(managerRow({ center: { country_code: null } }));
 
       const profile: any = await service.getProfile(identity);
 
@@ -104,7 +110,7 @@ describe('onboarding state on the center profile', () => {
     });
 
     it('names city when only that is absent', async () => {
-      given(managerRow({ center: { city: null } }));
+      given(managerRow({ center: { city_id: null } }));
 
       const profile: any = await service.getProfile(identity);
 
@@ -124,10 +130,10 @@ describe('onboarding state on the center profile', () => {
     it.each([
       ['an empty country', ''],
       ['a whitespace country', '   '],
-    ])('treats %s as missing', async (_case, country) => {
+    ])('treats %s as missing', async (_case, country_code) => {
       // A blank string is not an answer. Without this, a client could satisfy
       // the checklist by submitting spaces.
-      given(managerRow({ center: { country } }));
+      given(managerRow({ center: { country_code } }));
 
       const profile: any = await service.getProfile(identity);
 
@@ -146,7 +152,7 @@ describe('onboarding state on the center profile', () => {
   });
 
   it('keeps the order stable, so a checklist does not reshuffle', async () => {
-    given(managerRow({ phone: null, center: { city: null } }));
+    given(managerRow({ phone: null, center: { city_id: null } }));
 
     const profile: any = await service.getProfile(identity);
 
@@ -155,7 +161,12 @@ describe('onboarding state on the center profile', () => {
   });
 
   it('still returns the profile itself alongside the state', async () => {
-    given(managerRow({ phone: null, center: { country: null, city: null } }));
+    given(
+      managerRow({
+        phone: null,
+        center: { country_code: null, city_id: null },
+      }),
+    );
 
     const profile: any = await service.getProfile(identity);
 

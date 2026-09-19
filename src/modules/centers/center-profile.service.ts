@@ -14,8 +14,7 @@ import type {
 import {
   addressRulesFor,
   isLocationRefusal,
-  resolveLocation,
-} from '../locations/location-resolver';
+  resolveLocation, locationLabelOf } from '../locations/location-resolver';
 import {
   deriveOnboardingState,
   suppliedLocationOf,
@@ -348,8 +347,6 @@ export class CenterProfileService {
       center: {
         id: string;
         name: string;
-        country: string | null;
-        city: string | null;
         logo_url: string | null;
       } & StoredLocation;
     },
@@ -372,11 +369,9 @@ export class CenterProfileService {
       center: {
         id: centerUser.center.id,
         name: centerUser.center.name,
-        // The first, free-text pair. Still reported until the columns are
-        // dropped, because rows written before the structured ones hold their
-        // location here and nowhere else.
-        country: centerUser.center.country,
-        city: centerUser.center.city,
+        // Kept for clients that show the location as words; derived from the
+        // structured columns below, which are the only ones stored.
+        ...locationLabelOf(centerUser.center),
         logoUrl: centerUser.center.logo_url,
         // What the settings form prefills from. A read that omitted these
         // would show empty fields over a complete address, and the manager
@@ -478,8 +473,6 @@ export class CenterProfileService {
   private toOnboardingState(centerUser: {
     phone: string | null;
     center: {
-      country: string | null;
-      city: string | null;
       country_code?: string | null;
       city_id?: string | null;
       city_other?: string | null;

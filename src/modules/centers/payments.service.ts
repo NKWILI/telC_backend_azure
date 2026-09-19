@@ -166,8 +166,6 @@ export class PaymentsService {
         phone: true,
         center: {
           select: {
-            country: true,
-            city: true,
             country_code: true,
             city_id: true,
             city_other: true,

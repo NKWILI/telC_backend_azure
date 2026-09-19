@@ -126,7 +126,7 @@ describe('recognising a replay', () => {
       centerUser: {
         findFirst: jest.fn().mockResolvedValue({
           phone: '+237690000000',
-          center: { country: 'Cameroon', city: 'Douala' },
+          center: { country_code: 'CM', city_id: 'douala', city_other: null },
         }),
       },
       centerSeat: { findMany: jest.fn().mockResolvedValue([]) },

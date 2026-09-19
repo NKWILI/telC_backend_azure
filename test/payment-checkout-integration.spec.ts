@@ -90,8 +90,8 @@ async function makeCenter() {
   return prisma.center.create({
     data: {
       name: `Checkout Test ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: { create: { plan: 'TRIAL' } },
     },
   });

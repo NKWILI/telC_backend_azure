@@ -48,8 +48,8 @@ async function makeCenterStudent(tier: 'START' | 'PRO' | 'PREMIUM') {
   const center = await prisma.center.create({
     data: {
       name: `Ai Usage Test ${tier} ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: {
         create: {
           plan: 'PAID',
