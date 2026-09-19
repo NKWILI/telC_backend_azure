@@ -1,4 +1,5 @@
-import { IsNotEmpty, MinLength, IsString, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import { StrongPassword } from '../../../shared/strong-password.decorator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ResetPasswordRequestDto {
@@ -9,9 +10,14 @@ export class ResetPasswordRequestDto {
   @IsString()
   token: string;
 
-  @ApiProperty({ minLength: 8, format: 'password' })
+  @ApiProperty({
+    minLength: 8,
+    format: 'password',
+    description:
+      'At least 8 characters with an uppercase letter, a digit and a special character; at most 72 bytes (T2).',
+  })
   @IsNotEmpty()
-  @MinLength(8)
+  @StrongPassword()
   newPassword: string;
 
   @ApiProperty({

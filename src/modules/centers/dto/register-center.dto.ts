@@ -1,3 +1,4 @@
+import { StrongPassword } from '../../../shared/strong-password.decorator';
 import {
   IsEmail,
   IsNotEmpty,
@@ -9,7 +10,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   MaxUtf8Bytes,
   NormalizeEmail,
-  StrongPassword,
   Trim,
 } from './center-validation.decorators';
 

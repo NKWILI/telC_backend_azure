@@ -190,7 +190,7 @@ describe('AuthController (e2e)', () => {
         firstName: 'Anna',
         lastName: 'Beck',
         email: 'anna@example.com',
-        password: 'password123',
+        password: 'Password123!',
       })
       .expect(429);
 
@@ -206,7 +206,7 @@ describe('AuthController (e2e)', () => {
         firstName: 'John',
         lastName: 'Doe',
         email: 'John.Doe@Example.com',
-        password: 'password123',
+        password: 'Password123!',
       })
       .expect(201)
       .expect((res) => {
@@ -224,7 +224,7 @@ describe('AuthController (e2e)', () => {
         firstName: 'John',
         lastName: 'Doe',
         email: 'john.doe@example.com',
-        password: 'password123',
+        password: 'Password123!',
       })
       .expect(201)
       .expect((res) => {
@@ -239,7 +239,7 @@ describe('AuthController (e2e)', () => {
         firstName: 'John',
         lastName: 'Doe',
         email: 'john.doe@example.com',
-        password: 'password123',
+        password: 'Password123!',
       })
       .expect(201)
       .expect((res) => {
@@ -454,7 +454,7 @@ describe('AuthController (e2e)', () => {
       .post('/api/auth/reset-password')
       .send({
         token: 'reset-token',
-        newPassword: 'newpassword123',
+        newPassword: 'NewPassword123!',
         deviceId: 'device-1',
       })
       .expect(201)
