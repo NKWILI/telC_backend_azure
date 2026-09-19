@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Param,
+  Ip,
   Request,
   Logger,
   NotFoundException,
@@ -11,6 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
+import { GuestBlockGuard } from '../../../shared/guards/guest-block.guard';
 import { StudentSubscriptionGuard } from '../../../shared/guards/student-subscription.guard';
 import { AccessTokenPayload } from '../../../shared/interfaces/token-payload.interface';
 import { RateLimitService } from '../../../shared/services/rate-limit.service';
@@ -65,22 +67,27 @@ export class RoomController {
 
   /**
    * Joining by short code (D32): resolves the code, then the client runs the
-   * usual `GET /rooms/{id}` and `join-room`. Login required, so guessing can
-   * be counted per student; joining by link stays open for guests.
+   * usual `GET /rooms/{id}` and `join-room`.
+   *
+   * A real student only. A guest token is free and anonymous, with a fresh id
+   * each time, so a per-student limit would be a per-token limit and could be
+   * reset at will; guests keep joining by link. The IP bucket backs it up
+   * against accounts made in bulk.
    */
   @Get('code/:code')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, GuestBlockGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Find a live room by its 6-character short code',
     description:
-      'Case-insensitive, trimmed. 404 when no live room has this code. 20 lookups per 10 minutes per student.',
+      'Student login; guest tokens are refused (403), guests join by link. Case-insensitive, trimmed. 404 when no live room has this code. 20 lookups per 10 minutes per student, 100 per IP.',
   })
   async getRoomByCode(
     @Request() req: { student: AccessTokenPayload },
+    @Ip() ip: string,
     @Param('code') code: string,
   ): Promise<RoomInfoResponseDto> {
-    await this.rateLimit.checkRoomCodeLookupLimit(req.student.studentId);
+    await this.rateLimit.checkRoomCodeLookupLimit(req.student.studentId, ip);
     const room = this.roomService.getRoomByCode(code);
     if (!room) {
       throw new NotFoundException('Room not found');

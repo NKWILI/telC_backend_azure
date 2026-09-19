@@ -350,14 +350,26 @@ export class RateLimitService {
 
   /**
    * Caps guessing at speaking-room short codes (D32). A code is guessable by
-   * design and hides only a practice room, but guesses should not be free. An
-   * honest student types one code, maybe twice.
+   * design and hides only a practice room, but guesses should not be free.
+   *
+   * Two buckets, as for activation codes. Per student is the tight one: an
+   * honest student types one code, maybe twice. Per IP is the backstop against
+   * accounts made in bulk, kept loose because a whole class behind one school
+   * router looks codes up in the same few minutes.
    */
-  checkRoomCodeLookupLimit(studentId: string): void | Promise<void> {
+  checkRoomCodeLookupLimit(
+    studentId: string,
+    ip: string,
+  ): void | Promise<void> {
     return this.enforceDistributed([
       {
         key: `ratelimit:speaking:room-code:student:${studentId}`,
         max: 20,
+        ttlSeconds: 10 * 60,
+      },
+      {
+        key: `ratelimit:speaking:room-code:ip:${ip}`,
+        max: 100,
         ttlSeconds: 10 * 60,
       },
     ]);

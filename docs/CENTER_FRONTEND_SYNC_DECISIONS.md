@@ -1433,9 +1433,11 @@ this — the center sees it too, so it is decided with B10.
 **Status:** built in the backend (phase 15, 2026-09-19); the Flutter app still uses its mock store
 
 **As built:** `POST /api/speaking/rooms` returns `shortCode` beside `roomId`
-and `hostToken`. `GET /api/speaking/rooms/code/{code}` (student login,
-case-insensitive, trimmed) returns the same room info as `GET /rooms/{id}`, or
-404. 20 lookups per 10 minutes per student. Rooms live in the server's memory,
+and `hostToken`. `GET /api/speaking/rooms/code/{code}` (student login;
+guest tokens are refused with 403, since a free anonymous token would reset
+the per-student limit at will; case-insensitive, trimmed) returns the same
+room info as `GET /rooms/{id}`, or 404. 20 lookups per 10 minutes per
+student, 100 per IP. Rooms live in the server's memory,
 as before, so the code is held with the room and freed when it ends or
 expires; a code is only guaranteed unique among live rooms. Guests without an
 account still join by link.
