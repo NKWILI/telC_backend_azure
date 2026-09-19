@@ -474,8 +474,13 @@ export class AuthService {
 
           if (evicted.length > 0) {
             evictedSessionIds = evicted.map(({ id }) => id);
-            await tx.deviceSession.deleteMany({
-              where: { id: { in: evictedSessionIds } },
+            // Revoked, not deleted: the old device's refresh then finds its
+            // session and answers SESSION_REVOKED, which is how the app knows
+            // to say "you signed in on another device". A deleted row reads
+            // as INVALID_SESSION, indistinguishable from a broken token.
+            await tx.deviceSession.updateMany({
+              where: { id: { in: evictedSessionIds }, revoked_at: null },
+              data: { revoked_at: new Date() },
             });
           }
         }
@@ -505,7 +510,7 @@ export class AuthService {
       });
 
       // Production runs without Valkey: the guard then reads the database,
-      // finds the evicted row gone, and the old device is signed out on its
+      // finds the evicted row revoked, and the old device is signed out on its
       // next request. If Valkey is running, the guard trusts it and skips the
       // database — so the evicted sessions are marked there too, and the rule
       // holds either way. Best effort: a failed mark is the cache's problem,

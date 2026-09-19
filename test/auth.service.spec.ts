@@ -161,9 +161,14 @@ describe('AuthService', () => {
         take: 1,
         select: { id: true },
       });
-      expect(txMock.deviceSession.deleteMany).toHaveBeenCalledWith({
-        where: { id: { in: ['least-recently-used'] } },
+      // Revoked, not deleted: the old device's refresh must find its session
+      // and answer SESSION_REVOKED, so the app can say "you signed in on
+      // another device" rather than a generic failure.
+      expect(txMock.deviceSession.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['least-recently-used'] }, revoked_at: null },
+        data: { revoked_at: expect.any(Date) },
       });
+      expect(txMock.deviceSession.deleteMany).not.toHaveBeenCalled();
       expect(result).toEqual(session);
     });
 
@@ -178,7 +183,7 @@ describe('AuthService', () => {
     });
 
     // Production runs without Valkey, so the guard reads the database and the
-    // deleted row already signs the old device out on its next request. If
+    // revoked row already signs the old device out on its next request. If
     // Valkey comes back, the guard trusts it and skips the database — so the
     // evicted session is marked there too, and the rule holds either way.
     it('marks the signed-out session revoked in Valkey, when Valkey is there', async () => {
@@ -220,8 +225,9 @@ describe('AuthService', () => {
       expect(txMock.deviceSession.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ take: 3 }),
       );
-      expect(txMock.deviceSession.deleteMany).toHaveBeenCalledWith({
-        where: { id: { in: ['s-1', 's-2', 's-3'] } },
+      expect(txMock.deviceSession.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['s-1', 's-2', 's-3'] }, revoked_at: null },
+        data: { revoked_at: expect.any(Date) },
       });
     });
 
