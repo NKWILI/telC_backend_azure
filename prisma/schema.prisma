@@ -91,7 +91,6 @@ model Student {
   center          Center?           @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
-  exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
   oauth_accounts  OAuthAccount[]
   activities      StudentActivity[]
@@ -497,77 +496,6 @@ model CenterDeviceSession {
   @@unique([center_user_id, device_id])
   @@index([center_user_id])
   @@map("center_device_sessions")
-}
-
-model ExamSession {
-  session_id                 String    @id @default(uuid())
-  user_id                    String?
-  student_id                 String?
-  teil_number                Int
-  status                     String
-  use_timer                  Boolean?  @default(true)
-  time_limit_seconds         Int?
-  server_start_time          DateTime?
-  pause_timestamp            DateTime?
-  elapsed_time               Int?      @default(0)
-  context_from_previous_teil Boolean?  @default(false)
-  created_at                 DateTime? @default(now())
-  updated_at                 DateTime? @default(now())
-  completed_at               DateTime?
-
-  student          Student?         @relation(fields: [student_id], references: [id])
-  teil_transcripts TeilTranscript[]
-  teil_evaluations TeilEvaluation[]
-  gemini_sessions  GeminiSession[]
-
-  @@map("exam_sessions")
-}
-
-model GeminiSession {
-  id                String    @id @default(uuid())
-  exam_session_id   String
-  gemini_session_id String?
-  status            String?
-  created_at        DateTime? @default(now())
-  closed_at         DateTime?
-  error_message     String?
-
-  exam_session ExamSession @relation(fields: [exam_session_id], references: [session_id])
-
-  @@map("gemini_sessions")
-}
-
-model TeilTranscript {
-  id                   String    @id @default(uuid())
-  session_id           String
-  transcript_text      String
-  conversation_history Json?
-  word_count           Int?      @default(0)
-  interrupted_at       DateTime?
-  created_at           DateTime? @default(now())
-
-  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("teil_transcripts")
-}
-
-model TeilEvaluation {
-  id                      String    @id @default(uuid())
-  session_id              String
-  pronunciation_score     Float?
-  fluency_score           Float?
-  grammar_score           Float?
-  vocabulary_score        Float?
-  overall_score           Float?
-  corrections_json        Json?
-  strengths               String?
-  areas_for_improvement   String?
-  evaluation_requested_at DateTime?
-  created_at              DateTime? @default(now())
-
-  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("teil_evaluations")
 }
 
 model WritingAttempt {

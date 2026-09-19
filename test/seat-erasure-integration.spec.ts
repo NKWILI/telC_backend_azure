@@ -146,13 +146,23 @@ describe('seat data erasure against real Postgres', () => {
   it('erases the hidden work only after 7 days, and nothing else', async () => {
     const { student, code, manager, before } = await studentOnSeat();
     await codes.reset(manager, code.id);
+    // Judged on this student's erasure: other suites' resets share the
+    // database, so the number purged overall says nothing here.
+    const erasedAt = async () =>
+      (
+        await prisma.dataErasure.findFirstOrThrow({
+          where: { student_id: student.id },
+        })
+      ).erased_at;
 
-    expect(await erasure.purgeDue(daysFromNow(6))).toBe(0);
+    await erasure.purgeDue(daysFromNow(6));
+    expect(await erasedAt()).toBeNull();
     expect(
       await prisma.studentActivity.count({ where: { student_id: student.id } }),
     ).toBe(3);
 
-    expect(await erasure.purgeDue(daysFromNow(8))).toBe(1);
+    await erasure.purgeDue(daysFromNow(8));
+    expect(await erasedAt()).not.toBeNull();
     const left = await prisma.lesenAttempt.findMany({
       where: { student_id: student.id },
       select: { attempt_id: true },
@@ -165,7 +175,10 @@ describe('seat data erasure against real Postgres', () => {
     expect(await prisma.student.count({ where: { id: student.id } })).toBe(1);
 
     // Running again changes nothing.
-    expect(await erasure.purgeDue(daysFromNow(9))).toBe(0);
+    await erasure.purgeDue(daysFromNow(9));
+    expect(
+      await prisma.studentActivity.count({ where: { student_id: student.id } }),
+    ).toBe(1);
   });
 
   it('lets support restore a mistaken reset before the erasure, not after', async () => {
@@ -179,7 +192,7 @@ describe('seat data erasure against real Postgres', () => {
 
     expect(await visible(student.id)).toBe(3);
     // A restored erasure is never purged.
-    expect(await erasure.purgeDue(daysFromNow(8))).toBe(0);
+    await erasure.purgeDue(daysFromNow(8));
     expect(await visible(student.id)).toBe(3);
 
     // And one already erased cannot be restored.
