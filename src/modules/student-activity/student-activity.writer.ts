@@ -14,6 +14,11 @@ export interface ActivityInput {
   /** The detailed row this summarises, in the table `skill` names. */
   attemptId: string;
   completedAt?: Date;
+  /**
+   * The erasure hiding the attempt, when it was hidden before its summary was
+   * written — a writing correction finishing after a reset (D39).
+   */
+  erasureId?: string | null;
 }
 
 /**
@@ -65,6 +70,7 @@ export async function recordActivity(
       duration_seconds: input.durationSeconds ?? null,
       modelltest_id: input.modelltestId ?? null,
       attempt_id: input.attemptId,
+      erasure_id: input.erasureId ?? null,
       ...(input.completedAt ? { created_at: input.completedAt } : {}),
     },
   });

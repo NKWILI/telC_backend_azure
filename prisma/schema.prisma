@@ -588,6 +588,10 @@ model WritingAttempt {
   created_at        DateTime  @default(now())
   completed_at      DateTime?
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
+  @@index([erasure_id])
   @@map("writing_attempts")
 }
 
@@ -612,7 +616,11 @@ model ListeningAttempt {
   listening_exercise_id String?            @db.Uuid
   listening_exercise    ListeningExercise? @relation(fields: [listening_exercise_id], references: [id], onDelete: Restrict)
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([listening_exercise_id])
+  @@index([erasure_id])
   @@map("listening_attempts")
 }
 
@@ -642,7 +650,11 @@ model SprachbausteineAttempt {
   created_at       DateTime  @default(now())
   completed_at     DateTime?
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_id])
+  @@index([erasure_id])
   @@map("sprachbausteine_attempts")
 }
 
@@ -1113,9 +1125,13 @@ model StudentActivity {
 
   student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@unique([skill, attempt_id])
   @@index([student_id, created_at])
   @@index([student_id, skill, created_at])
+  @@index([erasure_id])
   @@map("student_activities")
 }
 
@@ -1131,7 +1147,11 @@ model LesenAttempt {
   duration_seconds Int?
   created_at       DateTime @default(now())
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_id])
+  @@index([erasure_id])
   @@map("lesen_attempts")
 }
 
@@ -1149,6 +1169,32 @@ model SpeakingAttempt {
   duration_seconds Int?
   created_at       DateTime @default(now())
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_number])
+  @@index([erasure_id])
   @@map("speaking_attempts")
+}
+
+/// A reset took this seat from a student; their learning data on it is
+/// hidden now and erased once `erase_after` passes (D39). Until then support
+/// can restore it. The rows it covers carry its id in `erasure_id`.
+model DataErasure {
+  id             String    @id @default(uuid())
+  student_id     String
+  center_id      String
+  code_id        String
+  center_user_id String?
+  /// The window of the student's time on the seat: what is erased.
+  since          DateTime
+  until          DateTime
+  created_at     DateTime  @default(now())
+  erase_after    DateTime
+  erased_at      DateTime?
+  restored_at    DateTime?
+
+  @@index([erase_after])
+  @@index([student_id])
+  @@map("data_erasures")
 }

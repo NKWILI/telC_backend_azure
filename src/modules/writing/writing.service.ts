@@ -107,6 +107,7 @@ export class WritingService {
       const rows = await this.prisma.writingAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(exerciseId ? { exercise_id: exerciseId } : {}),
         },
         orderBy: { created_at: 'desc' },

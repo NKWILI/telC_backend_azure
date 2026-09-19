@@ -313,6 +313,7 @@ export class LesenService {
       const rows = await this.prisma.lesenAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(teilId ? { teil_id: teilId } : {}),
         },
         orderBy: { created_at: 'desc' },

@@ -200,6 +200,7 @@ export class ProgressService {
                ) AS recent
         FROM student_activities
         WHERE student_id = ANY(${studentIds}::text[])
+          AND erasure_id IS NULL
           AND created_at <= ${asOf}
       )
       SELECT student_id,

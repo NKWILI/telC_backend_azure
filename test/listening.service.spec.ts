@@ -158,7 +158,11 @@ describe('ListeningService', () => {
     });
     expect(prisma.listeningAttempt.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { student_id: 'student-1', exercise_id: '2' },
+        where: {
+          student_id: 'student-1',
+          erasure_id: null,
+          exercise_id: '2',
+        },
       }),
     );
   });

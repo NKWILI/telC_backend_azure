@@ -4,7 +4,17 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { CenterActivationCodesService } from '../src/modules/centers/center-activation-codes.service';
+import {
+  CenterActivationCodesService,
+  seatWindowOf,
+} from '../src/modules/centers/center-activation-codes.service';
+import { hideSeatData } from '../src/modules/student-activity/seat-erasure';
+
+// The hiding itself is proven on Postgres (seat-erasure-integration.spec.ts);
+// here, only that a reset asks for it, for the right student and window.
+jest.mock('../src/modules/student-activity/seat-erasure', () => ({
+  hideSeatData: jest.fn().mockResolvedValue('erasure-1'),
+}));
 
 /**
  * The Users page: what a center holds, and the two things it may do to a code.
@@ -304,6 +314,23 @@ describe('CenterActivationCodesService', () => {
       expect(code.status).toBe('activated');
     });
 
+    it("hides the student's work on the seat, from connecting until now (D39)", async () => {
+      await service.reset(identity, 'code-1');
+
+      expect(hideSeatData).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          studentId: 'student-1',
+          centerId: 'center-1',
+          codeId: 'code-1',
+          centerUserId: 'owner-1',
+          since: new Date('2027-01-02T00:00:00.000Z'),
+          until: expect.any(Date),
+        },
+        expect.any(Date),
+      );
+    });
+
     it('cuts the connected student off, keeping their tier', async () => {
       await service.reset(identity, 'code-1');
 
@@ -413,5 +440,61 @@ describe('CenterActivationCodesService', () => {
 
       await expect(service.list(identity, {})).resolves.toHaveLength(1);
     });
+  });
+});
+
+describe('seatWindowOf', () => {
+  const since = new Date('2027-01-02T00:00:00Z');
+  const now = new Date('2027-02-01T00:00:00Z');
+  const left = new Date('2027-01-20T00:00:00Z');
+  const event = (
+    to_status: any,
+    created_at: Date,
+    student_id = 'student-1',
+  ) => ({
+    to_status,
+    created_at,
+    student_id,
+  });
+
+  it('runs to now for a student still on the seat', () => {
+    expect(
+      seatWindowOf(
+        { status: 'CONNECTED', student_id: 'student-1', connected_at: since },
+        [],
+        now,
+      ),
+    ).toEqual({ studentId: 'student-1', since, until: now });
+  });
+
+  it('ends when a deactivated seat was taken from them, sparing later work elsewhere', () => {
+    expect(
+      seatWindowOf(
+        { status: 'DEACTIVATED', student_id: 'student-1', connected_at: since },
+        [
+          event('CONNECTED', since),
+          event('DEACTIVATED', left),
+          event('DEACTIVATED', left, 'someone-else'),
+        ],
+        now,
+      ),
+    ).toEqual({ studentId: 'student-1', since, until: left });
+  });
+
+  it('is nothing for a seat nobody held, or whose end was never logged', () => {
+    expect(
+      seatWindowOf(
+        { status: 'ACTIVATED', student_id: null, connected_at: null },
+        [],
+        now,
+      ),
+    ).toBeNull();
+    expect(
+      seatWindowOf(
+        { status: 'DEACTIVATED', student_id: 'student-1', connected_at: since },
+        [],
+        now,
+      ),
+    ).toBeNull();
   });
 });

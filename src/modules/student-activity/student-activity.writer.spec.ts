@@ -36,6 +36,7 @@ describe('recordActivity', () => {
         duration_seconds: 300,
         modelltest_id: 'mt-1',
         attempt_id: 'attempt-1',
+        erasure_id: null,
       },
     });
   });

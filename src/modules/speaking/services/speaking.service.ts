@@ -76,6 +76,7 @@ export class SpeakingService {
       const rows = await this.prisma.speakingAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3
             ? { teil_number: teilNumber }
             : {}),
