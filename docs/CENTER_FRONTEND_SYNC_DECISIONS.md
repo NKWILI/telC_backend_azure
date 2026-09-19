@@ -1118,9 +1118,9 @@ its behaviour, with the password rule aligned to D10.
 stored rows (Valkey is not deployed), and the acknowledgement goes to the
 **account** email, not the typed one, so the form cannot send mail to any
 address a caller enters. The team email has reply-to = the typed address and
-also shows the account email. Everything typed is HTML-escaped. With
-`SUPPORT_EMAIL` unset the message is stored, an error is logged, and the route
-still answers `201`. **Set `SUPPORT_EMAIL` in DigitalOcean before release.**
+also shows the account email. Everything typed is HTML-escaped. The
+team inbox is **ngeukeualain@gmail.com**, written in the code as the default;
+`SUPPORT_EMAIL` overrides it if ever set.
 
 `POST /api/support/contact`, body `{ "name", "email", "message" }`
 (message at least 10 characters after trimming).
