@@ -16,6 +16,12 @@ Do the tasks in order: each one is used by the ones after it.
 
 ## 0. Rules that apply to every task
 
+**Exact shapes: Swagger.** The backend serves its API reference at
+`/api-docs` (JSON at `/api-docs-json`). This prompt says what each page must
+do; for the exact request and response fields, check Swagger on the backend
+you are running against. If the two disagree, Swagger is right — tell the
+backend team.
+
 **Error shape.** Every center route answers an error as
 
 ```json
@@ -28,7 +34,11 @@ Do the tasks in order: each one is used by the ones after it.
   with the field name (`"password PASSWORD_NEEDS_DIGIT"`). Map them onto the
   form fields.
 - Some refusals carry extra fields: keep them, they are what makes the refusal
-  actionable (e.g. `missing`, `resetsAvailableAt`, `tier`).
+  actionable (e.g. `missing`, `field`, `resetsAvailableAt`, `tier`,
+  `subscriptionStatus`).
+- A **503** (`SUBSCRIPTION_CHECK_UNAVAILABLE`,
+  `CENTER_SESSION_VERIFICATION_UNAVAILABLE`) means the backend could not check
+  right now: say "try again in a moment". It never means signed out.
 
 **Never compute business rules in the dashboard.** Access, completeness,
 readiness, seat counts and reset allowances all come from the API. If the page
@@ -66,21 +76,49 @@ submitting. The backend refuses with `VALIDATION_ERROR` and one of
 Never check it at login. The register page today asks ≥6 + complexity and the
 settings page ≥8: both move to this rule.
 
-## 3. Tokens: refresh and real logout (D10)
+## 3. Signing in, tokens and logout (D10, D13)
 
-- Login (`POST /api/center-auth/login`, body `{ email, password, deviceId,
-  deviceName? }`) returns `accessToken`, `refreshToken`, `centerUser`,
-  `center`. `deviceId` is a stable id for this browser: generate it once and
-  keep it.
-- On a 401 with `INVALID_CENTER_ACCESS_TOKEN`, call
-  `POST /api/center-auth/refresh` with `{ refreshToken }` **once**, store the new
-  pair (the refresh token rotates: always replace it), and retry the request.
-  If the refresh answers `INVALID_CENTER_REFRESH_TOKEN`, clear the session and
-  go to login. Make concurrent requests share one refresh.
-- Logout calls `POST /api/center-auth/logout` with the refresh token, then
-  clears local state. Today logout only clears local state.
-- A center user can be signed in on up to 3 devices; a 4th login signs out the
-  least recently used one (D13), which then gets the refresh failure above.
+**Register** (task 1) always answers `{ "message": "verification email sent" }`,
+also for an address that already has an account. Say "check your inbox"; never
+suggest whether the address was known.
+
+**Email verification.** The email links to the website:
+`/verify-email?token=…&type=center`. On that page, for `type=center`, call
+`POST /api/center-auth/verify-email` with `{ token, deviceId, deviceName? }`:
+it verifies **and signs in**, answering like login. (`verify-email-public`
+with `{ token }` only verifies, without a session.) Refusals:
+`VERIFICATION_TOKEN_INVALID`, `VERIFICATION_TOKEN_EXPIRED` — offer to send a
+new email by registering again.
+
+**Login** — `POST /api/center-auth/login` with `{ email, password, deviceId,
+deviceName? }` returns `accessToken`, `refreshToken`, `centerUser`, `center`.
+`deviceId` is a stable id for this browser: generate it once and keep it.
+- `INVALID_CREDENTIALS` (401): the same answer for an unknown email and a
+  wrong password. Say "email or password is incorrect".
+- `EMAIL_NOT_VERIFIED` (403): only after a correct password. Say "verify your
+  email first".
+
+**Forgot password** — `POST /api/center-auth/forgot-password` with `{ email }`
+always answers the same way; the email carries a code valid 10 minutes. Then
+`POST /api/center-auth/reset-password` with `{ email, code, newPassword,
+deviceId, deviceName? }` sets the password (task 2 rule) **and signs in**,
+answering like login; every other device is signed out. Refusals:
+`RESET_CODE_INVALID`, `RESET_CODE_EXPIRED`.
+
+**Tokens.**
+- On a 401 `INVALID_CENTER_ACCESS_TOKEN`, call `POST /api/center-auth/refresh`
+  with `{ refreshToken }` **once**, store the new pair (the refresh token
+  rotates: always replace it), and retry the request. Make concurrent requests
+  share one refresh. If the refresh answers `INVALID_CENTER_REFRESH_TOKEN`,
+  clear the session and go to login.
+- On a 401 `CENTER_SESSION_REVOKED`, **do not refresh**: this session was ended
+  on purpose — a 4th device signed in (a center user may be signed in on 3),
+  the password was changed or reset elsewhere, or it was logged out elsewhere.
+  Clear the session and go to login with *"You were signed out on this
+  device."*
+
+**Logout** — `POST /api/center-auth/logout` with `{ refreshToken }`, then clear
+local state. Today logout only clears local state.
 
 ## 4. The account: `GET /api/centers/me` (D2, D11, D14)
 
@@ -111,8 +149,14 @@ Replace every fake-mode value the pages read (localStorage) with this.
 
 - `PATCH /api/centers/me` — the school: `name`, `countryCode`, `cityId` **or**
   `cityOther`, `district`, `postalCode`, `street`, `houseNumber`, `logoUrl`.
+  `logoUrl` is an **https URL to a logo the school already hosts**; there is no
+  upload yet (D22), so do not build an upload button.
 - `PATCH /api/centers/me/manager` — the manager: `firstName`, `lastName`,
-  `phone`.
+  `phone`, and where the manager is: `countryCode`, `cityId` **or** `cityOther`
+  (no street address: nothing is posted to a manager).
+- Both return the **whole updated profile** (same shape as `GET
+  /api/centers/me`): use it, no need to re-read. Sending no field at all is
+  refused with `NO_PROFILE_FIELDS_SUPPLIED`.
 - `GET /api/locations` — countries, their regions and cities, and each
   country's address rules (which of district / postal code / street / house
   number it requires). Build the location fields from it: a country select,
@@ -120,18 +164,24 @@ Replace every fake-mode value the pages read (localStorage) with this.
   in `cityOther` (never both `cityId` and `cityOther`). The region is derived
   by the backend; do not send it. Show only the address fields the country
   requires.
-- Location refusals come back as `VALIDATION_ERROR` naming the field
-  (`UNKNOWN_COUNTRY`, `UNKNOWN_CITY`, `CITY_REQUIRED`, `CITY_AMBIGUOUS`,
-  `CITY_TOO_LONG`, missing required address field).
+- Location refusals are **not** `VALIDATION_ERROR`. `error` is the refusal
+  itself — `UNKNOWN_COUNTRY`, `UNKNOWN_CITY`, `CITY_REQUIRED`,
+  `CITY_AMBIGUOUS`, `CITY_TOO_LONG` — with `field` naming the input to mark
+  (`countryCode`, `cityId` or `cityOther`). A required address field left
+  empty answers `ADDRESS_INCOMPLETE` with `missing`: the fields to mark
+  (`district`, `postalCode`, `street`, `houseNumber`). Shape errors (too long,
+  wrong type) are still `VALIDATION_ERROR`.
 - `GET /api/plans` — plan prices, seat minimums and quotas. The dashboard keeps
   only plan names and descriptions (translations); every number comes from
   here (D15). Plan ids are `start`, `pro`, `premium`.
 
 ## 6. Settings: change password (D23)
 
-`POST /api/center-auth/change-password` with `{ currentPassword, newPassword }`.
-The new password follows task 2. Other devices are signed out; this one stays
-signed in.
+`POST /api/center-auth/change-password` with `{ currentPassword, newPassword }`
+answers `{ success: true }`. The new password follows task 2. Other devices are
+signed out (they get `CENTER_SESSION_REVOKED`, task 3); this one stays signed
+in. Refusals: `WRONG_CURRENT_PASSWORD`, `PASSWORD_UNCHANGED` (the new password
+is the current one).
 
 ## 7. Trial (D3)
 
@@ -167,8 +217,10 @@ Seats **are** codes: each seat a center holds is one code a student redeems.
   - `CODE_RESET_LIMIT_REACHED` (409) carries `resetsAvailableAt`: show it.
   - `CODE_CHANGED` (409): the code changed meanwhile — reload the list.
 - **Remove "activate"**: the route no longer exists. Reset replaces it.
-- Both actions are refused with `ACCOUNT_NOT_FINALIZED` or
-  `SUBSCRIPTION_INACTIVE` when the account cannot act: show why.
+- Both actions are refused when the account cannot act:
+  `ACCOUNT_NOT_FINALIZED` (403: no trial started and nothing paid yet — send
+  them to finish onboarding) or `SUBSCRIPTION_INACTIVE` (403, with
+  `subscriptionStatus`: e.g. `BLOCKED` "your subscription has lapsed").
 - There is no "create code" and no "delete code": codes come from the trial and
   from payments.
 
@@ -235,9 +287,11 @@ Remove the fake values (`fake/students.ts`).
 ## How to check your work
 
 With `NEXT_PUBLIC_*` pointing at a local backend on `dev` and fake mode off:
-register → verify email → log in → complete onboarding → start the trial →
+register → verify email (lands signed in) → log out → log in with a wrong
+password, then the right one → forgot password → reset → complete onboarding → start the trial →
 see the one code → (in the Flutter app, a student redeems it) → the student
 appears on the Users page and the Students page with "not enough exercises
 yet" → reset the code with the confirmation → the student disappears and the
 new code value shows. Also: let the access token expire and see the page
-recover without a login.
+recover without a login; sign in on a 4th browser and see the first one sent
+to login with "You were signed out on this device".

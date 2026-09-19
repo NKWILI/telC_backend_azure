@@ -18,16 +18,25 @@ Do the tasks in order: each one is used by the ones after it.
 
 ## 0. Rules that apply to every task
 
-**Error shape.** Student routes answer an error as
+**Exact shapes: Swagger.** The backend serves its API reference at
+`/api-docs` (JSON at `/api-docs-json`). This prompt says what each screen must
+do; for the exact request and response fields, check Swagger on the backend
+you are running against. If the two disagree, Swagger is right — tell the
+backend team.
 
-```json
-{ "statusCode": 403, "message": "CODE_IN_CAPITALS", "error": "Forbidden", "...extra": "fields" }
-```
+**Error shapes.** Student routes answer errors in two forms:
 
-- Branch on `message` (the code), never on the human text. Validation errors
-  carry `message` as an **array** of strings starting with the field name.
-- Extra fields (`reason`, `subscriptionStatus`…) are part of the answer: keep
-  them.
+- **With a `messageKey`** (the older module errors, and the guest block):
+  `{ "statusCode", "error", "message": "Human text", "messageKey":
+  "listeningStaleRevision" }`. Branch on `messageKey`.
+- **Without one** (everything added for the school model): the code is in
+  `message` — `{ "message": "ACTIVATION_REQUIRED", "reason": …,
+  "subscriptionStatus": … }`. `statusCode` and `error` may be absent. Branch on
+  `message`.
+- So: use `messageKey` when present, otherwise `message`. Never branch on human
+  text. Validation errors carry `message` as an **array** of strings starting
+  with the field name. Extra fields (`reason`, `subscriptionStatus`…) are part
+  of the answer: keep them.
 
 **Never compute business rules in the app.** Access, progress, readiness and
 history come from the API. The device keeps a local copy only as a cache for
@@ -46,7 +55,9 @@ when the network is down.
 - **Level (D38):** register (`POST /api/auth/register`) and profile
   (`PATCH /api/auth/profile`) accept an optional `level`: `A1 | A2 | B1 | B2`.
   Ask it at sign-up ("What is your German level today?"), let the student
-  change it in the profile. Their school can also correct it.
+  change it in the profile. Their school can also correct it. Read it back from
+  `GET /api/progress/me` (task 6). The profile update, as before, answers with a
+  **new token pair**: store it.
 - **Tokens:** on a 401 `INVALID_ACCESS_TOKEN`, call `POST /api/auth/refresh`
   with `{ refreshToken }` **once**, store the new pair (the refresh token
   rotates: always replace it) and retry. Concurrent requests share one refresh.
@@ -66,8 +77,8 @@ A new screen, reachable after login and from every "access required" message:
 one field for the code (`LQ-XXXX-XXXX`; accept lowercase and missing dashes,
 the backend normalises), and a button.
 
-`POST /api/auth/redeem-code` with `{ code }` (a real account; a guest cannot
-redeem). Success `200`: `{ planId, centerName, expiresAt }` → *"You joined
+`POST /api/auth/redeem-code` with `{ code }` (a real account; a guest gets
+403 `messageKey: guestNotAllowed` — offer to create an account). Success `200`: `{ planId, centerName, expiresAt }` → *"You joined
 {centerName}"* and go to the home screen.
 
 | `message` | What to say |
@@ -100,20 +111,23 @@ An unknown `reason` falls back to the `NO_CODE` handling.
 
 Turn remote submit **on for every module** (today `useRemoteSubmit = false` for
 Lesen and Sprachbausteine, and Hören and Sprechen keep results on the device).
-Each submit now accepts two optional fields:
+Each submit now accepts optional fields:
 
 - `attemptId` — a UUID the app generates **once per attempt**, before sending.
   Sending the same attempt again with the same id stores it once and returns
   the first result. **Never reuse an id for a different attempt.** 409
   `ATTEMPT_ID_TAKEN` means the id belongs to someone else: generate a new one.
-- `durationSeconds` — time spent on the attempt.
+  Accepted by every submit, and by `evaluate`.
+- `durationSeconds` — time spent on the attempt. Accepted by Hören, Lesen,
+  Sprachbausteine and `evaluate` — **not by Schreiben**: its submit refuses
+  unknown fields, so sending it there is a 400.
 
 Routes and what they return:
 
 | Module | Submit | Response |
 |---|---|---|
 | Hören | `POST /api/listening/submit` | `{ attemptId, score, answerKey }` |
-| Lesen | `POST /api/reading/submit` | `{ attemptId, score }` |
+| Lesen | `POST /api/reading/submit` | `{ attemptId, score }` (a guest gets `{ score }` only: nothing is stored) |
 | Sprachbausteine | `POST /api/sprachbausteine/submit` | `{ attemptId, score }` |
 | Schreiben | `POST /api/writing/submit` | `{ attemptId, status, message }` — scored later |
 | Sprechen | `POST /api/speaking/evaluate` | the evaluation, as today |
@@ -127,9 +141,15 @@ Routes and what they return:
 
 ## 5. History from the server (D29)
 
-For every module, `GET /api/{module}/sessions?teilNumber=` and
-`GET /api/{module}/teils` (modules: `listening`, `reading`, `sprachbausteine`,
-`writing` — sessions only, `speaking`). Lesen's two routes are new.
+| Module | History | Teils |
+|---|---|---|
+| Hören | `GET /api/listening/sessions?teilNumber=` | `GET /api/listening/teils?modelltest=` |
+| Lesen (new) | `GET /api/reading/sessions?teilNumber=` | `GET /api/reading/teils` |
+| Sprachbausteine | `GET /api/sprachbausteine/sessions?teilNumber=` | `GET /api/sprachbausteine/teils` |
+| Schreiben | `GET /api/writing/sessions?exerciseId=` | — |
+| Sprechen | `GET /api/speaking/sessions?teilNumber=&limit=` | `GET /api/speaking/teils?modelltest=` |
+
+All query parameters are optional.
 
 - Every `/sessions` item keeps the fields it had and adds: `attemptId`,
   `skill`, `teil`, `score`, `maxScore` (100), `status` (`completed` or
@@ -173,8 +193,8 @@ the student's own history.
   not matter) returns the room info with `roomId`; then continue exactly as
   joining by id (`GET /api/speaking/rooms/{roomId}`, then the `join-room`
   socket event). 404 = no live room with this code.
-- Requires a real account: a guest gets 403 and joins **by link** instead.
-  429 after 20 tries in 10 minutes.
+- Requires a real account: a guest gets 403 `messageKey: guestNotAllowed` and
+  joins **by link** instead. 429 after 20 tries in 10 minutes.
 - **Remove** the short-code branch in `speaking_peer_repository_impl.dart` and
   `SpeakingPeerSessionMockStore` (`speaking_peer_session_mock_store.dart`).
   Keep `SpeakingPeerSocketClientMock` for tests. Leaving a room uses the
