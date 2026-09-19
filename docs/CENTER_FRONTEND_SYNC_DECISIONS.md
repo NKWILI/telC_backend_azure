@@ -1430,7 +1430,15 @@ this — the center sees it too, so it is decided with B10.
 ## D32. Speaking rooms get a real short code
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** built in the backend (phase 15, 2026-09-19); the Flutter app still uses its mock store
+
+**As built:** `POST /api/speaking/rooms` returns `shortCode` beside `roomId`
+and `hostToken`. `GET /api/speaking/rooms/code/{code}` (student login,
+case-insensitive, trimmed) returns the same room info as `GET /rooms/{id}`, or
+404. 20 lookups per 10 minutes per student. Rooms live in the server's memory,
+as before, so the code is held with the room and freed when it ends or
+expires; a code is only guaranteed unique among live rooms. Guests without an
+account still join by link.
 
 ### The problem
 
