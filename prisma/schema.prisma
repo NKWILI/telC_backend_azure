@@ -91,28 +91,12 @@ model Student {
   center          Center?           @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
-  lesen_sessions  LesenSession[]
-  oauth_accounts  OAuthAccount[]
   activities      StudentActivity[]
 
   @@index([center_id])
   @@index([activation_key_hash])
   @@index([email])
   @@map("students")
-}
-
-model OAuthAccount {
-  id          String   @id @default(uuid())
-  student_id  String
-  provider    String
-  provider_id String
-  created_at  DateTime @default(now())
-
-  student Student @relation(fields: [student_id], references: [id])
-
-  @@unique([provider, provider_id])
-  @@index([student_id])
-  @@map("oauth_accounts")
 }
 
 model DeviceSession {
@@ -604,35 +588,6 @@ model LesenQuestion {
   @@map("lesen_questions")
 }
 
-model LesenSession {
-  session_id   String    @id @default(uuid())
-  user_id      String?
-  student_id   String?
-  question_ids String[]
-  status       String
-  started_at   DateTime? @default(now())
-  completed_at DateTime?
-
-  student Student?      @relation(fields: [student_id], references: [id])
-  results LesenResult[]
-
-  @@map("lesen_sessions")
-}
-
-model LesenResult {
-  id              String    @id @default(uuid())
-  session_id      String
-  user_answers    Json
-  score           Float
-  correct_count   Int
-  total_questions Int
-  created_at      DateTime? @default(now())
-
-  session LesenSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("lesen_results")
-}
-
 model LesenTeil2Exercise {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   contentRevision String
@@ -1051,8 +1006,7 @@ model StudentActivity {
   @@map("student_activities")
 }
 
-/// A scored Lesen Teil. Lesen stored nothing before phase 11; the old
-/// LesenSession / LesenResult tables belong to a design nothing uses.
+/// A scored Lesen Teil. Lesen stored nothing before phase 11.
 model LesenAttempt {
   attempt_id       String   @id @default(uuid())
   student_id       String

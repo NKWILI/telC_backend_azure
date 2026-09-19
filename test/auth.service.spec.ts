@@ -33,9 +33,6 @@ describe('AuthService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
-      oAuthAccount: {
-        create: jest.fn(),
-      },
     };
 
     prismaMock = {
@@ -56,9 +53,6 @@ describe('AuthService', () => {
         upsert: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
-      },
-      oAuthAccount: {
-        findFirst: jest.fn(),
       },
     };
 
