@@ -1112,7 +1112,15 @@ its behaviour, with the password rule aligned to D10.
 ## D24. The support contact form
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** built in the backend (phase 14, 2026-09-19)
+
+**As built:** as below, with two choices: the rate limit is counted from the
+stored rows (Valkey is not deployed), and the acknowledgement goes to the
+**account** email, not the typed one, so the form cannot send mail to any
+address a caller enters. The team email has reply-to = the typed address and
+also shows the account email. Everything typed is HTML-escaped. With
+`SUPPORT_EMAIL` unset the message is stored, an error is logged, and the route
+still answers `201`. **Set `SUPPORT_EMAIL` in DigitalOcean before release.**
 
 `POST /api/support/contact`, body `{ "name", "email", "message" }`
 (message at least 10 characters after trimming).
@@ -1800,7 +1808,12 @@ new code is shown to hand out.
 ## D37. Deleting a center account is a request, not a deletion
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B8)
-**Status:** decided, not built
+**Status:** built in the backend (phase 14, 2026-09-19)
+
+**As built:** `POST /api/centers/me/deletion-request` (center login; allowed
+while the subscription is blocked), `201 { id }`. Stored as a
+`SupportRequest` of kind `ACCOUNT_DELETION`, emailed to `SUPPORT_EMAIL`,
+confirmation to the manager. At most 3 per day per center.
 
 The "delete my account" button **deletes nothing**. It sends a request to the
 Lerniqo team, who contact the manager to understand the problem and then
