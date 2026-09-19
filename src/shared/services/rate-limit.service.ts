@@ -22,10 +22,6 @@ export class RateLimitService {
   private readonly verifyEmailPublicWindowSeconds: number;
   private readonly resetPasswordMaxAttempts: number;
   private readonly resetPasswordWindowSeconds: number;
-  private readonly newsletterIpMaxAttempts: number;
-  private readonly newsletterIpWindowSeconds: number;
-  private readonly newsletterEmailMaxAttempts: number;
-  private readonly newsletterEmailWindowSeconds: number;
   private readonly guestSessionMaxAttempts: number;
   private readonly guestSessionWindowSeconds: number;
   private readonly writingGuestSubmitMaxAttempts: number;
@@ -88,26 +84,6 @@ export class RateLimitService {
     );
     this.resetPasswordWindowSeconds = resetPasswordWindowMinutes * 60;
 
-    this.newsletterIpMaxAttempts = parseInt(
-      process.env.RATE_LIMIT_NEWSLETTER_IP_MAX_ATTEMPTS || '5',
-      10,
-    );
-    const newsletterIpWindowMinutes = parseInt(
-      process.env.RATE_LIMIT_NEWSLETTER_IP_WINDOW_MINUTES || '15',
-      10,
-    );
-    this.newsletterIpWindowSeconds = newsletterIpWindowMinutes * 60;
-
-    this.newsletterEmailMaxAttempts = parseInt(
-      process.env.RATE_LIMIT_NEWSLETTER_EMAIL_MAX_ATTEMPTS || '2',
-      10,
-    );
-    const newsletterEmailWindowMinutes = parseInt(
-      process.env.RATE_LIMIT_NEWSLETTER_EMAIL_WINDOW_MINUTES || '15',
-      10,
-    );
-    this.newsletterEmailWindowSeconds = newsletterEmailWindowMinutes * 60;
-
     this.guestSessionMaxAttempts = parseInt(
       process.env.RATE_LIMIT_GUEST_SESSION_MAX_ATTEMPTS || '10',
       10,
@@ -155,7 +131,7 @@ export class RateLimitService {
   /**
    * Read the current counter for a key and throw 429 if it has reached `max`.
    * Returns the current count so the caller can increment it via {@link record}.
-   * Split from `record` so multi-bucket limits (newsletter) can assert ALL
+   * Split from `record` so multi-bucket limits can assert ALL
    * buckets before incrementing ANY — preserving all-or-nothing semantics.
    */
   private assertUnderLimit(cacheKey: string, max: number): number {
@@ -397,33 +373,6 @@ export class RateLimitService {
         key: `ratelimit:auth:reset-password:${key}`,
         max: this.resetPasswordMaxAttempts,
         ttlSeconds: this.resetPasswordWindowSeconds,
-      },
-    ]);
-  }
-
-  /**
-   * Rate limit for POST /api/newsletter/subscribe. Throws 429 when exceeded.
-   * Enforces both per-IP and per-email caps. Per-email defends against
-   * targeted spam from rotating IPs; per-IP defends against bursts.
-   * Both buckets are asserted before either is incremented.
-   */
-  checkNewsletterSubscribeLimit(
-    ipKey: string,
-    emailKey: string,
-  ): void | Promise<void> {
-    const emailCacheKey = `ratelimit:newsletter:subscribe:email:${emailKey}`;
-    const ipCacheKey = `ratelimit:newsletter:subscribe:ip:${ipKey}`;
-
-    return this.enforceDistributed([
-      {
-        key: emailCacheKey,
-        max: this.newsletterEmailMaxAttempts,
-        ttlSeconds: this.newsletterEmailWindowSeconds,
-      },
-      {
-        key: ipCacheKey,
-        max: this.newsletterIpMaxAttempts,
-        ttlSeconds: this.newsletterIpWindowSeconds,
       },
     ]);
   }
