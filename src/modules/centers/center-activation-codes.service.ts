@@ -379,7 +379,7 @@ export class CenterActivationCodesService {
     });
     const allowance = resetAllowance(history, subscription);
     const now = new Date();
-    const seatWindow = seatWindowOf(current, history, now);
+    const seatWindow = seatWindowOf(current, history);
 
     if (!allowance.allowed) {
       throw new ConflictException({
@@ -514,8 +514,8 @@ export class CenterActivationCodesService {
 
 /**
  * The time the code's last student spent on this seat: from connecting to
- * leaving it — now, if they still hold it, or the event that took the seat
- * from them. Null when nobody held it, or when leaving was never logged:
+ * leaving it — open-ended if they still hold it, else the event that took the
+ * seat from them. Null when nobody held it, or when leaving was never logged:
  * without an end, erasing could reach work done at another school since.
  */
 export function seatWindowOf(
@@ -525,12 +525,12 @@ export function seatWindowOf(
     to_status: ActivationCodeStatus;
     student_id: string | null;
   }[],
-  now: Date,
-): { studentId: string; since: Date; until: Date } | null {
+): { studentId: string; since: Date; until: Date | null } | null {
   if (!code.student_id || !code.connected_at) return null;
   const since = code.connected_at;
   if (code.status === ActivationCodeStatus.CONNECTED) {
-    return { studentId: code.student_id, since, until: now };
+    // Still on the seat: open-ended, not "until now" (see hideSeatData).
+    return { studentId: code.student_id, since, until: null };
   }
   const left = history
     .filter(

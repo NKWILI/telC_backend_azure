@@ -205,6 +205,19 @@ describe('seat data erasure against real Postgres', () => {
     await expect(erasure.restore(erased.id)).rejects.toThrow('ALREADY_ERASED');
   });
 
+  it('hides seat work stamped after the app clock, as when the database runs ahead', async () => {
+    const { student, code, manager } = await studentOnSeat();
+    const ahead = await lesen(student.id, new Date(Date.now() + 5000));
+
+    await codes.reset(manager, code.id);
+
+    const row = await prisma.lesenAttempt.findUniqueOrThrow({
+      where: { attempt_id: ahead },
+    });
+    expect(row.erasure_id).not.toBeNull();
+    expect(await visible(student.id)).toBe(1);
+  });
+
   it('erases nothing when a seat nobody used is reset', async () => {
     const { code, manager } = await studentOnSeat();
     // First reset takes the seat from the student; the second finds it empty.

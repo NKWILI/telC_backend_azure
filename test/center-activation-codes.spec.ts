@@ -325,7 +325,7 @@ describe('CenterActivationCodesService', () => {
           codeId: 'code-1',
           centerUserId: 'owner-1',
           since: new Date('2027-01-02T00:00:00.000Z'),
-          until: expect.any(Date),
+          until: null,
         },
         expect.any(Date),
       );
@@ -457,14 +457,13 @@ describe('seatWindowOf', () => {
     student_id,
   });
 
-  it('runs to now for a student still on the seat', () => {
+  it('is open-ended for a student still on the seat, whatever the clocks say', () => {
     expect(
       seatWindowOf(
         { status: 'CONNECTED', student_id: 'student-1', connected_at: since },
         [],
-        now,
       ),
-    ).toEqual({ studentId: 'student-1', since, until: now });
+    ).toEqual({ studentId: 'student-1', since, until: null });
   });
 
   it('ends when a deactivated seat was taken from them, sparing later work elsewhere', () => {
@@ -476,7 +475,6 @@ describe('seatWindowOf', () => {
           event('DEACTIVATED', left),
           event('DEACTIVATED', left, 'someone-else'),
         ],
-        now,
       ),
     ).toEqual({ studentId: 'student-1', since, until: left });
   });
@@ -486,14 +484,12 @@ describe('seatWindowOf', () => {
       seatWindowOf(
         { status: 'ACTIVATED', student_id: null, connected_at: null },
         [],
-        now,
       ),
     ).toBeNull();
     expect(
       seatWindowOf(
         { status: 'DEACTIVATED', student_id: 'student-1', connected_at: since },
         [],
-        now,
       ),
     ).toBeNull();
   });

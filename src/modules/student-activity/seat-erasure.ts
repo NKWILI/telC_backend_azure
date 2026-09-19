@@ -22,7 +22,12 @@ export interface SeatErasureInput {
   centerUserId: string | null;
   /** The student's time on the seat: only what was done inside it goes. */
   since: Date;
-  until: Date;
+  /**
+   * When they left the seat, or null while they still hold it. Null is not
+   * "now": the app's clock and the database's differ, and a student holding
+   * the seat has done everything since `since` on it (one code at a time).
+   */
+  until: Date | null;
 }
 
 /**
@@ -50,7 +55,7 @@ export async function hideSeatData(
       code_id: input.codeId,
       center_user_id: input.centerUserId,
       since: input.since,
-      until: input.until,
+      until: input.until ?? now,
       erase_after: new Date(now.getTime() + ERASE_AFTER_DAYS * DAY_MS),
     },
   });
@@ -58,7 +63,10 @@ export async function hideSeatData(
   const window = {
     student_id: input.studentId,
     erasure_id: null,
-    created_at: { gte: input.since, lte: input.until },
+    created_at: {
+      gte: input.since,
+      ...(input.until ? { lte: input.until } : {}),
+    },
   };
   const stamp = { data: { erasure_id: erasure.id } };
   await tx.listeningAttempt.updateMany({ where: window, ...stamp });
@@ -124,8 +132,18 @@ export class SeatErasureService
       where: { erase_after: { lte: now }, erased_at: null, restored_at: null },
       select: { id: true },
     });
+    let erased = 0;
     for (const { id } of due) {
       await this.prisma.$transaction(async (tx) => {
+        // Claimed first, on the row: a restore or a second job racing this one
+        // finds it taken and does nothing, so the record never says "erased"
+        // over data that was restored, or the reverse.
+        const claimed = await tx.dataErasure.updateMany({
+          where: { id, erased_at: null, restored_at: null },
+          data: { erased_at: now },
+        });
+        if (claimed.count !== 1) return;
+        erased++;
         const hidden = { where: { erasure_id: id } };
         await tx.studentActivity.deleteMany(hidden);
         await tx.listeningAttempt.deleteMany(hidden);
@@ -133,16 +151,12 @@ export class SeatErasureService
         await tx.writingAttempt.deleteMany(hidden);
         await tx.lesenAttempt.deleteMany(hidden);
         await tx.speakingAttempt.deleteMany(hidden);
-        await tx.dataErasure.update({
-          where: { id },
-          data: { erased_at: now },
-        });
       });
     }
-    if (due.length > 0) {
-      this.logger.log(`Erased the seat data of ${due.length} reset(s)`);
+    if (erased > 0) {
+      this.logger.log(`Erased the seat data of ${erased} reset(s)`);
     }
-    return due.length;
+    return erased;
   }
 
   /**
@@ -158,6 +172,15 @@ export class SeatErasureService
     if (erasure.restored_at) return;
 
     await this.prisma.$transaction(async (tx) => {
+      // Claimed first, like the purge: whichever reaches the row second
+      // changes nothing.
+      const claimed = await tx.dataErasure.updateMany({
+        where: { id: erasureId, erased_at: null, restored_at: null },
+        data: { restored_at: now },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('ALREADY_ERASED');
+      }
       const hidden = { where: { erasure_id: erasureId } };
       const shown = { data: { erasure_id: null } };
       await tx.studentActivity.updateMany({ ...hidden, ...shown });
@@ -166,10 +189,6 @@ export class SeatErasureService
       await tx.writingAttempt.updateMany({ ...hidden, ...shown });
       await tx.lesenAttempt.updateMany({ ...hidden, ...shown });
       await tx.speakingAttempt.updateMany({ ...hidden, ...shown });
-      await tx.dataErasure.update({
-        where: { id: erasureId },
-        data: { restored_at: now },
-      });
     });
   }
 }
