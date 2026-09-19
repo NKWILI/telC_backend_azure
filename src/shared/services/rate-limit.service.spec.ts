@@ -26,6 +26,36 @@ describe('RateLimitService', () => {
     service = new RateLimitService();
   });
 
+  describe('checkRoomCodeLookupLimit (D32)', () => {
+    it('allows a student 20 guesses in 10 minutes, then refuses', async () => {
+      for (let i = 0; i < 20; i++) {
+        await service.checkRoomCodeLookupLimit('student-1', '1.2.3.4');
+      }
+      await expect(
+        Promise.resolve().then(() =>
+          service.checkRoomCodeLookupLimit('student-1', '1.2.3.4'),
+        ),
+      ).rejects.toThrow('RATE_LIMIT_EXCEEDED');
+    });
+
+    it('lets a whole class behind one router look codes up', async () => {
+      for (let i = 0; i < 100; i++) {
+        await service.checkRoomCodeLookupLimit(`student-${i}`, '1.2.3.4');
+      }
+    });
+
+    it('stops many accounts guessing from one IP, however fresh each account is', async () => {
+      for (let i = 0; i < 100; i++) {
+        await service.checkRoomCodeLookupLimit(`student-${i}`, '1.2.3.4');
+      }
+      await expect(
+        Promise.resolve().then(() =>
+          service.checkRoomCodeLookupLimit('student-fresh', '1.2.3.4'),
+        ),
+      ).rejects.toThrow('RATE_LIMIT_EXCEEDED');
+    });
+  });
+
   describe('checkRegisterLimit', () => {
     // The per-email bucket is the security-critical one. Without it, anyone who
     // knows an address with an unverified account can re-register it on a loop:
