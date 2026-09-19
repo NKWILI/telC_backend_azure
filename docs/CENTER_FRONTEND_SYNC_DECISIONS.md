@@ -1800,7 +1800,11 @@ deleted**, and showing the resets left until the renewal date.
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B13).
 **Changed:** 2026-09-19 by the backend dev — **no German-teacher review**.
-**Status:** decided, not built
+**Status:** **set aside (2026-09-19)** — not worth building now; off the build
+list. Useful, not critical: schools do not pay for it and nothing waits on it.
+If picked up: a phrase has a purpose (opinion, agreeing…) and a Teil, and is
+usable in all three of the app's exercise modes (read aloud, repetition,
+dialogue) — the app's "type" is the mode, not the purpose.
 
 In the Flutter app a phrase is a German sentence, its translation and a type
 (e.g. giving an opinion, agreeing, disagreeing, asking back).
