@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import {
+  escapeHtml,
   LERNIQO_LOGO_ATTACHMENT,
   readLerniqoLogo,
   renderLerniqoEmail,
@@ -21,10 +22,15 @@ export class EmailService {
    * CID logo attachment and the plain-text alternative cannot be forgotten on
    * a new message — which is how five of the six ended up unbranded before.
    */
-  private async send(to: string, content: EmailContent): Promise<void> {
+  private async send(
+    to: string,
+    content: EmailContent,
+    replyTo?: string,
+  ): Promise<void> {
     await this.resend.emails.send({
       from: this.config.getOrThrow<string>('EMAIL_FROM'),
       to,
+      ...(replyTo ? { replyTo } : {}),
       subject: content.subject,
       html: renderLerniqoEmail(content),
       text: content.text,
@@ -278,6 +284,88 @@ export class EmailService {
         '',
         'Wenn du diese Anfrage nicht gestellt hast, kannst du diese E-Mail ignorieren.',
       ].join('\n'),
+    });
+  }
+
+  /**
+   * A support message or deletion request, to the Lerniqo team (D24, D37).
+   * In English: it is read by the team, not by a school.
+   *
+   * Every field was typed by a caller, so each is escaped before it enters the
+   * HTML — the template takes paragraphs as markup.
+   */
+  async sendSupportRequestToTeam(
+    to: string,
+    request: {
+      subject: string;
+      replyTo: string;
+      fields: [label: string, value: string][];
+      message?: string;
+    },
+  ): Promise<void> {
+    const rows = request.fields.map(
+      ([label, value]) => `<strong>${label}:</strong> ${escapeHtml(value)}`,
+    );
+    const message = request.message
+      ? escapeHtml(request.message).replace(/\n/g, '<br>')
+      : null;
+    await this.send(
+      to,
+      {
+        subject: request.subject,
+        preheader: request.subject,
+        heading: request.subject,
+        paragraphs: message ? [...rows, message] : rows,
+        text: [
+          request.subject,
+          '',
+          ...request.fields.map(([label, value]) => `${label}: ${value}`),
+          ...(request.message ? ['', request.message] : []),
+        ].join('\n'),
+      },
+      request.replyTo,
+    );
+  }
+
+  /** "We received your message", to the manager's account address (D24). */
+  async sendSupportAcknowledgement(
+    to: string,
+    firstName: string,
+  ): Promise<void> {
+    const greeting = `Hallo ${escapeHtml(firstName.trim())},`;
+    await this.send(to, {
+      subject: 'Wir haben Ihre Nachricht erhalten',
+      preheader: 'Das Lerniqo-Team meldet sich so bald wie möglich bei Ihnen.',
+      heading: 'Nachricht erhalten',
+      paragraphs: [
+        greeting,
+        'vielen Dank für Ihre Nachricht an das Lerniqo-Team. Wir melden uns so bald wie möglich bei Ihnen.',
+      ],
+      text: [
+        `Hallo ${firstName.trim()},`,
+        '',
+        'vielen Dank für Ihre Nachricht an das Lerniqo-Team. Wir melden uns so bald wie möglich bei Ihnen.',
+      ].join('\n'),
+    });
+  }
+
+  /** The deletion request was received; nothing is deleted yet (D37). */
+  async sendDeletionRequestAcknowledgement(
+    to: string,
+    firstName: string,
+  ): Promise<void> {
+    const greeting = `Hallo ${escapeHtml(firstName.trim())},`;
+    const body =
+      'wir haben Ihre Anfrage erhalten, Ihr Lerniqo-Konto und alle zugehörigen Daten zu löschen. Eine Administratorin oder ein Administrator wird Sie kontaktieren, um die Löschung mit Ihnen zu besprechen.';
+    const notice =
+      'Bis dahin bleibt Ihr Konto unverändert: Plätze, Codes und Lernende funktionieren weiter.';
+    await this.send(to, {
+      subject: 'Ihre Anfrage zur Kontolöschung',
+      preheader: 'Wir melden uns bei Ihnen, bevor etwas gelöscht wird.',
+      heading: 'Anfrage erhalten',
+      paragraphs: [greeting, body],
+      notice,
+      text: [`Hallo ${firstName.trim()},`, '', body, '', notice].join('\n'),
     });
   }
 }

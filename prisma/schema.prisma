@@ -1126,3 +1126,27 @@ model DataErasure {
   @@index([student_id])
   @@map("data_erasures")
 }
+
+enum SupportRequestKind {
+  CONTACT
+  ACCOUNT_DELETION
+}
+
+/// A message from a center to the Lerniqo team (D24), or its request to have
+/// the account deleted (D37). Stored before it is emailed, so a mail failure
+/// loses nothing: `emailed_at` stays null and the row can be found.
+model SupportRequest {
+  id             String             @id @default(uuid())
+  kind           SupportRequestKind
+  center_id      String
+  center_user_id String
+  /// As typed in the form; the trusted identity is the two ids above.
+  name           String
+  email          String
+  message        String?
+  created_at     DateTime           @default(now())
+  emailed_at     DateTime?
+
+  @@index([center_id, kind, created_at])
+  @@map("support_requests")
+}
