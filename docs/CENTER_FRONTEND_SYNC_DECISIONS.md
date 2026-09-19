@@ -642,7 +642,10 @@ for students if a device limit is ever added there (T22).
 ## D14. Locations: controlled country, searchable city, region derived
 
 **Decided:** 2026-09-17
-**Status:** decided, not built
+**Status:** **built (phase 8)**; the legacy free-text `country`/`city` columns
+were dropped on 2026-09-19 (production holds demo data only). Responses keep
+`center.country` (the country code) and `center.city` (the listed city name or
+the town typed in), derived from the structured columns.
 
 ### The rule
 
@@ -942,7 +945,11 @@ Rules:
 ## D20. Removing the per-student activation keys, in three steps
 
 **Decided:** 2026-09-17
-**Status:** decided; **production checked 2026-09-18 — nothing to migrate**
+**Status:** **done (2026-09-19)** — the code was removed earlier; the four
+`students` key columns are now dropped (none set in production, checked
+read-only). The center student view no longer returns `activated`,
+`activatedAt` or `activationKeyExpiresAt`: every student on the roster joined
+by redeeming a code, and the code list shows when.
 
 > **Production result (2026-09-18, read-only transaction):** 0 pending keys,
 > 0 activated students, 0 centers using keys, 0 students in any center,
@@ -1379,7 +1386,10 @@ bug, and the center dashboard reads a single table (D26) instead of five.
 ## D30. Newsletter: dropped, removed later
 
 **Decided:** 2026-09-17
-**Status:** decided — **removal is a later task, deliberately not now**
+**Status:** **done in the backend (2026-09-19)** — route, module, rate limits
+and the `newsletter_subscribers` table removed (0 subscribers in production,
+checked read-only first). The Flutter app's newsletter screen goes with the
+frontend prompts.
 
 The newsletter is not part of the product.
 

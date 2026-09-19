@@ -1,5 +1,6 @@
 import {
   addressRulesFor,
+  locationLabelOf,
   resolveLocation,
 } from '../src/modules/locations/location-resolver';
 
@@ -112,5 +113,33 @@ describe('addressRulesFor', () => {
 
   it('returns nothing for a country we do not serve', () => {
     expect(addressRulesFor('FR')).toBeNull();
+  });
+});
+
+describe('locationLabelOf', () => {
+  it('names a listed city from its id', () => {
+    expect(
+      locationLabelOf({
+        country_code: 'CM',
+        city_id: 'yaounde',
+        city_other: null,
+      }),
+    ).toEqual({ country: 'CM', city: 'Yaoundé' });
+  });
+
+  it('gives back the town a school typed when it is not listed', () => {
+    expect(
+      locationLabelOf({
+        country_code: 'CM',
+        city_id: null,
+        city_other: 'Kribi',
+      }),
+    ).toEqual({ country: 'CM', city: 'Kribi' });
+  });
+
+  it('is null for a center that has not onboarded', () => {
+    expect(
+      locationLabelOf({ country_code: null, city_id: null, city_other: null }),
+    ).toEqual({ country: null, city: null });
   });
 });

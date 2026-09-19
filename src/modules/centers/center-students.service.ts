@@ -46,10 +46,6 @@ export interface CenterStudentView {
   lastName: string | null;
   email: string | null;
   phone: string | null;
-  /** Whether they redeemed their key and set a password. */
-  activated: boolean;
-  activatedAt: Date | null;
-  activationKeyExpiresAt: Date | null;
   createdAt: Date;
   lastSeenAt: Date;
   /**
@@ -300,8 +296,6 @@ export class CenterStudentsService {
       last_name: string | null;
       email: string | null;
       phone: string | null;
-      activated_at: Date | null;
-      activation_key_expires: Date | null;
       created_at: Date;
       last_seen_at: Date;
       tier: Tier | null;
@@ -315,9 +309,6 @@ export class CenterStudentsService {
       lastName: row.last_name,
       email: row.email,
       phone: row.phone,
-      activated: row.activated_at !== null,
-      activatedAt: row.activated_at,
-      activationKeyExpiresAt: row.activation_key_expires,
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at,
       tier: row.tier,

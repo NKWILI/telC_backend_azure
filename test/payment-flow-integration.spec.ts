@@ -68,8 +68,8 @@ async function makeTrialCenter() {
   const center = await prisma.center.create({
     data: {
       name: `Flow Test ${Date.now()}-${Math.random()}`,
-      country: 'Cameroon',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
       subscription: { create: { plan: 'TRIAL' } },
       seats: { create: { tier: 'START', quantity: 1, unit_price_xaf: 0 } },
     },

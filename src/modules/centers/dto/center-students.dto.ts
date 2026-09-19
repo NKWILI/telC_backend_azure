@@ -94,17 +94,6 @@ export class CenterStudentDto {
     | null;
   @ApiPropertyOptional({ nullable: true }) phone: string | null;
 
-  @ApiProperty({
-    description: 'Whether the student redeemed their key and set a password.',
-  })
-  activated: boolean;
-
-  @ApiPropertyOptional({ nullable: true, type: String, format: 'date-time' })
-  activatedAt: Date | null;
-
-  @ApiPropertyOptional({ nullable: true, type: String, format: 'date-time' })
-  activationKeyExpiresAt: Date | null;
-
   @ApiProperty({ type: String, format: 'date-time' }) createdAt: Date;
   @ApiProperty({ type: String, format: 'date-time' }) lastSeenAt: Date;
 

@@ -29,9 +29,6 @@ describe('CenterStudentsController contract', () => {
     lastName: 'Mbarga',
     email: 'awa@example.com',
     phone: '+237690000000',
-    activated: false,
-    activatedAt: null,
-    activationKeyExpiresAt: new Date('2026-09-01T00:00:00.000Z'),
     createdAt: new Date('2026-08-23T00:00:00.000Z'),
     lastSeenAt: new Date('2026-08-23T00:00:00.000Z'),
   };

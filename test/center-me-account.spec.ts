@@ -26,8 +26,9 @@ describe('CenterProfileService account state', () => {
     center: {
       id: 'center-1',
       name: 'Goethe Language Center',
-      country: 'CM',
-      city: 'Douala',
+      country_code: 'CM',
+      city_id: 'douala',
+      city_other: null,
       logo_url: null,
     },
   };
@@ -124,7 +125,7 @@ describe('CenterProfileService account state', () => {
     prisma.centerUser.findFirst.mockResolvedValue({
       ...storedUser,
       phone: null,
-      center: { ...storedUser.center, city: null },
+      center: { ...storedUser.center, city_id: null },
     });
 
     const profile = await service.getProfile(signedIdentity);

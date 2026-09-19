@@ -47,23 +47,22 @@ describe('a draft center against real Postgres', () => {
       // Exactly what the five-field registration will write.
       const center = await draftCenter();
 
-      expect(center.country).toBeNull();
-      expect(center.city).toBeNull();
+      expect(center.country_code).toBeNull();
+      expect(center.city_id).toBeNull();
     });
 
     it('still accepts a country and city when they are known', async () => {
-      // The columns become optional, not unused. Onboarding fills them in
-      // later, and every center that predates this migration kept its values.
+      // Optional, not unused: onboarding fills them in later.
       const center = await prisma.center.create({
         data: {
           name: `Draft Test complete ${Date.now()}`,
-          country: 'CM',
-          city: 'Douala',
+          country_code: 'CM',
+          city_id: 'douala',
         },
       });
 
-      expect(center.country).toBe('CM');
-      expect(center.city).toBe('Douala');
+      expect(center.country_code).toBe('CM');
+      expect(center.city_id).toBe('douala');
     });
 
     it('can be completed after the fact', async () => {
@@ -72,11 +71,11 @@ describe('a draft center against real Postgres', () => {
 
       const completed = await prisma.center.update({
         where: { id: center.id },
-        data: { country: 'CM', city: 'Douala' },
+        data: { country_code: 'CM', city_id: 'douala' },
       });
 
-      expect(completed.country).toBe('CM');
-      expect(completed.city).toBe('Douala');
+      expect(completed.country_code).toBe('CM');
+      expect(completed.city_id).toBe('douala');
     });
   });
 

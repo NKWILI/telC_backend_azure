@@ -32,8 +32,6 @@ describe('CenterProfileService location writes', () => {
     center: {
       id: 'center-1',
       name: 'Goethe Language Center',
-      country: null,
-      city: null,
       logo_url: null,
       country_code: 'CM',
       region_id: 'littoral',
@@ -282,8 +280,6 @@ describe('CenterProfileService location writes', () => {
         ...storedUser,
         center: {
           ...storedUser.center,
-          country: null,
-          city: null,
           country_code: 'CM',
           city_id: 'douala',
         },
@@ -299,30 +295,9 @@ describe('CenterProfileService location writes', () => {
         ...storedUser,
         center: {
           ...storedUser.center,
-          country: null,
-          city: null,
           country_code: 'CM',
           city_id: null,
           city_other: 'Kribi',
-        },
-      });
-
-      const profile = await service.getProfile(signedIdentity);
-
-      expect(profile.onboarding.complete).toBe(true);
-    });
-
-    it('still accepts the free text written before the structured columns existed', async () => {
-      prisma.centerUser.findFirst.mockResolvedValue({
-        ...storedUser,
-        center: {
-          ...storedUser.center,
-          country: 'Cameroun',
-          city: 'Douala',
-          country_code: null,
-          region_id: null,
-          city_id: null,
-          city_other: null,
         },
       });
 

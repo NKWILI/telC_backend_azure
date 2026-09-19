@@ -12,7 +12,6 @@ import { SeatErasureModule } from './modules/student-activity/seat-erasure.modul
 import { SprachbausteineModule } from './modules/sprachbausteine/sprachbausteine.module';
 import { LesenModule } from './modules/lesen/lesen.module';
 import { ModelltestsModule } from './modules/modelltests/modelltests.module';
-import { NewsletterModule } from './modules/newsletter/newsletter.module';
 import { RateLimitModule } from './shared/rate-limit.module';
 import { CentersModule } from './modules/centers/centers.module';
 import { LocationsModule } from './modules/locations/locations.module';
@@ -36,7 +35,6 @@ import { PlansModule } from './modules/plans/plans.module';
     ModelltestsModule,
     SprachbausteineModule,
     LesenModule,
-    NewsletterModule,
     LocationsModule,
     PlansModule,
   ],

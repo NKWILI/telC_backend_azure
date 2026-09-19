@@ -50,20 +50,6 @@ model Student {
   /// for renewal reminders and for reaching a student whose center lapses.
   phone String?
 
-  /// One-time key a center hands to a student, hashed at rest exactly like the
-  /// verification and reset tokens above. The raw key is shown to the center
-  /// once, at generation, and cannot be recovered afterwards.
-  activation_key_hash    String?
-  activation_key_expires DateTime?
-  /// When the student redeemed their key and chose a password. Distinguishes a
-  /// provisioned-but-unused account from a real user, which reminders and any
-  /// churn analysis need.
-  activated_at           DateTime?
-  /// Where that redemption came from. A center holds the key and can therefore
-  /// redeem it itself, so this is the audit trail that makes an impersonation
-  /// visible after the fact rather than preventing it.
-  activated_ip           String?
-
   /// The center that provisioned this student, and the seat-counting boundary.
   /// Nullable: students who predate the center model, and any future
   /// independent student, simply have none.
@@ -91,28 +77,11 @@ model Student {
   center          Center?           @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
-  lesen_sessions  LesenSession[]
-  oauth_accounts  OAuthAccount[]
   activities      StudentActivity[]
 
   @@index([center_id])
-  @@index([activation_key_hash])
   @@index([email])
   @@map("students")
-}
-
-model OAuthAccount {
-  id          String   @id @default(uuid())
-  student_id  String
-  provider    String
-  provider_id String
-  created_at  DateTime @default(now())
-
-  student Student @relation(fields: [student_id], references: [id])
-
-  @@unique([provider, provider_id])
-  @@index([student_id])
-  @@map("oauth_accounts")
 }
 
 model DeviceSession {
@@ -139,12 +108,6 @@ model Center {
   /// says nothing.
   name String
 
-  /// The first, free-text pair, kept only until every row has moved to the
-  /// structured columns below. Nothing new writes them; they are dropped in a
-  /// migration of their own once production is checked, because a column drop
-  /// is not something to ride along with the feature that replaces it.
-  country  String?
-  city     String?
   logo_url String?
 
   /// Where the school is, as ids rather than prose.
@@ -552,18 +515,6 @@ model ListeningAttempt {
   @@map("listening_attempts")
 }
 
-model NewsletterSubscriber {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  full_name       String
-  consent_version String
-  consented_at    DateTime @default(now())
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-
-  @@map("newsletter_subscribers")
-}
-
 model SprachbausteineAttempt {
   attempt_id       String    @id @default(uuid())
   student_id       String
@@ -614,35 +565,6 @@ model LesenQuestion {
   passage LesenPassage @relation(fields: [passage_id], references: [id])
 
   @@map("lesen_questions")
-}
-
-model LesenSession {
-  session_id   String    @id @default(uuid())
-  user_id      String?
-  student_id   String?
-  question_ids String[]
-  status       String
-  started_at   DateTime? @default(now())
-  completed_at DateTime?
-
-  student Student?      @relation(fields: [student_id], references: [id])
-  results LesenResult[]
-
-  @@map("lesen_sessions")
-}
-
-model LesenResult {
-  id              String    @id @default(uuid())
-  session_id      String
-  user_answers    Json
-  score           Float
-  correct_count   Int
-  total_questions Int
-  created_at      DateTime? @default(now())
-
-  session LesenSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("lesen_results")
 }
 
 model LesenTeil2Exercise {
@@ -1063,8 +985,7 @@ model StudentActivity {
   @@map("student_activities")
 }
 
-/// A scored Lesen Teil. Lesen stored nothing before phase 11; the old
-/// LesenSession / LesenResult tables belong to a design nothing uses.
+/// A scored Lesen Teil. Lesen stored nothing before phase 11.
 model LesenAttempt {
   attempt_id       String   @id @default(uuid())
   student_id       String

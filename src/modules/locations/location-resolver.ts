@@ -59,6 +59,27 @@ const findCountry = (code: string) =>
  * Lives here rather than in the routes that apply it, because the rules belong
  * to the school's country and two routes already need the same answer.
  */
+/**
+ * A center's location as words, for a response: the country code, and the
+ * listed city's name or the town typed in. Null where nothing was given.
+ */
+export function locationLabelOf(center: {
+  country_code?: string | null;
+  city_id?: string | null;
+  city_other?: string | null;
+}): { country: string | null; city: string | null } {
+  const country = center.country_code ? findCountry(center.country_code) : null;
+  const listed = center.city_id
+    ? country?.regions
+        .flatMap((region) => region.cities)
+        .find((city) => city.id === center.city_id)
+    : undefined;
+  return {
+    country: center.country_code ?? null,
+    city: listed?.name ?? center.city_other ?? null,
+  };
+}
+
 export function addressRulesFor(countryCode: string): AddressRules | null {
   return findCountry(countryCode)?.addressRules ?? null;
 }

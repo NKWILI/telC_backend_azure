@@ -103,7 +103,7 @@ export class CenterActivationCodesController {
   @ApiOperation({
     summary: 'Hand a seat to a new student: a new value for the same seat',
     description:
-      'Gives the code a NEW value on the same row (same seat, plan and expiry) and sets it `activated`. The old value stops existing: typing it answers CODE_INVALID. A connected student loses access at once. Logged with the old value. A code that has been redeemed since its last reset may be reset 2 times per billing period (1 during the trial); a code nobody redeemed resets freely. Over the limit: CODE_RESET_LIMIT_REACHED with `resetsAvailableAt`. CODE_CHANGED when the code changed while the request was in flight. Learning data of the previous student is not erased yet.',
+      'Gives the code a NEW value on the same row (same seat, plan and expiry) and sets it `activated`. The old value stops existing: typing it answers CODE_INVALID. A connected student loses access at once. Logged with the old value. A code that has been redeemed since its last reset may be reset 2 times per billing period (1 during the trial); a code nobody redeemed resets freely. Over the limit: CODE_RESET_LIMIT_REACHED with `resetsAvailableAt`. CODE_CHANGED when the code changed while the request was in flight. The learning data of the previous student on this seat is hidden at once and erased 7 days later (D39).',
   })
   @ApiOkResponse({ type: ActivationCodeDto })
   @ApiConflictResponse({

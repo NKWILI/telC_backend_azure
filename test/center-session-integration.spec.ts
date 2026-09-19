@@ -41,7 +41,7 @@ const PASSWORD = 'integration-password';
 
 async function createVerifiedOwner(suffix: string) {
   const center = await prisma.center.create({
-    data: { name: `Center ${suffix}`, country: 'Cameroon', city: 'Douala' },
+    data: { name: `Center ${suffix}`, country_code: 'CM', city_id: 'douala' },
   });
   return prisma.centerUser.create({
     data: {

@@ -4,7 +4,6 @@ import { CenterStudentsService } from '../src/modules/centers/center-students.se
 
 describe('CenterStudentsService', () => {
   const identity = { centerUserId: 'owner-1', centerId: 'center-1' } as never;
-  const DAY = 24 * 60 * 60 * 1000;
 
   const row = (over: Record<string, unknown> = {}) => ({
     id: 'student-1',
@@ -13,8 +12,6 @@ describe('CenterStudentsService', () => {
     last_name: 'Mbarga',
     email: 'awa@example.com',
     phone: '+237690000000',
-    activated_at: null,
-    activation_key_expires: new Date(Date.now() + 5 * DAY),
     created_at: new Date(),
     last_seen_at: new Date(),
     tier: 'START',
@@ -199,11 +196,11 @@ describe('CenterStudentsService', () => {
       expect(result.page).toBe(1);
     });
 
-    it('never exposes credentials or the activation key hash', async () => {
+    it('never exposes credentials or verification tokens', async () => {
       prisma.student.findMany.mockResolvedValue([
         row({
           password_hash: 'secret-hash',
-          activation_key_hash: 'secret-key-hash',
+          email_verification_token: 'secret-key-hash',
           password_reset_token: 'secret-reset',
         }),
       ]);
@@ -214,16 +211,6 @@ describe('CenterStudentsService', () => {
       expect(json).not.toContain('secret-hash');
       expect(json).not.toContain('secret-key-hash');
       expect(json).not.toContain('secret-reset');
-    });
-
-    it('reports whether each student has activated', async () => {
-      prisma.student.findMany.mockResolvedValue([
-        row({ activated_at: new Date() }),
-      ]);
-
-      const result = await service.list(identity, { page: 1, pageSize: 20 });
-
-      expect(result.students[0].activated).toBe(true);
     });
   });
 

@@ -22,6 +22,7 @@ import { checkPassword } from '../../shared/password-policy';
 import { ValkeyService } from '../../shared/services/valkey.service';
 import { TokenCryptoService } from '../auth/token-crypto.service';
 import { EmailService } from '../auth/email.service';
+import { locationLabelOf } from '../locations/location-resolver';
 import { TokenService } from '../auth/token.service';
 import {
   CenterAuthResponseDto,
@@ -644,8 +645,7 @@ export class CenterAuthService {
       center: {
         id: centerUser.center.id,
         name: centerUser.center.name,
-        country: centerUser.center.country,
-        city: centerUser.center.city,
+        ...locationLabelOf(centerUser.center),
         logoUrl: centerUser.center.logo_url,
       },
     };

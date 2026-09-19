@@ -23,8 +23,9 @@ describe('CenterAuthService', () => {
   const center = {
     id: 'center-1',
     name: 'Goethe Language Center',
-    country: 'Cameroon',
-    city: 'Douala',
+    country_code: 'CM',
+    city_id: 'douala',
+    city_other: null,
     logo_url: 'https://cdn.example.com/center.webp',
   };
   const verifiedOwner = {
@@ -179,7 +180,7 @@ describe('CenterAuthService', () => {
         center: {
           id: 'center-1',
           name: 'Goethe Language Center',
-          country: 'Cameroon',
+          country: 'CM',
           city: 'Douala',
           logoUrl: 'https://cdn.example.com/center.webp',
         },
