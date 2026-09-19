@@ -348,6 +348,21 @@ export class RateLimitService {
     ]);
   }
 
+  /**
+   * Caps guessing at speaking-room short codes (D32). A code is guessable by
+   * design and hides only a practice room, but guesses should not be free. An
+   * honest student types one code, maybe twice.
+   */
+  checkRoomCodeLookupLimit(studentId: string): void | Promise<void> {
+    return this.enforceDistributed([
+      {
+        key: `ratelimit:speaking:room-code:student:${studentId}`,
+        max: 20,
+        ttlSeconds: 10 * 60,
+      },
+    ]);
+  }
+
   /** Center verification is isolated from student verification traffic. */
   checkCenterVerifyEmailLimit(ip: string): void | Promise<void> {
     return this.enforceDistributed([

@@ -5,6 +5,13 @@ export class CreateRoomResponseDto {
   roomId: string;
 
   @ApiProperty({
+    example: 'K7M2QX',
+    description:
+      'Read aloud to the other student, who joins with GET /api/speaking/rooms/code/{code}. 6 characters without look-alikes; valid while the room lives.',
+  })
+  shortCode: string;
+
+  @ApiProperty({
     description: 'Private token. Only share roomId, never hostToken.',
   })
   hostToken: string;

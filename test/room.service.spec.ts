@@ -292,6 +292,73 @@ describe('RoomService', () => {
     });
   });
 
+  // ─── short code (D32) ───────────────────────────────────────────────────────
+
+  describe('short code (D32)', () => {
+    it('gives each room 6 characters from the no-look-alike alphabet', () => {
+      const { shortCode } = service.createRoom();
+
+      expect(shortCode).toMatch(/^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/);
+    });
+
+    it('finds the live room by its code, typed in any case with spaces', () => {
+      const { roomId, shortCode } = service.createRoom();
+
+      expect(
+        service.getRoomByCode(`  ${shortCode.toLowerCase()} `)?.roomId,
+      ).toBe(roomId);
+    });
+
+    it('never hands the same code to two live rooms', () => {
+      const codes = new Set(
+        Array.from({ length: 500 }, () => service.createRoom().shortCode),
+      );
+
+      expect(codes.size).toBe(500);
+    });
+
+    it('draws again when the code it drew is taken', () => {
+      const crypto = jest.requireActual('crypto');
+      const draw = jest.spyOn(crypto, 'randomInt');
+      // First room: all '2'. Second room: all '2' again, then all '3'.
+      draw.mockReturnValue(0 as never);
+      const first = service.createRoom().shortCode;
+      draw.mockReset();
+      draw
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValueOnce(0 as never)
+        .mockReturnValue(1 as never);
+      const second = service.createRoom().shortCode;
+      draw.mockRestore();
+
+      expect(first).toBe('222222');
+      expect(second).toBe('333333');
+    });
+
+    it('stops answering once the room ended, and frees the code once it is gone', () => {
+      const { roomId, shortCode } = service.createRoom();
+
+      service.startGracePeriod(roomId, () => undefined);
+      expect(service.getRoomByCode(shortCode)).toBeUndefined();
+
+      service.deleteRoom(roomId);
+      expect(service.getRoomByCode(shortCode)).toBeUndefined();
+      expect((service as any).codes.has(shortCode)).toBe(false);
+    });
+
+    it('frees the code when the room expires', () => {
+      const { shortCode } = service.createRoom();
+
+      jest.advanceTimersByTime(2 * 60 * 60 * 1000 + 1);
+
+      expect((service as any).codes.has(shortCode)).toBe(false);
+    });
+  });
+
   // ─── deleteRoom ─────────────────────────────────────────────────────────────
 
   describe('deleteRoom()', () => {

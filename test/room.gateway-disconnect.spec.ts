@@ -13,6 +13,7 @@ const GUEST_SOCKET_ID = 'socket-guest-1';
 function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     roomId: ROOM_ID,
+    shortCode: 'K7M2QX',
     hostSocketId: HOST_SOCKET_ID,
     hostToken: HOST_TOKEN,
     guest: { displayName: 'Anna', socketId: GUEST_SOCKET_ID },

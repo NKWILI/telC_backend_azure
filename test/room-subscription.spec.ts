@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
 import { SubscriptionPolicyService } from '../src/modules/centers/subscription-policy.service';
 import { StudentEntitlementService } from '../src/shared/services/student-entitlement.service';
+import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { PrismaService } from '../src/shared/services/prisma.service';
 import { TokenService } from '../src/modules/auth/token.service';
 import { ValkeyService } from '../src/shared/services/valkey.service';
@@ -86,6 +87,10 @@ describe('speaking rooms and the subscription', () => {
         {
           provide: TurnCredentialsService,
           useValue: { getIceServers: jest.fn().mockReturnValue({}) },
+        },
+        {
+          provide: RateLimitService,
+          useValue: { checkRoomCodeLookupLimit: jest.fn() },
         },
         // The real guards. Overriding them would test nothing.
         JwtAuthGuard,

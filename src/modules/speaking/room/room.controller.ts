@@ -13,7 +13,9 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../../../shared/guards/student-subscription.guard';
 import { AccessTokenPayload } from '../../../shared/interfaces/token-payload.interface';
+import { RateLimitService } from '../../../shared/services/rate-limit.service';
 import { RoomService } from './room.service';
+import type { Room } from './interfaces/room.interface';
 import { TurnCredentialsService } from './turn-credentials.service';
 import { CreateRoomResponseDto } from './dto/create-room-response.dto';
 import { RoomInfoResponseDto } from './dto/room-info-response.dto';
@@ -27,6 +29,7 @@ export class RoomController {
   constructor(
     private readonly roomService: RoomService,
     private readonly turnCredentialsService: TurnCredentialsService,
+    private readonly rateLimit: RateLimitService,
   ) {}
 
   // Creating a room is where a student spends their entitlement, so this is
@@ -60,6 +63,31 @@ export class RoomController {
     return this.turnCredentialsService.getIceServers(studentId);
   }
 
+  /**
+   * Joining by short code (D32): resolves the code, then the client runs the
+   * usual `GET /rooms/{id}` and `join-room`. Login required, so guessing can
+   * be counted per student; joining by link stays open for guests.
+   */
+  @Get('code/:code')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Find a live room by its 6-character short code',
+    description:
+      'Case-insensitive, trimmed. 404 when no live room has this code. 20 lookups per 10 minutes per student.',
+  })
+  async getRoomByCode(
+    @Request() req: { student: AccessTokenPayload },
+    @Param('code') code: string,
+  ): Promise<RoomInfoResponseDto> {
+    await this.rateLimit.checkRoomCodeLookupLimit(req.student.studentId);
+    const room = this.roomService.getRoomByCode(code);
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    return this.toInfo(room);
+  }
+
   @Get(':roomId')
   @ApiOperation({
     summary: 'Get room info by roomId (public — no auth required)',
@@ -75,9 +103,14 @@ export class RoomController {
       `GET /api/speaking/rooms/${roomId} → status=${room.status}`,
     );
 
+    return this.toInfo(room);
+  }
+
+  /** Both callers have already answered 404 for an ended room. */
+  private toInfo(room: Room): RoomInfoResponseDto {
     return {
       roomId: room.roomId,
-      status: room.status,
+      status: room.status as RoomInfoResponseDto['status'],
       hasHost: room.hostSocketId !== null,
       hasGuest: room.guest !== null,
       expiresAt: room.expiresAt.toISOString(),

@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { RoomController } from '../src/modules/speaking/room/room.controller';
 import { RoomService } from '../src/modules/speaking/room/room.service';
+import { RateLimitService } from '../src/shared/services/rate-limit.service';
 import { TurnCredentialsService } from '../src/modules/speaking/room/turn-credentials.service';
 import { JwtAuthGuard } from '../src/shared/guards/jwt-auth.guard';
 import { StudentSubscriptionGuard } from '../src/shared/guards/student-subscription.guard';
@@ -14,6 +15,11 @@ const EXPIRES_AT = '2026-06-14T16:00:00.000Z';
 const mockRoomService = {
   createRoom: jest.fn(),
   getRoom: jest.fn(),
+  getRoomByCode: jest.fn(),
+};
+
+const mockRateLimit = {
+  checkRoomCodeLookupLimit: jest.fn(),
 };
 
 const mockTurnService = {
@@ -23,6 +29,7 @@ const mockTurnService = {
 function makeRoom(overrides: Partial<Room> = {}): Room {
   return {
     roomId: VALID_UUID,
+    shortCode: 'K7M2QX',
     hostSocketId: null,
     hostToken: 'secret',
     guest: null,
@@ -44,6 +51,7 @@ describe('RoomController', () => {
       providers: [
         { provide: RoomService, useValue: mockRoomService },
         { provide: TurnCredentialsService, useValue: mockTurnService },
+        { provide: RateLimitService, useValue: mockRateLimit },
       ],
     })
       .overrideGuard(ThrottlerGuard)
@@ -179,6 +187,56 @@ describe('RoomController', () => {
       controller.getIceServers(req);
 
       expect(mockTurnService.getIceServers).toHaveBeenCalledWith('anonymous');
+    });
+  });
+
+  describe('getRoomByCode() (D32)', () => {
+    const req = { student: { studentId: 'student-1' } } as any;
+
+    it('counts the guess against the student, then answers with the room', async () => {
+      mockRoomService.getRoomByCode.mockReturnValue(makeRoom());
+
+      const result = await controller.getRoomByCode(req, 'k7m2qx');
+
+      expect(mockRateLimit.checkRoomCodeLookupLimit).toHaveBeenCalledWith(
+        'student-1',
+      );
+      expect(mockRoomService.getRoomByCode).toHaveBeenCalledWith('k7m2qx');
+      expect(result).toEqual({
+        roomId: VALID_UUID,
+        status: 'waiting',
+        hasHost: false,
+        hasGuest: false,
+        expiresAt: EXPIRES_AT,
+      });
+    });
+
+    it('requires a login, so every guess is counted against a student', () => {
+      const guards = Reflect.getMetadata(
+        '__guards__',
+        RoomController.prototype.getRoomByCode,
+      ) as unknown[];
+
+      expect(guards).toContain(JwtAuthGuard);
+    });
+
+    it('answers 404 for a code no live room holds', async () => {
+      mockRoomService.getRoomByCode.mockReturnValue(undefined);
+
+      await expect(controller.getRoomByCode(req, 'ZZZZZZ')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('refuses before looking, once the student has guessed too often', async () => {
+      mockRateLimit.checkRoomCodeLookupLimit.mockRejectedValueOnce(
+        new Error('RATE_LIMIT_EXCEEDED'),
+      );
+
+      await expect(controller.getRoomByCode(req, 'K7M2QX')).rejects.toThrow(
+        'RATE_LIMIT_EXCEEDED',
+      );
+      expect(mockRoomService.getRoomByCode).not.toHaveBeenCalled();
     });
   });
 });

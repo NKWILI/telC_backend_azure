@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
+import { ACTIVATION_CODE_ALPHABET } from '../../centers/activation-code-format';
+import { ROOM_CODE_LENGTH } from './constants';
 import { Room } from './interfaces/room.interface';
 import { CreateRoomResponseDto } from './dto/create-room-response.dto';
 
@@ -7,6 +9,8 @@ import { CreateRoomResponseDto } from './dto/create-room-response.dto';
 export class RoomService {
   private readonly logger = new Logger(RoomService.name);
   private readonly rooms = new Map<string, Room>();
+  /** Short code → roomId, for live rooms only. */
+  private readonly codes = new Map<string, string>();
 
   createRoom(): CreateRoomResponseDto {
     const roomId = randomUUID();
@@ -21,8 +25,10 @@ export class RoomService {
       2 * 60 * 60 * 1000,
     );
 
+    const shortCode = this.drawShortCode();
     const room: Room = {
       roomId,
+      shortCode,
       hostSocketId: null,
       hostToken,
       guest: null,
@@ -34,9 +40,42 @@ export class RoomService {
     };
 
     this.rooms.set(roomId, room);
+    this.codes.set(shortCode, roomId);
     this.logger.log(JSON.stringify({ event: 'room.created', roomId }));
 
-    return { roomId, hostToken, expiresAt: expiresAt.toISOString() };
+    return {
+      roomId,
+      shortCode,
+      hostToken,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /**
+   * The live room a short code names, or undefined. Case-insensitive and
+   * trimmed, since the code was read aloud and typed; an ended room is as
+   * good as gone.
+   */
+  getRoomByCode(code: string): Room | undefined {
+    const roomId = this.codes.get(code.trim().toUpperCase());
+    const room = roomId ? this.rooms.get(roomId) : undefined;
+    return room && room.status !== 'ended' ? room : undefined;
+  }
+
+  /**
+   * A code no live room holds. Rooms are in this process's memory, so this
+   * map is the whole truth; with hundreds of live rooms among 729 million
+   * values, a second draw is already rare.
+   */
+  private drawShortCode(): string {
+    for (;;) {
+      let code = '';
+      for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
+        code +=
+          ACTIVATION_CODE_ALPHABET[randomInt(ACTIVATION_CODE_ALPHABET.length)];
+      }
+      if (!this.codes.has(code)) return code;
+    }
   }
 
   getRoom(roomId: string): Room | undefined {
@@ -113,6 +152,8 @@ export class RoomService {
 
     // keep Map.delete() synchronous and first — see RC-05
     this.rooms.delete(roomId);
+    // The code is free for another room from here on (D32).
+    this.codes.delete(room.shortCode);
     clearTimeout(room.expiryTimer);
     clearTimeout(room.gracePeriodTimer ?? undefined);
 
