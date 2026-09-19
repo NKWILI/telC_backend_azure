@@ -24,19 +24,22 @@ do; for the exact request and response fields, check Swagger on the backend
 you are running against. If the two disagree, Swagger is right — tell the
 backend team.
 
-**Error shapes.** Student routes answer errors in two forms:
+**Error shapes.** Where the error code is depends on the route:
 
-- **With a `messageKey`** (the older module errors, and the guest block):
-  `{ "statusCode", "error", "message": "Human text", "messageKey":
-  "listeningStaleRevision" }`. Branch on `messageKey`.
-- **Without one** (everything added for the school model): the code is in
-  `message` — `{ "message": "ACTIVATION_REQUIRED", "reason": …,
-  "subscriptionStatus": … }`. `statusCode` and `error` may be absent. Branch on
-  `message`.
-- So: use `messageKey` when present, otherwise `message`. Never branch on human
-  text. Validation errors carry `message` as an **array** of strings starting
-  with the field name. Extra fields (`reason`, `subscriptionStatus`…) are part
-  of the answer: keep them.
+| Routes | Error body | Branch on |
+|---|---|---|
+| `/api/auth/*` (login, refresh, register, reset, profile, **redeem-code**) | `{ "error": "SESSION_REVOKED", "message": "Human text" }` | `error` |
+| The older module errors, and the guest block | `{ "statusCode", "error", "message": "Human text", "messageKey": "listeningStaleRevision" }` | `messageKey` |
+| Everything else: learning routes, progress, rooms | `{ "message": "ACTIVATION_REQUIRED", "reason": …, "subscriptionStatus": … }` (`statusCode`/`error` may be present or not) | `message` |
+
+- Write one helper that returns the code: `messageKey` if present, else — on
+  an `/api/auth/*` route — `error`, else `message`. Never branch on human
+  text.
+- Validation errors carry the field messages as an **array** (in `message`;
+  on `/api/auth/*` with `error: "VALIDATION_ERROR"`), each starting with the
+  field name.
+- Extra fields (`reason`, `subscriptionStatus`…) are part of the answer: keep
+  them.
 
 **Never compute business rules in the app.** Access, progress, readiness and
 history come from the API. The device keeps a local copy only as a cache for
@@ -67,7 +70,7 @@ when the network is down.
   `INVALID_ACCESS_TOKEN`, and the refresh then answers 401 `SESSION_REVOKED`:
   show *"You signed in on another device"* and go to login. Any other refresh
   failure (`INVALID_REFRESH_TOKEN`, `INVALID_SESSION`) goes to login without
-  that message.
+  that message. (These come from `/api/auth/refresh`: the code is in `error`.)
 - **Guest mode stays** (B16) as it is.
 - Remove any remaining **Google sign-in** (D8) and the **"my devices"** screen.
 
@@ -81,7 +84,7 @@ the backend normalises), and a button.
 403 `messageKey: guestNotAllowed` — offer to create an account). Success `200`: `{ planId, centerName, expiresAt }` → *"You joined
 {centerName}"* and go to the home screen.
 
-| `message` | What to say |
+| `error` | What to say |
 |---|---|
 | `CODE_INVALID` | This code does not exist. Check it with your school. |
 | `CODE_ALREADY_USED` | This code is already used by someone else. |
