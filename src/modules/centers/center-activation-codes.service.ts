@@ -26,6 +26,7 @@ import {
 import { isAccountFinalized } from './center-account-state';
 import { generateActivationCode } from './activation-code-format';
 import { resetAllowance, type SubscriptionFacts } from './code-reset-allowance';
+import { hideSeatData } from '../student-activity/seat-erasure';
 import { isUniqueViolationOn } from '../../shared/prisma-errors';
 
 /**
@@ -368,10 +369,17 @@ export class CenterActivationCodesService {
     // one. Nothing is stored that could drift from what happened.
     const history = await this.prisma.activationCodeEvent.findMany({
       where: { code_id: codeId },
-      select: { created_at: true, to_status: true, previous_code: true },
+      select: {
+        created_at: true,
+        to_status: true,
+        previous_code: true,
+        student_id: true,
+      },
       orderBy: { created_at: 'asc' },
     });
     const allowance = resetAllowance(history, subscription);
+    const now = new Date();
+    const seatWindow = seatWindowOf(current, history);
 
     if (!allowance.allowed) {
       throw new ConflictException({
@@ -429,6 +437,22 @@ export class CenterActivationCodesService {
           previous_code: current.code,
         },
       });
+      // Resetting a seat means losing what was done on it (D39): hidden now,
+      // erased in 7 days.
+      if (seatWindow) {
+        await hideSeatData(
+          tx,
+          {
+            studentId: seatWindow.studentId,
+            centerId: identity.centerId,
+            codeId,
+            centerUserId: identity.centerUserId,
+            since: seatWindow.since,
+            until: seatWindow.until,
+          },
+          now,
+        );
+      }
     });
 
     return toActivationCodeView(await this.loadOwnedCode(identity, codeId));
@@ -486,4 +510,37 @@ export class CenterActivationCodesService {
 
     return code;
   }
+}
+
+/**
+ * The time the code's last student spent on this seat: from connecting to
+ * leaving it — open-ended if they still hold it, else the event that took the
+ * seat from them. Null when nobody held it, or when leaving was never logged:
+ * without an end, erasing could reach work done at another school since.
+ */
+export function seatWindowOf(
+  code: Pick<ActivationCode, 'status' | 'student_id' | 'connected_at'>,
+  history: {
+    created_at: Date;
+    to_status: ActivationCodeStatus;
+    student_id: string | null;
+  }[],
+): { studentId: string; since: Date; until: Date | null } | null {
+  if (!code.student_id || !code.connected_at) return null;
+  const since = code.connected_at;
+  if (code.status === ActivationCodeStatus.CONNECTED) {
+    // Still on the seat: open-ended, not "until now" (see hideSeatData).
+    return { studentId: code.student_id, since, until: null };
+  }
+  const left = history
+    .filter(
+      (event) =>
+        event.to_status === ActivationCodeStatus.DEACTIVATED &&
+        event.student_id === code.student_id &&
+        event.created_at >= since,
+    )
+    .at(-1);
+  return left
+    ? { studentId: code.student_id, since, until: left.created_at }
+    : null;
 }

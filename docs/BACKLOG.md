@@ -65,7 +65,8 @@ Fix is the same: take the raw string and parse explicitly, as
 than cosmetic the moment a second Modelltest exists.
 
 ### Two e2e suites do not install the global pipes
-`test/app.e2e-spec.ts`, `test/speaking-websocket.e2e-spec.ts` — **verified**
+`test/app.e2e-spec.ts` — **verified** (`test/speaking-websocket.e2e-spec.ts`
+was deleted on 2026-09-19 with the live-speaking tables it wrote to)
 
 They build test apps without the global `ValidationPipe` from `main.ts`, so any
 assertion they make about validation or transformation does not represent

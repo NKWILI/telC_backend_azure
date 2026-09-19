@@ -91,7 +91,6 @@ model Student {
   center          Center?           @relation(fields: [center_id], references: [id], onDelete: SetNull)
   ai_usage        AiUsage[]
   device_sessions DeviceSession[]
-  exam_sessions   ExamSession[]
   lesen_sessions  LesenSession[]
   oauth_accounts  OAuthAccount[]
   activities      StudentActivity[]
@@ -499,77 +498,6 @@ model CenterDeviceSession {
   @@map("center_device_sessions")
 }
 
-model ExamSession {
-  session_id                 String    @id @default(uuid())
-  user_id                    String?
-  student_id                 String?
-  teil_number                Int
-  status                     String
-  use_timer                  Boolean?  @default(true)
-  time_limit_seconds         Int?
-  server_start_time          DateTime?
-  pause_timestamp            DateTime?
-  elapsed_time               Int?      @default(0)
-  context_from_previous_teil Boolean?  @default(false)
-  created_at                 DateTime? @default(now())
-  updated_at                 DateTime? @default(now())
-  completed_at               DateTime?
-
-  student          Student?         @relation(fields: [student_id], references: [id])
-  teil_transcripts TeilTranscript[]
-  teil_evaluations TeilEvaluation[]
-  gemini_sessions  GeminiSession[]
-
-  @@map("exam_sessions")
-}
-
-model GeminiSession {
-  id                String    @id @default(uuid())
-  exam_session_id   String
-  gemini_session_id String?
-  status            String?
-  created_at        DateTime? @default(now())
-  closed_at         DateTime?
-  error_message     String?
-
-  exam_session ExamSession @relation(fields: [exam_session_id], references: [session_id])
-
-  @@map("gemini_sessions")
-}
-
-model TeilTranscript {
-  id                   String    @id @default(uuid())
-  session_id           String
-  transcript_text      String
-  conversation_history Json?
-  word_count           Int?      @default(0)
-  interrupted_at       DateTime?
-  created_at           DateTime? @default(now())
-
-  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("teil_transcripts")
-}
-
-model TeilEvaluation {
-  id                      String    @id @default(uuid())
-  session_id              String
-  pronunciation_score     Float?
-  fluency_score           Float?
-  grammar_score           Float?
-  vocabulary_score        Float?
-  overall_score           Float?
-  corrections_json        Json?
-  strengths               String?
-  areas_for_improvement   String?
-  evaluation_requested_at DateTime?
-  created_at              DateTime? @default(now())
-
-  exam_session ExamSession @relation(fields: [session_id], references: [session_id])
-
-  @@map("teil_evaluations")
-}
-
 model WritingAttempt {
   attempt_id        String    @id @default(uuid())
   student_id        String
@@ -588,6 +516,10 @@ model WritingAttempt {
   created_at        DateTime  @default(now())
   completed_at      DateTime?
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
+  @@index([erasure_id])
   @@map("writing_attempts")
 }
 
@@ -612,7 +544,11 @@ model ListeningAttempt {
   listening_exercise_id String?            @db.Uuid
   listening_exercise    ListeningExercise? @relation(fields: [listening_exercise_id], references: [id], onDelete: Restrict)
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([listening_exercise_id])
+  @@index([erasure_id])
   @@map("listening_attempts")
 }
 
@@ -642,7 +578,11 @@ model SprachbausteineAttempt {
   created_at       DateTime  @default(now())
   completed_at     DateTime?
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_id])
+  @@index([erasure_id])
   @@map("sprachbausteine_attempts")
 }
 
@@ -1113,9 +1053,13 @@ model StudentActivity {
 
   student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@unique([skill, attempt_id])
   @@index([student_id, created_at])
   @@index([student_id, skill, created_at])
+  @@index([erasure_id])
   @@map("student_activities")
 }
 
@@ -1131,7 +1075,11 @@ model LesenAttempt {
   duration_seconds Int?
   created_at       DateTime @default(now())
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_id])
+  @@index([erasure_id])
   @@map("lesen_attempts")
 }
 
@@ -1149,6 +1097,32 @@ model SpeakingAttempt {
   duration_seconds Int?
   created_at       DateTime @default(now())
 
+  /// Set when a code reset hid this row for erasure (D39); null = visible.
+  erasure_id String?
+
   @@index([student_id, teil_number])
+  @@index([erasure_id])
   @@map("speaking_attempts")
+}
+
+/// A reset took this seat from a student; their learning data on it is
+/// hidden now and erased once `erase_after` passes (D39). Until then support
+/// can restore it. The rows it covers carry its id in `erasure_id`.
+model DataErasure {
+  id             String    @id @default(uuid())
+  student_id     String
+  center_id      String
+  code_id        String
+  center_user_id String?
+  /// The window of the student's time on the seat: what is erased.
+  since          DateTime
+  until          DateTime
+  created_at     DateTime  @default(now())
+  erase_after    DateTime
+  erased_at      DateTime?
+  restored_at    DateTime?
+
+  @@index([erase_after])
+  @@index([student_id])
+  @@map("data_erasures")
 }

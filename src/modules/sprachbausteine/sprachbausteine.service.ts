@@ -316,7 +316,11 @@ export class SprachbausteineService {
 
     try {
       const rows = await this.prisma.sprachbausteineAttempt.findMany({
-        where: { student_id: studentId, status: 'completed' },
+        where: {
+          student_id: studentId,
+          status: 'completed',
+          erasure_id: null,
+        },
         select: { teil_id: true },
       });
 
@@ -345,6 +349,7 @@ export class SprachbausteineService {
       const rows = await this.prisma.sprachbausteineAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(teilId ? { teil_id: teilId } : {}),
         },
         orderBy: { created_at: 'desc' },

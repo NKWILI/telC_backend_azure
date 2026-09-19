@@ -74,6 +74,7 @@ export class ListeningService {
       const rows = await this.prisma.listeningAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(exerciseId ? { exercise_id: exerciseId } : {}),
         },
         orderBy: { created_at: 'desc' },
@@ -288,6 +289,7 @@ export class ListeningService {
           student_id: studentId,
           status: 'completed',
           modelltest_id: modelltestId,
+          erasure_id: null,
         },
         select: { exercise_id: true },
       });

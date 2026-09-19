@@ -1666,9 +1666,19 @@ The thresholds (7 days, 40, 45) are the ones the dashboard already uses. The
 ## D39. Resetting an activation code (moving a seat to another student)
 
 **Decided:** 2026-09-18, by the backend dev and Herman (settles B11)
-**Status:** reset and limit **built (phase 9b, 2026-09-19)**; the data erase is
-**not built** — it needs `StudentActivity` and the module history (D26, D29)
-and follows phase 11. As built: a reset is counted by the event's
+**Status:** reset and limit **built (phase 9b, 2026-09-19)**; the data erase
+**built (phase 13, 2026-09-19)**.
+
+**Erase as built:** the reset stamps a `DataErasure` id on the student's
+attempts and `StudentActivity` rows from their time on the seat — from
+`connected_at` to now, or to the event that took the seat from them if the
+code was deactivated earlier (so later work at another school is never
+touched; a seat whose end was never logged erases nothing). Every history and
+progress read skips stamped rows. A job in the app erases due ones every 6
+hours (no scheduler dependency; safe to run twice). Support restores with
+`SeatErasureService.restore(id)` before the erasure — there is no route for it
+yet. A writing attempt corrected after the reset gets a hidden summary too.
+No audio is stored by these modules, so there are no files to erase. As built: a reset is counted by the event's
 `previous_code` being filled; a code is "used" when there is a `CONNECTED`
 event since its last reset; redemption also claims by value, so a reset in
 flight cannot hand the seat to someone typing the old value. `activate` is

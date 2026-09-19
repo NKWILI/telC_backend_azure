@@ -69,13 +69,14 @@ export class SpeakingService {
     teilNumber?: number,
     limit = 50,
   ): Promise<SessionHistoryItemDto[]> {
-    // Read from the evaluations `evaluate` keeps (phase 11). The old source,
-    // exam_sessions, was written only by the live Gemini flow, which stopped
-    // in March 2026 and never stored a score.
+    // Read from the evaluations `evaluate` keeps (phase 11). The live Gemini
+    // flow's exam_sessions, the old source, stopped in March 2026 without ever
+    // storing a score, and was dropped on 2026-09-19.
     try {
       const rows = await this.prisma.speakingAttempt.findMany({
         where: {
           student_id: studentId,
+          erasure_id: null,
           ...(teilNumber !== undefined && teilNumber >= 1 && teilNumber <= 3
             ? { teil_number: teilNumber }
             : {}),

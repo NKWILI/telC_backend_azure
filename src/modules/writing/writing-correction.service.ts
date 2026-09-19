@@ -116,7 +116,7 @@ export class WritingCorrectionService {
               ? { corrections: correctionsForDb }
               : {}),
           },
-          select: { student_id: true, modelltest_id: true },
+          select: { student_id: true, modelltest_id: true, erasure_id: true },
         });
         // Only a real score is progress. The stub's 75 means the model
         // failed, and the student's history must not count it as a result.
@@ -141,6 +141,8 @@ export class WritingCorrectionService {
           modelltestId: attempt.modelltest_id,
           attemptId,
           completedAt: new Date(completedAt),
+          // Hidden by a reset while it was being corrected: so is its summary.
+          erasureId: attempt.erasure_id,
         });
       });
 

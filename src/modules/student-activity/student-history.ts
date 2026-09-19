@@ -116,6 +116,7 @@ export async function teilStats(
              MAX(created_at) AS last_at
       FROM student_activities
       WHERE student_id = ${studentId}
+        AND erasure_id IS NULL
         AND skill = ${skill}::"Skill"
         ${modelltestId ? Prisma.sql`AND modelltest_id = ${modelltestId}::uuid` : Prisma.empty}
       GROUP BY teil`;
